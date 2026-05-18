@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import type { PersonNodeData } from "@/lib/graph/transform";
 
-export function PersonNode({ data }: NodeProps) {
-  const { person, lang } = data as PersonNodeData;
+type PersonNodeType = Node<PersonNodeData, "person">;
+
+export function PersonNode({ data }: NodeProps<PersonNodeType>) {
+  const { person, lang } = data;
 
   const name =
     lang === "ar"

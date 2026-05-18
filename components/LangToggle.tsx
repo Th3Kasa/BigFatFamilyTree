@@ -7,7 +7,7 @@ type Props = { current: Lang };
 export function LangToggle({ current }: Props) {
   function toggle() {
     const next = current === "ar" ? "en" : "ar";
-    document.cookie = `lang=${next}; path=/; max-age=31536000; SameSite=Lax`;
+    document.cookie = `lang=${next}; path=/; max-age=31536000; SameSite=Lax; Secure`;
     window.location.reload();
   }
 
