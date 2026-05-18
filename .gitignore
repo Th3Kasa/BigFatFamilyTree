@@ -18,3 +18,5 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+next-env.d.ts
+tsconfig.tsbuildinfo
