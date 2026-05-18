@@ -5,7 +5,7 @@ import type { Lang } from "@/lib/lang/server";
 const NODE_WIDTH = 160;
 const NODE_HEIGHT = 80;
 
-type PersonInput = {
+export type PersonInput = {
   id: string;
   given_en: string | null;
   given_ar: string | null;
@@ -18,7 +18,7 @@ type PersonInput = {
   photo_url: string | null;
 };
 
-type RelationshipInput = {
+export type RelationshipInput = {
   id: string;
   person_a_id: string;
   person_b_id: string;
@@ -44,6 +44,7 @@ export type GraphEdge = {
   source: string;
   target: string;
   type: "smoothstep" | "straight";
+  edgeKind: "parent" | "spouse";
   style?: React.CSSProperties;
   animated?: boolean;
 };
@@ -66,10 +67,10 @@ export function buildGraphElements(
 
   for (const p of people) {
     if (p.father_id && idSet.has(p.father_id)) {
-      edges.push({ id: `f-${p.id}`, source: p.father_id, target: p.id, type: "smoothstep" });
+      edges.push({ id: `f-${p.id}`, source: p.father_id, target: p.id, type: "smoothstep", edgeKind: "parent" });
     }
     if (p.mother_id && idSet.has(p.mother_id)) {
-      edges.push({ id: `m-${p.id}`, source: p.mother_id, target: p.id, type: "smoothstep" });
+      edges.push({ id: `m-${p.id}`, source: p.mother_id, target: p.id, type: "smoothstep", edgeKind: "parent" });
     }
   }
 
@@ -80,6 +81,7 @@ export function buildGraphElements(
         source: r.person_a_id,
         target: r.person_b_id,
         type: "straight",
+        edgeKind: "spouse",
         style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
       });
     }
@@ -91,7 +93,7 @@ export function buildGraphElements(
 
   nodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
   edges
-    .filter((e) => e.type === "smoothstep")
+    .filter((e) => e.edgeKind === "parent")
     .forEach((e) => g.setEdge(e.source, e.target));
 
   dagre.layout(g);

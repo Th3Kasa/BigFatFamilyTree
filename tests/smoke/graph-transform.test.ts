@@ -63,4 +63,10 @@ describe("buildGraphElements", () => {
       expect(isNaN(n.position.x)).toBe(false);
     }
   });
+
+  it("handles empty input gracefully", () => {
+    const { nodes, edges } = buildGraphElements([], [], "en");
+    expect(nodes).toHaveLength(0);
+    expect(edges).toHaveLength(0);
+  });
 });
