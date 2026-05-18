@@ -24,7 +24,7 @@ function applySecurityHeaders(res: NextResponse) {
   );
   res.headers.set(
     "Content-Security-Policy",
-    `default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co https://*.upstash.io; font-src 'self' data:; frame-ancestors 'none'`,
+    `default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co https://*.upstash.io; font-src 'self' data:; worker-src blob:; frame-ancestors 'none'`,
   );
   return res;
 }
