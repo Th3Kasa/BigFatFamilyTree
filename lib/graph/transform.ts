@@ -1,0 +1,107 @@
+import type React from "react";
+import * as dagre from "@dagrejs/dagre";
+import type { Lang } from "@/lib/lang/server";
+
+const NODE_WIDTH = 160;
+const NODE_HEIGHT = 80;
+
+type PersonInput = {
+  id: string;
+  given_en: string | null;
+  given_ar: string | null;
+  family_name_en: string | null;
+  family_name_ar: string | null;
+  father_id: string | null;
+  mother_id: string | null;
+  gender: "m" | "f" | "unknown";
+  is_placeholder: boolean;
+  photo_url: string | null;
+};
+
+type RelationshipInput = {
+  id: string;
+  person_a_id: string;
+  person_b_id: string;
+  type: "spouse" | "adopted_by" | "raised_by" | "godparent";
+  status: "current" | "divorced" | "widowed";
+  order_index: number;
+};
+
+export type PersonNodeData = {
+  person: PersonInput;
+  lang: Lang;
+};
+
+export type GraphNode = {
+  id: string;
+  type: "person";
+  data: PersonNodeData;
+  position: { x: number; y: number };
+};
+
+export type GraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: "smoothstep" | "straight";
+  style?: React.CSSProperties;
+  animated?: boolean;
+};
+
+export function buildGraphElements(
+  people: PersonInput[],
+  relationships: RelationshipInput[],
+  lang: Lang,
+): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const idSet = new Set(people.map((p) => p.id));
+
+  const nodes: GraphNode[] = people.map((p) => ({
+    id: p.id,
+    type: "person",
+    data: { person: p, lang },
+    position: { x: 0, y: 0 },
+  }));
+
+  const edges: GraphEdge[] = [];
+
+  for (const p of people) {
+    if (p.father_id && idSet.has(p.father_id)) {
+      edges.push({ id: `f-${p.id}`, source: p.father_id, target: p.id, type: "smoothstep" });
+    }
+    if (p.mother_id && idSet.has(p.mother_id)) {
+      edges.push({ id: `m-${p.id}`, source: p.mother_id, target: p.id, type: "smoothstep" });
+    }
+  }
+
+  for (const r of relationships) {
+    if (r.type === "spouse") {
+      edges.push({
+        id: `s-${r.person_a_id}-${r.person_b_id}`,
+        source: r.person_a_id,
+        target: r.person_b_id,
+        type: "straight",
+        style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
+      });
+    }
+  }
+
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "TB", nodesep: 50, ranksep: 90, marginx: 20, marginy: 20 });
+
+  nodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+  edges
+    .filter((e) => e.type === "smoothstep")
+    .forEach((e) => g.setEdge(e.source, e.target));
+
+  dagre.layout(g);
+
+  nodes.forEach((n) => {
+    const pos = g.node(n.id);
+    if (pos) {
+      n.position = { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 };
+    }
+  });
+
+  return { nodes, edges };
+}
