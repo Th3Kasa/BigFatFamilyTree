@@ -4,7 +4,7 @@ import type { Database } from "@/lib/db/types";
 
 type PersonRow = Pick<
   Database["public"]["Tables"]["people"]["Row"],
-  "id" | "given_ar" | "given_en" | "family_name_ar" | "family_name_en" | "gender" | "is_placeholder"
+  "id" | "slug" | "given_ar" | "given_en" | "family_name_ar" | "family_name_en" | "gender" | "is_placeholder"
 >;
 
 type Props = {
