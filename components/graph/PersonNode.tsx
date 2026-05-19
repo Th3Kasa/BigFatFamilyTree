@@ -63,6 +63,18 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         position={Position.Top}
         className="!w-2 !h-2 !border-border !bg-background"
       />
+      <Handle
+        type="source"
+        position={Position.Left}
+        id="left"
+        className="!w-2 !h-2 !border-border !bg-background"
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left-target"
+        className="!w-2 !h-2 !border-border !bg-background"
+      />
       <div
         className={cn(
           "w-[220px] h-20 rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(20_20_20/0.06),0_4px_12px_rgb(20_20_20/0.08)]",
@@ -135,6 +147,18 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           </Link>
         </div>
       </div>
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        className="!w-2 !h-2 !border-border !bg-background"
+      />
+      <Handle
+        type="target"
+        position={Position.Right}
+        id="right-target"
+        className="!w-2 !h-2 !border-border !bg-background"
+      />
       <Handle
         type="source"
         position={Position.Bottom}
