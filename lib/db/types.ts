@@ -200,6 +200,8 @@ export type Database = {
           grandfather_name_en: string | null
           great_grandfather_name_ar: string | null
           great_grandfather_name_en: string | null
+          birth_date: string | null
+          death_date: string | null
           id: string
           is_placeholder: boolean
           mother_id: string | null
@@ -208,10 +210,13 @@ export type Database = {
           photo_url: string | null
           pos_x: number | null
           pos_y: number | null
+          slug: string | null
           updated_at: string
         }
         Insert: {
+          birth_date?: string | null
           created_at?: string
+          death_date?: string | null
           deleted_at?: string | null
           family_name_ar?: string | null
           family_name_en?: string | null
@@ -233,10 +238,13 @@ export type Database = {
           photo_url?: string | null
           pos_x?: number | null
           pos_y?: number | null
+          slug?: string | null
           updated_at?: string
         }
         Update: {
+          birth_date?: string | null
           created_at?: string
+          death_date?: string | null
           deleted_at?: string | null
           family_name_ar?: string | null
           family_name_en?: string | null
@@ -258,6 +266,7 @@ export type Database = {
           photo_url?: string | null
           pos_x?: number | null
           pos_y?: number | null
+          slug?: string | null
           updated_at?: string
         }
         Relationships: [
