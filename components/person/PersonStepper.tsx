@@ -242,6 +242,12 @@ export function PersonStepper({
             <input type="hidden" name="gender" value={fields.gender} />
             <input type="hidden" name="notes_en" value={fields.notes_en} />
             <input type="hidden" name="notes_ar" value={fields.notes_ar} />
+            <input type="hidden" name="birth_date" value={fields.birth_date} />
+            <input type="hidden" name="death_date" value={fields.death_date} />
+            <input type="hidden" name="father_name_en" value="" />
+            <input type="hidden" name="father_name_ar" value="" />
+            <input type="hidden" name="grandfather_name_en" value="" />
+            <input type="hidden" name="grandfather_name_ar" value="" />
             <input type="hidden" name="great_grandfather_name_en" value="" />
             <input type="hidden" name="great_grandfather_name_ar" value="" />
 

@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-const nullableText = z.string().max(200).nullable();
-const nullableUuid = z.string().uuid().nullable();
+const nullableText = z.string().max(200).nullish().transform((v) => v ?? null);
 
 export const personSchema = z
   .object({
@@ -16,12 +15,14 @@ export const personSchema = z
     family_name_en: nullableText,
     family_name_ar: nullableText,
     gender: z.enum(["m", "f", "unknown"]),
-    father_id: nullableUuid,
-    mother_id: nullableUuid,
+    father_id: z.string().uuid().nullish().transform((v) => v ?? null),
+    mother_id: z.string().uuid().nullish().transform((v) => v ?? null),
     is_placeholder: z.boolean(),
-    photo_url: z.string().url().nullable(),
-    notes_en: z.string().max(2000).nullable(),
-    notes_ar: z.string().max(2000).nullable(),
+    photo_url: z.string().url().nullish().transform((v) => v ?? null),
+    notes_en: z.string().max(2000).nullish().transform((v) => v ?? null),
+    notes_ar: z.string().max(2000).nullish().transform((v) => v ?? null),
+    birth_date: z.string().max(20).nullish().transform((v) => v ?? null),
+    death_date: z.string().max(20).nullish().transform((v) => v ?? null),
   })
   .refine(
     (d) => d.given_en != null || d.given_ar != null || d.is_placeholder,
