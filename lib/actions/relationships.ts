@@ -15,7 +15,7 @@ export async function createRelationship(
   personId: string,
   _prev: ActionState,
   formData: FormData,
-): Promise<ActionState> {
+): Promise<ActionState & { id?: string }> {
   const otherPersonId = formData.get("other_person_id")?.toString()?.trim();
   const type = formData.get("type")?.toString();
   const status = formData.get("status")?.toString();
@@ -36,18 +36,18 @@ export async function createRelationship(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("relationships").insert({
+  const { data, error } = await supabase.from("relationships").insert({
     person_a_id: personId,
     person_b_id: otherPersonId,
     type: type as RelType,
     status: status as RelStatus,
-  });
+  }).select("id").single();
 
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
   revalidatePath(`/person/${personId}`);
-  return { success: true };
+  return { success: true, id: data.id };
 }
 
 export async function deleteRelationship(

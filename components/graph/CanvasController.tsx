@@ -162,7 +162,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
 
   const { fitView } = useReactFlow() as { fitView: (opts?: { padding?: number; duration?: number }) => void };
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any[]);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges as any[]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges as any[]);
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
     startTransition(async () => {
@@ -172,13 +172,35 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
 
   const onConnect = (c: Connection) => {
     if (!c.source || !c.target) return;
+    const tempId = `spouse-temp-${c.source}-${c.target}`;
+    setEdges((eds) => [
+      ...eds,
+      {
+        id: tempId,
+        source: c.source!,
+        target: c.target!,
+        sourceHandle: c.sourceHandle ?? undefined,
+        targetHandle: c.targetHandle ?? undefined,
+        type: "straight",
+        data: { edgeKind: "spouse" },
+        style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
+      },
+    ]);
     const fd = new FormData();
     fd.set("other_person_id", c.target);
     fd.set("type", "spouse");
     fd.set("status", "current");
     startTransition(async () => {
-      await createRelationship(c.source!, null, fd);
-      router.refresh();
+      const result = await createRelationship(c.source!, null, fd);
+      if (result?.id) {
+        setEdges((eds) =>
+          eds.map((e) =>
+            e.id === tempId
+              ? { ...e, id: `spouse-${result.id}`, data: { edgeKind: "spouse", relationshipId: result.id } }
+              : e
+          )
+        );
+      }
     });
   };
 
