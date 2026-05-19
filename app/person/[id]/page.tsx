@@ -70,7 +70,7 @@ export default async function PersonPage({ params }: Props) {
     supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single(),
     supabase
       .from("events")
-      .select("*, transcripts:source_transcript_id(id, raw_text_ar, recorded_at)")
+      .select("*")
       .eq("person_id", id)
       .order("date_value", { ascending: true }),
     supabase
@@ -137,13 +137,14 @@ export default async function PersonPage({ params }: Props) {
         ? lang === "ar" ? "أنثى" : "Female"
         : lang === "ar" ? "غير محدد" : "Unknown";
 
-  // Linked transcripts via events
-  const linkedTranscripts = (events ?? [])
-    .filter((e) => e.transcripts)
-    .map((e) => e.transcripts as { id: string; raw_text_ar: string | null; recorded_at: string | null });
-  const uniqueTranscripts = Array.from(
-    new Map(linkedTranscripts.map((t) => [t.id, t])).values()
-  );
+  // Linked transcript IDs via events
+  const transcriptIds = Array.from(
+    new Set((events ?? []).map((e) => e.source_transcript_id).filter(Boolean))
+  ) as string[];
+  const { data: linkedTranscriptsData } = transcriptIds.length
+    ? await supabase.from("transcripts").select("id, recorded_at").in("id", transcriptIds)
+    : { data: [] };
+  const uniqueTranscripts = linkedTranscriptsData ?? [];
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
@@ -520,8 +521,8 @@ export default async function PersonPage({ params }: Props) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                            {t.recorded_at
-                              ? new Date(t.recorded_at).toLocaleDateString()
+                            {(t as { id: string; recorded_at: string | null }).recorded_at
+                              ? new Date((t as { id: string; recorded_at: string | null }).recorded_at!).toLocaleDateString()
                               : lang === "ar" ? "تسجيل صوتي" : "Audio transcript"}
                           </p>
                           <p className="text-xs text-[var(--muted-foreground)]">
