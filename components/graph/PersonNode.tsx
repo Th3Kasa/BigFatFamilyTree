@@ -65,7 +65,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
       />
       <div
         className={cn(
-          "w-[220px] h-20 rounded-xl border border-border bg-white shadow-[0_1px_2px_rgb(20_20_20/0.06),0_4px_12px_rgb(20_20_20/0.08)]",
+          "w-[220px] h-20 rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(20_20_20/0.06),0_4px_12px_rgb(20_20_20/0.08)]",
           "flex items-center gap-3 px-3 transition-all duration-200 cursor-default relative overflow-hidden",
           selected && "ring-2 ring-primary ring-offset-1 shadow-[0_1px_2px_rgb(20_20_20/0.06),0_8px_24px_rgb(20_20_20/0.12)]",
           hovered && "scale-[1.02] shadow-[0_1px_2px_rgb(20_20_20/0.06),0_8px_24px_rgb(20_20_20/0.12)]"
@@ -102,7 +102,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         <div
           className={cn(
             "absolute inset-0 flex items-center justify-end gap-1 px-2",
-            "bg-white/90 backdrop-blur-sm rounded-xl",
+            "bg-card/90 backdrop-blur-sm rounded-xl",
             "transition-opacity duration-150",
             hovered ? "opacity-100" : "opacity-0 pointer-events-none"
           )}

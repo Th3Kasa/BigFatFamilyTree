@@ -61,7 +61,7 @@ export function FamilyGraph({
         onPaneClick={onPaneClick}
         panOnDrag={panOnDrag}
         selectionOnDrag={selectionMode}
-        proOptions={{ hideAttribution: false }}
+        proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
           style: { stroke: "#d1d5db", strokeWidth: 1.5 },
           animated: false,

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { PlusCircle, ExternalLink, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { deletePerson } from "@/lib/actions/people";
 import type { PersonInput } from "@/lib/graph/transform";
 
 type Props = {
@@ -21,6 +24,22 @@ type Props = {
 };
 
 export function Inspector({ person, lang, onClose }: Props) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  function handleDelete() {
+    if (!person) return;
+    const confirmed = window.confirm(
+      lang === "ar" ? "هل تريد حذف هذا الشخص؟" : "Delete this person?"
+    );
+    if (!confirmed) return;
+    const id = person.id;
+    onClose();
+    startTransition(async () => {
+      await deletePerson(id);
+      router.refresh();
+    });
+  }
   const open = person !== null;
 
   const givenName = person
@@ -136,22 +155,45 @@ export function Inspector({ person, lang, onClose }: Props) {
         {/* Footer actions */}
         <div className="p-6 pt-4 border-t border-border space-y-2">
           <Button asChild className="w-full" size="sm">
-            <Link href={person ? `/person/${person.id}` : "#"}>
-              <ExternalLink className="w-3.5 h-3.5" />
-              {lang === "ar" ? "فتح الصفحة الكاملة" : "Open full profile"}
+            <Link href={person ? `/person/${person.id}/edit` : "#"}>
+              <Pencil className="w-3.5 h-3.5" />
+              {lang === "ar" ? "تعديل" : "Edit"}
             </Link>
           </Button>
-          <Button asChild variant="outline" className="w-full" size="sm">
-            <Link
-              href={
-                person
-                  ? `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`
-                  : "#"
-              }
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              {lang === "ar" ? "إضافة طفل" : "Add child"}
+          <div className="grid grid-cols-2 gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={
+                  person
+                    ? `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`
+                    : "#"
+                }
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                {lang === "ar" ? "إضافة طفل" : "Add child"}
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={person ? `/person/new?spouse=${person.id}` : "#"}>
+                <UserPlus className="w-3.5 h-3.5" />
+                {lang === "ar" ? "إضافة زوج/ة" : "Add spouse"}
+              </Link>
+            </Button>
+          </div>
+          <Button asChild variant="outline" size="sm" className="w-full">
+            <Link href={person ? `/person/${person.id}` : "#"}>
+              <ExternalLink className="w-3.5 h-3.5" />
+              {lang === "ar" ? "الصفحة الكاملة" : "Full profile"}
             </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/5"
+            onClick={handleDelete}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            {lang === "ar" ? "حذف" : "Delete"}
           </Button>
         </div>
       </SheetContent>
