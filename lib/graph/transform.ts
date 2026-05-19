@@ -16,6 +16,8 @@ export type PersonInput = {
   gender: "m" | "f" | "unknown";
   is_placeholder: boolean;
   photo_url: string | null;
+  pos_x: number | null;
+  pos_y: number | null;
 };
 
 export type RelationshipInput = {
@@ -60,7 +62,7 @@ export function buildGraphElements(
     id: p.id,
     type: "person",
     data: { person: p, lang },
-    position: { x: 0, y: 0 },
+    position: { x: p.pos_x ?? 0, y: p.pos_y ?? 0 },
   }));
 
   const edges: GraphEdge[] = [];
@@ -87,23 +89,50 @@ export function buildGraphElements(
     }
   }
 
+  // Only nodes WITHOUT stored positions go through dagre
+  const unpositioned = nodes.filter((n) => {
+    const p = (n.data as PersonNodeData).person;
+    return p.pos_x == null || p.pos_y == null;
+  });
+
+  if (unpositioned.length > 0) {
+    const g = new dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: "TB", nodesep: 50, ranksep: 90, marginx: 20, marginy: 20 });
+    unpositioned.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+    edges
+      .filter((e) => e.data?.edgeKind === "parent")
+      .filter((e) => unpositioned.some((n) => n.id === e.source) && unpositioned.some((n) => n.id === e.target))
+      .forEach((e) => g.setEdge(e.source, e.target));
+    dagre.layout(g);
+    unpositioned.forEach((n) => {
+      const pos = g.node(n.id);
+      if (pos) {
+        n.position = { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 };
+      }
+    });
+  }
+
+  return { nodes, edges };
+}
+
+export function autoLayoutPositions(
+  people: PersonInput[],
+): Map<string, { x: number; y: number }> {
+  const idSet = new Set(people.map((p) => p.id));
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "TB", nodesep: 50, ranksep: 90, marginx: 20, marginy: 20 });
-
-  nodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
-  edges
-    .filter((e) => e.data?.edgeKind === "parent")
-    .forEach((e) => g.setEdge(e.source, e.target));
-
+  people.forEach((p) => g.setNode(p.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+  for (const p of people) {
+    if (p.father_id && idSet.has(p.father_id)) g.setEdge(p.father_id, p.id);
+    if (p.mother_id && idSet.has(p.mother_id)) g.setEdge(p.mother_id, p.id);
+  }
   dagre.layout(g);
-
-  nodes.forEach((n) => {
-    const pos = g.node(n.id);
-    if (pos) {
-      n.position = { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 };
-    }
+  const out = new Map<string, { x: number; y: number }>();
+  people.forEach((p) => {
+    const pos = g.node(p.id);
+    if (pos) out.set(p.id, { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 });
   });
-
-  return { nodes, edges };
+  return out;
 }

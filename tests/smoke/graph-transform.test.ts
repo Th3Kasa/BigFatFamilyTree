@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildGraphElements } from "@/lib/graph/transform";
+import { buildGraphElements, autoLayoutPositions } from "@/lib/graph/transform";
 
 const people = [
   {
@@ -7,18 +7,21 @@ const people = [
     family_name_en: "Smith", family_name_ar: "سميث",
     father_id: null, mother_id: null,
     gender: "f" as const, is_placeholder: false, photo_url: null,
+    pos_x: null, pos_y: null,
   },
   {
     id: "p2", given_en: null, given_ar: null,
     family_name_en: null, family_name_ar: null,
     father_id: null, mother_id: null,
     gender: "m" as const, is_placeholder: true, photo_url: null,
+    pos_x: null, pos_y: null,
   },
   {
     id: "p3", given_en: "Carol", given_ar: "كارول",
     family_name_en: "Smith", family_name_ar: "سميث",
     father_id: "p2", mother_id: "p1",
     gender: "f" as const, is_placeholder: false, photo_url: null,
+    pos_x: null, pos_y: null,
   },
 ];
 
@@ -68,5 +71,31 @@ describe("buildGraphElements", () => {
     const { nodes, edges } = buildGraphElements([], [], "en");
     expect(nodes).toHaveLength(0);
     expect(edges).toHaveLength(0);
+  });
+
+  it("honors stored positions when present", () => {
+    const people = [
+      { id: "p1", given_en: "A", given_ar: null, family_name_en: null, family_name_ar: null,
+        father_id: null, mother_id: null, gender: "m" as const, is_placeholder: false, photo_url: null,
+        pos_x: 100, pos_y: 200 },
+    ];
+    const { nodes } = buildGraphElements(people, [], "en");
+    expect(nodes[0].position).toEqual({ x: 100, y: 200 });
+  });
+
+  it("autoLayoutPositions returns dagre coords for every person", () => {
+    const people = [
+      { id: "p1", given_en: "Parent", given_ar: null, family_name_en: null, family_name_ar: null,
+        father_id: null, mother_id: null, gender: "m" as const, is_placeholder: false, photo_url: null,
+        pos_x: null, pos_y: null },
+      { id: "p2", given_en: "Child", given_ar: null, family_name_en: null, family_name_ar: null,
+        father_id: "p1", mother_id: null, gender: "f" as const, is_placeholder: false, photo_url: null,
+        pos_x: null, pos_y: null },
+    ];
+    const layout = autoLayoutPositions(people);
+    expect(layout.size).toBe(2);
+    expect(layout.get("p1")).toBeDefined();
+    expect(layout.get("p2")).toBeDefined();
+    expect(layout.get("p1")!.y).toBeLessThan(layout.get("p2")!.y);
   });
 });
