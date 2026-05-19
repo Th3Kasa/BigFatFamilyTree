@@ -3,38 +3,63 @@ import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { FamilyGraph } from "@/components/graph/FamilyGraph";
 import { PeopleList } from "@/components/PeopleList";
+import { EmptyState } from "@/components/ui/EmptyState";
 
-export default async function Home() {
+export default async function HomePage() {
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
 
-  const [{ data: people, error: peopleErr }, { data: relationships, error: relErr }] =
-    await Promise.all([
-      supabase
-        .from("people")
-        .select(
-          "id, given_ar, given_en, family_name_ar, family_name_en, father_id, mother_id, gender, is_placeholder, photo_url",
-        )
-        .is("deleted_at", null),
-      supabase
-        .from("relationships")
-        .select("id, person_a_id, person_b_id, type, status, order_index"),
-    ]);
+  const [{ data: people }, { data: relationships }] = await Promise.all([
+    supabase
+      .from("people")
+      .select("*")
+      .is("deleted_at", null)
+      .order("given_en"),
+    supabase.from("relationships").select("*"),
+  ]);
 
-  if (peopleErr) throw peopleErr;
-  if (relErr) throw relErr;
+  const isEmpty = !people || people.length === 0;
 
-  const { nodes, edges } = buildGraphElements(people ?? [], relationships ?? [], lang);
+  if (isEmpty) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 pt-16">
+        <EmptyState
+          icon="🌱"
+          title={lang === "ar" ? "ابدأ شجرة عائلتك" : "Start your family tree"}
+          description={
+            lang === "ar"
+              ? "لم يُضَف أي شخص بعد. ابدأ بإضافة أول فرد في العائلة."
+              : "No family members added yet. Add the first person to get started."
+          }
+          action={
+            <a
+              href="/person/new"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors"
+            >
+              {lang === "ar" ? "＋ إضافة شخص" : "＋ Add person"}
+            </a>
+          }
+        />
+      </div>
+    );
+  }
+
+  const { nodes, edges } = buildGraphElements(people, relationships ?? [], lang);
 
   return (
     <>
-      {/* Desktop: full-screen graph */}
-      <div className="hidden md:block">
+      {/* Desktop: graph */}
+      <div className="hidden md:block h-[calc(100vh-57px)] bg-gray-50">
         <FamilyGraph nodes={nodes} edges={edges} />
       </div>
-      {/* Mobile: grouped list */}
-      <div className="md:hidden">
-        <PeopleList people={people ?? []} lang={lang} />
+
+      {/* Mobile: list */}
+      <div className="md:hidden px-4 py-6">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+          {lang === "ar" ? "أفراد العائلة" : "Family members"}
+        </h2>
+        <PeopleList people={people} lang={lang} />
       </div>
+
       {/* FAB */}
       <a
         href="/person/new"
