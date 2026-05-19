@@ -70,7 +70,7 @@ export default async function PersonPage({ params }: Props) {
     supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single(),
     supabase
       .from("events")
-      .select("*, transcripts:source_transcript_id(id, title)")
+      .select("*, transcripts:source_transcript_id(id, raw_text_ar, recorded_at)")
       .eq("person_id", id)
       .order("date_value", { ascending: true }),
     supabase
@@ -140,7 +140,7 @@ export default async function PersonPage({ params }: Props) {
   // Linked transcripts via events
   const linkedTranscripts = (events ?? [])
     .filter((e) => e.transcripts)
-    .map((e) => e.transcripts as { id: string; title: string | null });
+    .map((e) => e.transcripts as { id: string; raw_text_ar: string | null; recorded_at: string | null });
   const uniqueTranscripts = Array.from(
     new Map(linkedTranscripts.map((t) => [t.id, t])).values()
   );
@@ -520,7 +520,9 @@ export default async function PersonPage({ params }: Props) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                            {t.title ?? (lang === "ar" ? "تسجيل صوتي" : "Audio transcript")}
+                            {t.recorded_at
+                              ? new Date(t.recorded_at).toLocaleDateString()
+                              : lang === "ar" ? "تسجيل صوتي" : "Audio transcript"}
                           </p>
                           <p className="text-xs text-[var(--muted-foreground)]">
                             {lang === "ar" ? "انقر للاستماع" : "Click to listen"}
