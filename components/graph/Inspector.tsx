@@ -155,7 +155,7 @@ export function Inspector({ person, lang, onClose }: Props) {
         {/* Footer actions */}
         <div className="p-6 pt-4 border-t border-border space-y-2">
           <Button asChild className="w-full" size="sm">
-            <Link href={person ? `/person/${person.id}/edit` : "#"}>
+            <Link href={person ? `/person/${person.slug ?? person.id}/edit` : "#"}>
               <Pencil className="w-3.5 h-3.5" />
               {lang === "ar" ? "تعديل" : "Edit"}
             </Link>
@@ -181,7 +181,7 @@ export function Inspector({ person, lang, onClose }: Props) {
             </Button>
           </div>
           <Button asChild variant="outline" size="sm" className="w-full">
-            <Link href={person ? `/person/${person.id}` : "#"}>
+            <Link href={person ? `/person/${person.slug ?? person.id}` : "#"}>
               <ExternalLink className="w-3.5 h-3.5" />
               {lang === "ar" ? "الصفحة الكاملة" : "Full profile"}
             </Link>

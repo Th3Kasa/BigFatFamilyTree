@@ -3,7 +3,7 @@
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useReactFlow, ReactFlowProvider } from "@xyflow/react";
-import type { Connection, NodeMouseHandler, OnNodeDrag } from "@xyflow/react";
+import type { Connection, NodeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
 import {
   MousePointer2,
   Plus,
@@ -16,7 +16,7 @@ import { Inspector } from "./Inspector";
 import { NodeContextMenu, type ContextMenuTarget } from "./NodeContextMenu";
 import { QuickAddDialog, type QuickAddRelation } from "./QuickAddDialog";
 import { updateNodePosition, autoLayoutAll } from "@/lib/actions/canvas";
-import { createRelationship } from "@/lib/actions/relationships";
+import { createRelationship, deleteRelationship } from "@/lib/actions/relationships";
 import { deletePerson } from "@/lib/actions/people";
 import {
   Tooltip,
@@ -223,12 +223,41 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     });
   }
 
+  const onEdgesDelete: OnEdgesDelete = useCallback((deletedEdges) => {
+    for (const edge of deletedEdges) {
+      const data = edge.data as { edgeKind?: string; relationshipId?: string } | undefined;
+      if (data?.edgeKind === "spouse" && data.relationshipId) {
+        const rid = data.relationshipId;
+        const pid = edge.source as string;
+        startTransition(async () => {
+          await deleteRelationship(rid, pid);
+          router.refresh();
+        });
+      }
+    }
+  }, [router, startTransition]);
+
   function handleAddChild() {
     if (menu?.kind !== "node") return;
     const parent = personById(menu.personId);
     if (!parent) return;
     setMenu(null);
-    setQuickAdd({ kind: "child", parentId: parent.id, parentGender: parent.gender });
+
+    // Find spouse to link both parents
+    const spouseEdge = initialEdges.find(
+      (e) =>
+        e.data?.edgeKind === "spouse" &&
+        (e.source === parent.id || e.target === parent.id)
+    );
+    if (spouseEdge) {
+      const spouseId = spouseEdge.source === parent.id ? spouseEdge.target : spouseEdge.source;
+      const spouse = personById(spouseId);
+      const fatherId = parent.gender !== "f" ? parent.id : (spouse?.gender !== "f" ? spouseId : parent.id);
+      const motherId = parent.gender === "f" ? parent.id : (spouse?.gender === "f" ? spouseId : spouseId);
+      router.push(`/person/new?father=${fatherId}&mother=${motherId}`);
+    } else {
+      setQuickAdd({ kind: "child", parentId: parent.id, parentGender: parent.gender });
+    }
   }
 
   function handleAddSpouse() {
@@ -272,6 +301,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         onPaneContextMenu={onPaneContextMenu}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onEdgesDelete={onEdgesDelete}
         panOnDrag={panOnDrag}
         selectionMode={toolMode === "select"}
       />

@@ -62,13 +62,19 @@ export default async function PersonPage({ params }: Props) {
   const { id } = await params;
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
 
+  // Accept slug or UUID
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const personQuery = UUID_RE.test(id)
+    ? supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single()
+    : supabase.from("people").select("*").eq("slug", id).is("deleted_at", null).single();
+
   const [
     { data: person },
     { data: events },
     { data: people },
     { data: relationships },
   ] = await Promise.all([
-    supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single(),
+    personQuery,
     supabase
       .from("events")
       .select("*")
@@ -91,7 +97,7 @@ export default async function PersonPage({ params }: Props) {
 
   async function handleDelete() {
     "use server";
-    await deletePerson(id);
+    await deletePerson(person.id);
   }
 
   // Derived display values
@@ -165,7 +171,7 @@ export default async function PersonPage({ params }: Props) {
         <Card className="overflow-hidden">
           {/* Top bar with edit button */}
           <div className="flex justify-end px-6 pt-4 gap-2">
-            <Link href={`/person/${id}/edit`}>
+            <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/edit`}>
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Edit2 className="h-3.5 w-3.5" />
                 {lang === "ar" ? "تعديل" : "Edit"}
@@ -383,7 +389,7 @@ export default async function PersonPage({ params }: Props) {
 
               {/* Placeholder add event button */}
               <div className="mt-6 pt-4 border-t border-[var(--border)]">
-                <Link href={`/person/${id}/event/new`}>
+                <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/event/new`}>
                   <Button variant="outline" size="sm" className="gap-1.5">
                     <Plus className="h-4 w-4" />
                     {lang === "ar" ? "إضافة حدث" : "Add event"}

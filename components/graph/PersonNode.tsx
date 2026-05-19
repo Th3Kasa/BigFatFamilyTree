@@ -11,7 +11,7 @@ import type { PersonNodeData } from "@/lib/graph/transform";
 type PersonNodeType = Node<PersonNodeData, "person">;
 
 export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
-  const { person, lang } = data;
+  const { person, spouseId, lang } = data;
   const [hovered, setHovered] = useState(false);
 
   const givenName =
@@ -108,7 +108,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           )}
         >
           <Link
-            href={`/person/${person.id}`}
+            href={`/person/${person.slug ?? person.id}`}
             onClick={(e) => e.stopPropagation()}
             className="flex items-center justify-center w-8 h-8 rounded-lg bg-background border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
             title={lang === "ar" ? "عرض" : "View"}
@@ -116,7 +116,9 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
             <Eye className="w-3.5 h-3.5" />
           </Link>
           <Link
-            href={`/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`}
+            href={spouseId
+              ? `/person/new?father=${person.gender !== "f" ? person.id : spouseId}&mother=${person.gender === "f" ? person.id : spouseId}`
+              : `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`}
             onClick={(e) => e.stopPropagation()}
             className="flex items-center justify-center w-8 h-8 rounded-lg bg-background border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
             title={lang === "ar" ? "إضافة طفل" : "Add child"}

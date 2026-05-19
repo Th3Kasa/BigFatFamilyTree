@@ -167,9 +167,11 @@ export function PersonStepper({
     translateBtn: lang === "ar" ? "ترجمة من الإنجليزية" : "Translate from English",
   };
 
-  const parentBadge = (fatherName ?? motherName)
-    ? `${t.addingChildOf} ${fatherName ?? motherName}`
-    : null;
+  const parentBadge = fatherName && motherName
+    ? `${t.addingChildOf} ${fatherName} ${lang === "ar" ? "و" : "&"} ${motherName}`
+    : (fatherName ?? motherName)
+      ? `${t.addingChildOf} ${fatherName ?? motherName}`
+      : null;
 
   function goNext() { setDir(1); setStep((s) => Math.min(s + 1, 2)); }
   function goBack() { setDir(-1); setStep((s) => Math.max(s - 1, 0)); }

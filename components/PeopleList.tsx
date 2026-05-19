@@ -44,7 +44,7 @@ export function PeopleList({ people, lang }: Props) {
               return (
                 <li key={p.id}>
                   <Link
-                    href={`/person/${p.id}`}
+                    href={`/person/${p.slug ?? p.id}`}
                     className="flex items-center gap-3 py-3 px-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
                   >
                     <span className="text-xl leading-none shrink-0">

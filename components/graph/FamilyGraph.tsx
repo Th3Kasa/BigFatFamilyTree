@@ -4,13 +4,13 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  MiniMap,
   type NodeTypes,
   type Node,
   type Edge,
   type Connection,
   type NodeMouseHandler,
   type OnNodeDrag,
+  type OnEdgesDelete,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { PersonNode } from "./PersonNode";
@@ -27,6 +27,7 @@ type Props = {
   onPaneContextMenu?: (e: React.MouseEvent | MouseEvent) => void;
   onNodeClick?: NodeMouseHandler;
   onPaneClick?: () => void;
+  onEdgesDelete?: OnEdgesDelete;
   panOnDrag?: boolean | number[];
   selectionMode?: boolean;
 };
@@ -40,6 +41,7 @@ export function FamilyGraph({
   onPaneContextMenu,
   onNodeClick,
   onPaneClick,
+  onEdgesDelete,
   panOnDrag = [1, 2],
   selectionMode = true,
 }: Props) {
@@ -59,8 +61,10 @@ export function FamilyGraph({
         onPaneContextMenu={onPaneContextMenu}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onEdgesDelete={onEdgesDelete}
         panOnDrag={panOnDrag}
         selectionOnDrag={selectionMode}
+        deleteKeyCode="Delete"
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
           style: { stroke: "#d1d5db", strokeWidth: 1.5 },
@@ -72,19 +76,6 @@ export function FamilyGraph({
           size={1}
           color="#e5e7eb"
           variant={BackgroundVariant.Dots}
-        />
-
-        <MiniMap
-          className="!rounded-xl !overflow-hidden !shadow-lg !border !border-border"
-          nodeColor={(n) => {
-            const d = n.data as { person?: { gender?: string; is_placeholder?: boolean } };
-            if (d.person?.is_placeholder) return "#e5e7eb";
-            return d.person?.gender === "f" ? "#fda4af" : "#93c5fd";
-          }}
-          maskColor="rgb(249 250 251 / 0.7)"
-          style={{ bottom: 80, right: 16 }}
-          pannable
-          zoomable
         />
       </ReactFlow>
     </div>

@@ -12,8 +12,13 @@ export default async function EditPersonPage({ params }: Props) {
   const { id } = await params;
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const personQuery = UUID_RE.test(id)
+    ? supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single()
+    : supabase.from("people").select("*").eq("slug", id).is("deleted_at", null).single();
+
   const [{ data: person }, { data: people }] = await Promise.all([
-    supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single(),
+    personQuery,
     supabase
       .from("people")
       .select("id, given_en, given_ar, family_name_en, family_name_ar")
@@ -23,7 +28,7 @@ export default async function EditPersonPage({ params }: Props) {
 
   if (!person) notFound();
 
-  const updateThisPerson = updatePerson.bind(null, id);
+  const updateThisPerson = updatePerson.bind(null, person.id);
   const given =
     lang === "ar"
       ? (person.given_ar ?? person.given_en)

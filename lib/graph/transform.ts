@@ -7,6 +7,7 @@ const NODE_HEIGHT = 80;
 
 export type PersonInput = {
   id: string;
+  slug: string | null;
   given_en: string | null;
   given_ar: string | null;
   family_name_en: string | null;
@@ -31,6 +32,7 @@ export type RelationshipInput = {
 
 export type PersonNodeData = {
   person: PersonInput;
+  spouseId?: string;
   lang: Lang;
 };
 
@@ -46,7 +48,7 @@ export type GraphEdge = {
   source: string;
   target: string;
   type: "smoothstep" | "straight";
-  data?: { edgeKind: "parent" | "spouse" };
+  data?: { edgeKind: "parent" | "spouse"; relationshipId?: string };
   style?: React.CSSProperties;
   animated?: boolean;
 };
@@ -58,10 +60,19 @@ export function buildGraphElements(
 ): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const idSet = new Set(people.map((p) => p.id));
 
+  // Build spouse map for "add child" links
+  const spouseMap = new Map<string, string>();
+  for (const r of relationships) {
+    if (r.type === "spouse") {
+      spouseMap.set(r.person_a_id, r.person_b_id);
+      spouseMap.set(r.person_b_id, r.person_a_id);
+    }
+  }
+
   const nodes: GraphNode[] = people.map((p) => ({
     id: p.id,
     type: "person",
-    data: { person: p, lang },
+    data: { person: p, spouseId: spouseMap.get(p.id), lang },
     position: { x: p.pos_x ?? 0, y: p.pos_y ?? 0 },
   }));
 
@@ -83,7 +94,7 @@ export function buildGraphElements(
         source: r.person_a_id,
         target: r.person_b_id,
         type: "straight",
-        data: { edgeKind: "spouse" },
+        data: { edgeKind: "spouse", relationshipId: r.id },
         style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
       });
     }

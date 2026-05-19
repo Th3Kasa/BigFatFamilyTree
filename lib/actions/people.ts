@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { personSchema } from "@/lib/validation/people";
+import { generateSlug } from "@/lib/utils/slug";
 
 export type ActionState = {
   success: boolean;
@@ -21,13 +22,28 @@ function parseFormData(formData: FormData): Record<string, string | null> {
   );
 }
 
+async function uniqueSlug(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  base: string,
+  excludeId?: string,
+): Promise<string> {
+  let candidate = base;
+  let n = 2;
+  while (true) {
+    const q = supabase.from("people").select("id").eq("slug", candidate);
+    if (excludeId) q.neq("id", excludeId);
+    const { data } = await q.maybeSingle();
+    if (!data) return candidate;
+    candidate = `${base}-${n++}`;
+  }
+}
+
 // ── createPerson ──────────────────────────────────────────────────────────────
 export async function createPerson(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   const raw = parseFormData(formData);
-  // coerce boolean and nulls
   const parsed = personSchema.safeParse({
     ...raw,
     is_placeholder: raw.is_placeholder === "true",
@@ -44,17 +60,19 @@ export async function createPerson(
   }
 
   const supabase = await createClient();
+  const baseSlug = generateSlug(parsed.data.given_en, parsed.data.family_name_en, parsed.data.given_ar);
+  const slug = await uniqueSlug(supabase, baseSlug);
+
   const { data, error } = await supabase
     .from("people")
-    .insert(parsed.data)
-    .select("id")
+    .insert({ ...parsed.data, slug })
+    .select("id, slug")
     .single();
 
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
-  revalidatePath(`/person/${data.id}`);
-  redirect(`/person/${data.id}`);
+  redirect(`/person/${data.slug ?? data.id}`);
 }
 
 // ── updatePerson ──────────────────────────────────────────────────────────────
@@ -80,17 +98,20 @@ export async function updatePerson(
   }
 
   const supabase = await createClient();
+  const baseSlug = generateSlug(parsed.data.given_en, parsed.data.family_name_en, parsed.data.given_ar);
+  const slug = await uniqueSlug(supabase, baseSlug, id);
+
   const { error } = await supabase
     .from("people")
-    .update(parsed.data)
+    .update({ ...parsed.data, slug })
     .eq("id", id)
     .is("deleted_at", null);
 
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
-  revalidatePath(`/person/${id}`);
-  redirect(`/person/${id}`);
+  revalidatePath(`/person/${slug}`);
+  redirect(`/person/${slug}`);
 }
 
 // ── deletePerson (soft delete) ────────────────────────────────────────────────
