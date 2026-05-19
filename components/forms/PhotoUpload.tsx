@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -8,11 +8,25 @@ type Props = {
   onUpload: (url: string) => void;
 };
 
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
 export function PhotoUpload({ currentUrl, onUpload }: Props) {
   const [preview, setPreview] = useState<string | null>(currentUrl);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -21,9 +35,12 @@ export function PhotoUpload({ currentUrl, onUpload }: Props) {
     setError(null);
     setUploading(true);
 
-    setPreview(URL.createObjectURL(file));
+    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    const blobUrl = URL.createObjectURL(file);
+    blobUrlRef.current = blobUrl;
+    setPreview(blobUrl);
 
-    const ext = file.name.split(".").pop() ?? "jpg";
+    const ext = MIME_TO_EXT[file.type] ?? "jpg";
     const path = `${crypto.randomUUID()}.${ext}`;
 
     const supabase = createClient();
@@ -46,13 +63,14 @@ export function PhotoUpload({ currentUrl, onUpload }: Props) {
     <div className="flex flex-col items-center gap-2">
       <button
         type="button"
+        aria-label="Upload photo"
         onClick={() => inputRef.current?.click()}
         className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-dashed border-gray-300 hover:border-amber-400 transition-colors flex items-center justify-center bg-gray-50"
       >
         {preview ? (
           <img src={preview} alt="Photo" className="w-full h-full object-cover" />
         ) : (
-          <span className="text-3xl">📷</span>
+          <span className="text-3xl" aria-hidden>📷</span>
         )}
         {uploading && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
