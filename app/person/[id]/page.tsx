@@ -35,6 +35,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DeletePersonButton } from "@/components/person/DeletePersonButton";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -170,26 +171,7 @@ export default async function PersonPage({ params }: Props) {
                 {lang === "ar" ? "تعديل" : "Edit"}
               </Button>
             </Link>
-            <form action={handleDelete}>
-              <Button
-                variant="ghost"
-                size="sm"
-                type="submit"
-                className="text-[var(--destructive)] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
-                onClick={(e) => {
-                  if (
-                    !confirm(
-                      lang === "ar"
-                        ? "حذف هذا الشخص؟"
-                        : "Delete this person?"
-                    )
-                  )
-                    e.preventDefault();
-                }}
-              >
-                {lang === "ar" ? "حذف" : "Delete"}
-              </Button>
-            </form>
+            <DeletePersonButton action={handleDelete} lang={lang} />
           </div>
 
           {/* Avatar + name */}
