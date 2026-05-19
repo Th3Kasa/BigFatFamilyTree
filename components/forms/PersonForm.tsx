@@ -36,6 +36,14 @@ type Props = {
   submitLabel: string;
 };
 
+const GENDER_LABELS: Record<"f" | "m" | "unknown", { en: string; ar: string }> = {
+  f:       { en: "Female",  ar: "أنثى" },
+  m:       { en: "Male",    ar: "ذكر" },
+  unknown: { en: "Unknown", ar: "غير محدد" },
+};
+
+const INPUT_CLS = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400";
+
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
@@ -53,9 +61,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
   const [state, formAction] = useActionState(action, null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(initialData?.photo_url ?? null);
 
-  function fieldError(name: string): string | undefined {
-    return state?.fieldErrors?.[name];
-  }
+  const fieldError = (name: string) => state?.fieldErrors?.[name];
 
   const personLabel = (p: PeopleLookup[number]) =>
     (lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar) ?? "?";
@@ -68,7 +74,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
         </div>
       )}
 
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center gap-1">
         <PhotoUpload currentUrl={photoUrl} onUpload={setPhotoUrl} />
         <input type="hidden" name="photo_url" value={photoUrl ?? ""} />
       </div>
@@ -79,25 +85,27 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
         </legend>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">English</label>
+            <label htmlFor="given_en" className="block text-xs text-gray-500 mb-1">English</label>
             <input
+              id="given_en"
               name="given_en"
               defaultValue={initialData?.given_en ?? ""}
               placeholder="e.g. Marcelle"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className={INPUT_CLS}
             />
             {fieldError("given_en") && (
               <p className="text-xs text-red-500 mt-1">{fieldError("given_en")}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">عربي</label>
+            <label htmlFor="given_ar" className="block text-xs text-gray-500 mb-1">عربي</label>
             <input
+              id="given_ar"
               name="given_ar"
               defaultValue={initialData?.given_ar ?? ""}
               placeholder="مثال: مارسيل"
               dir="rtl"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className={INPUT_CLS}
             />
           </div>
         </div>
@@ -105,41 +113,39 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Father name (EN)</label>
-          <input name="father_name_en" defaultValue={initialData?.father_name_en ?? ""} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          <label htmlFor="father_name_en" className="block text-xs text-gray-500 mb-1">Father name (EN)</label>
+          <input id="father_name_en" name="father_name_en" defaultValue={initialData?.father_name_en ?? ""} className={INPUT_CLS} />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">اسم الأب</label>
-          <input name="father_name_ar" defaultValue={initialData?.father_name_ar ?? ""} dir="rtl" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Grandfather name (EN)</label>
-          <input name="grandfather_name_en" defaultValue={initialData?.grandfather_name_en ?? ""} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">اسم الجد</label>
-          <input name="grandfather_name_ar" defaultValue={initialData?.grandfather_name_ar ?? ""} dir="rtl" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          <label htmlFor="father_name_ar" className="block text-xs text-gray-500 mb-1">اسم الأب</label>
+          <input id="father_name_ar" name="father_name_ar" defaultValue={initialData?.father_name_ar ?? ""} dir="rtl" className={INPUT_CLS} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Family name (EN)</label>
-          <input name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          <label htmlFor="grandfather_name_en" className="block text-xs text-gray-500 mb-1">Grandfather name (EN)</label>
+          <input id="grandfather_name_en" name="grandfather_name_en" defaultValue={initialData?.grandfather_name_en ?? ""} className={INPUT_CLS} />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">اسم العائلة</label>
-          <input name="family_name_ar" defaultValue={initialData?.family_name_ar ?? ""} dir="rtl" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          <label htmlFor="grandfather_name_ar" className="block text-xs text-gray-500 mb-1">اسم الجد</label>
+          <input id="grandfather_name_ar" name="grandfather_name_ar" defaultValue={initialData?.grandfather_name_ar ?? ""} dir="rtl" className={INPUT_CLS} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="family_name_en" className="block text-xs text-gray-500 mb-1">Family name (EN)</label>
+          <input id="family_name_en" name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} className={INPUT_CLS} />
+        </div>
+        <div>
+          <label htmlFor="family_name_ar" className="block text-xs text-gray-500 mb-1">اسم العائلة</label>
+          <input id="family_name_ar" name="family_name_ar" defaultValue={initialData?.family_name_ar ?? ""} dir="rtl" className={INPUT_CLS} />
         </div>
       </div>
 
       <div>
-        <label className="block text-xs text-gray-500 mb-2">
-          {lang === "ar" ? "الجنس" : "Gender"}
-        </label>
+        <p className="text-xs text-gray-500 mb-2">{lang === "ar" ? "الجنس" : "Gender"}</p>
         <div className="flex gap-4">
           {(["f", "m", "unknown"] as const).map((g) => (
             <label key={g} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -150,7 +156,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
                 defaultChecked={(initialData?.gender ?? "unknown") === g}
                 className="accent-amber-500"
               />
-              {g === "f" ? "Female" : g === "m" ? "Male" : "Unknown"}
+              {GENDER_LABELS[g][lang]}
             </label>
           ))}
         </div>
@@ -158,13 +164,14 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">
+          <label htmlFor="father_id" className="block text-xs text-gray-500 mb-1">
             {lang === "ar" ? "الأب" : "Father"}
           </label>
           <select
+            id="father_id"
             name="father_id"
             defaultValue={initialData?.father_id ?? ""}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+            className={`${INPUT_CLS} bg-white`}
           >
             <option value="">— none —</option>
             {people
@@ -175,13 +182,14 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">
+          <label htmlFor="mother_id" className="block text-xs text-gray-500 mb-1">
             {lang === "ar" ? "الأم" : "Mother"}
           </label>
           <select
+            id="mother_id"
             name="mother_id"
             defaultValue={initialData?.mother_id ?? ""}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+            className={`${INPUT_CLS} bg-white`}
           >
             <option value="">— none —</option>
             {people
@@ -194,24 +202,26 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       </div>
 
       <div>
-        <label className="block text-xs text-gray-500 mb-1">
+        <label htmlFor="notes_en" className="block text-xs text-gray-500 mb-1">
           {lang === "ar" ? "ملاحظات (إنجليزي)" : "Notes (English)"}
         </label>
         <textarea
+          id="notes_en"
           name="notes_en"
           defaultValue={initialData?.notes_en ?? ""}
           rows={3}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+          className={`${INPUT_CLS} resize-none`}
         />
       </div>
       <div>
-        <label className="block text-xs text-gray-500 mb-1">ملاحظات (عربي)</label>
+        <label htmlFor="notes_ar" className="block text-xs text-gray-500 mb-1">ملاحظات (عربي)</label>
         <textarea
+          id="notes_ar"
           name="notes_ar"
           defaultValue={initialData?.notes_ar ?? ""}
           rows={3}
           dir="rtl"
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+          className={`${INPUT_CLS} resize-none`}
         />
       </div>
 
