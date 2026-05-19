@@ -31,7 +31,7 @@ export default async function EditPersonPage({ params }: Props) {
         href={`/person/${id}`}
         className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block"
       >
-        {lang === "ar" ? "→ العودة" : "← Back"}
+        {lang === "ar" ? "← العودة" : "← Back"}
       </Link>
       <h1 className="text-2xl font-bold text-gray-900 mb-8">
         {lang === "ar" ? `تعديل: ${given ?? ""}` : `Edit: ${given ?? ""}`}

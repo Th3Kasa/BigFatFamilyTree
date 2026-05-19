@@ -12,7 +12,6 @@ type PersonOption = {
 };
 
 type Props = {
-  personId: string;
   people: PersonOption[];
   lang: "ar" | "en";
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
@@ -56,7 +55,7 @@ export function RelationshipForm({ people, lang, action }: Props) {
             required
             className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
           >
-            <option value="">— select —</option>
+            <option value="">{lang === "ar" ? "— اختر —" : "— select —"}</option>
             {people.map((p) => (
               <option key={p.id} value={p.id}>{personLabel(p)}</option>
             ))}
