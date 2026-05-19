@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { createTranscript } from "@/lib/actions/transcripts";
 import { TranscriptForm } from "@/components/forms/TranscriptForm";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ChevronLeft } from "lucide-react";
 
 export default async function NewTranscriptPage() {
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
@@ -15,13 +17,24 @@ export default async function NewTranscriptPage() {
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
-      <Link href="/transcripts" className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">
-        {lang === "ar" ? "→ العودة" : "← Back"}
+      <Link
+        href="/transcripts"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        {lang === "ar" ? "العودة" : "Back"}
       </Link>
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">
-        {lang === "ar" ? "رفع تسجيل صوتي" : "Upload recording"}
-      </h1>
-      <TranscriptForm action={createTranscript} people={people ?? []} lang={lang} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl">
+            {lang === "ar" ? "رفع تسجيل صوتي" : "Upload Transcript"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TranscriptForm action={createTranscript} people={people ?? []} lang={lang} />
+        </CardContent>
+      </Card>
     </main>
   );
 }

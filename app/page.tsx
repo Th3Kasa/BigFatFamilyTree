@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { CanvasController } from "@/components/graph/CanvasController";
-import { PeopleList } from "@/components/PeopleList";
+import { MobilePeopleSheet } from "@/components/MobilePeopleSheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { PersonInput } from "@/lib/graph/transform";
 
@@ -12,7 +12,9 @@ export default async function HomePage() {
   const [{ data: people }, { data: relationships }] = await Promise.all([
     supabase
       .from("people")
-      .select("id, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y")
+      .select(
+        "id, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y"
+      )
       .is("deleted_at", null)
       .order("given_en"),
     supabase.from("relationships").select("*"),
@@ -34,7 +36,7 @@ export default async function HomePage() {
           action={
             <a
               href="/person/new"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-[var(--primary-foreground)] font-semibold text-sm transition-colors"
             >
               {lang === "ar" ? "＋ إضافة شخص" : "＋ Add person"}
             </a>
@@ -49,8 +51,8 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* Desktop: graph */}
-      <div className="hidden md:block h-[calc(100vh-57px)] bg-gray-50">
+      {/* Canvas — always primary, full viewport */}
+      <div className="h-[calc(100vh-57px)] bg-[#fafafa]">
         <CanvasController
           initialNodes={nodes}
           initialEdges={edges}
@@ -59,22 +61,8 @@ export default async function HomePage() {
         />
       </div>
 
-      {/* Mobile: list */}
-      <div className="md:hidden px-4 py-6">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
-          {lang === "ar" ? "أفراد العائلة" : "Family members"}
-        </h2>
-        <PeopleList people={people} lang={lang} />
-      </div>
-
-      {/* FAB */}
-      <a
-        href="/person/new"
-        className="fixed bottom-6 end-6 z-50 w-14 h-14 rounded-full bg-amber-500 hover:bg-amber-600 shadow-lg flex items-center justify-center text-white text-2xl transition-colors"
-        aria-label={lang === "ar" ? "إضافة شخص" : "Add person"}
-      >
-        ＋
-      </a>
+      {/* Mobile: bottom-sheet people list, triggered by FAB */}
+      <MobilePeopleSheet people={typedPeople} lang={lang} />
     </>
   );
 }

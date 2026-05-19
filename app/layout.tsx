@@ -1,9 +1,33 @@
 import type { Metadata } from "next";
+import { Inter, Fraunces, IBM_Plex_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { getLang } from "@/lib/lang/server";
-import { LangToggle } from "@/components/LangToggle";
-import { SignOutButton } from "@/components/ui/SignOutButton";
 import { createClient } from "@/lib/supabase/server";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import { CommandProvider } from "@/components/providers/command-provider";
+import { TopBar } from "@/components/shell/TopBar";
+import { NavRail } from "@/components/shell/NavRail";
+import { MobileNav } from "@/components/shell/MobileNav";
+import { Toaster } from "@/components/ui/sonner";
+
+const fontSans = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const fontDisplay = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const fontArabic = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-arabic",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Big Fat Family Tree",
@@ -13,32 +37,40 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const lang = await getLang();
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   return (
-    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"}>
-      <body className="bg-white text-gray-900 antialiased">
-        <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-sm border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2 font-semibold text-gray-900 hover:text-amber-600 transition-colors">
-            <span className="text-xl">🌳</span>
-            <span className="hidden sm:block text-sm">
-              {lang === "ar" ? "شجرة العائلة" : "Family Tree"}
-            </span>
-          </a>
-          <div className="flex items-center gap-2">
-            {user && (
-              <a
-                href="/admin"
-                className="text-sm text-gray-400 hover:text-gray-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100 hidden sm:block"
-              >
-                {lang === "ar" ? "الإدارة" : "Admin"}
-              </a>
-            )}
-            <LangToggle current={lang} />
-            {user && <SignOutButton lang={lang} />}
-          </div>
-        </header>
-        {children}
+    <html
+      lang={lang}
+      dir={lang === "ar" ? "rtl" : "ltr"}
+      suppressHydrationWarning
+      className={`${fontSans.variable} ${fontDisplay.variable} ${fontArabic.variable}`}
+    >
+      <body className="antialiased">
+        <ThemeProvider>
+          <CommandProvider>
+            <div className="grid grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
+              {/* Top bar spans both columns */}
+              <TopBar user={user} lang={lang} />
+
+              {/* Nav rail: left col, row 2, desktop only */}
+              <NavRail lang={lang} />
+
+              {/* Main content: right col, row 2 */}
+              <main className="overflow-auto pb-16 md:pb-0">
+                {children}
+              </main>
+            </div>
+
+            {/* Mobile bottom nav */}
+            <MobileNav />
+
+            {/* Toast notifications */}
+            <Toaster position="bottom-right" />
+          </CommandProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
