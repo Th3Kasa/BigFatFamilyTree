@@ -120,16 +120,6 @@ export function Inspector({ person, lang, onClose }: Props) {
             </div>
           )}
 
-          {/* Birth / death dates (stored in family tree as part of person profile — show id for now as placeholder until fields added) */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              {lang === "ar" ? "المعرّف" : "ID"}
-            </p>
-            <p className="text-sm text-foreground font-mono break-all select-all">
-              {person?.id}
-            </p>
-          </div>
-
           {/* Family links */}
           {(person?.father_id || person?.mother_id) && (
             <div className="space-y-2">
