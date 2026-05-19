@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
-import { FamilyGraph } from "@/components/graph/FamilyGraph";
+import { CanvasController } from "@/components/graph/CanvasController";
 import { PeopleList } from "@/components/PeopleList";
 import { EmptyState } from "@/components/ui/EmptyState";
+import type { PersonInput } from "@/lib/graph/transform";
 
 export default async function HomePage() {
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
@@ -11,7 +12,7 @@ export default async function HomePage() {
   const [{ data: people }, { data: relationships }] = await Promise.all([
     supabase
       .from("people")
-      .select("*")
+      .select("id, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y")
       .is("deleted_at", null)
       .order("given_en"),
     supabase.from("relationships").select("*"),
@@ -43,13 +44,19 @@ export default async function HomePage() {
     );
   }
 
-  const { nodes, edges } = buildGraphElements(people, relationships ?? [], lang);
+  const typedPeople = people as PersonInput[];
+  const { nodes, edges } = buildGraphElements(typedPeople, relationships ?? [], lang);
 
   return (
     <>
       {/* Desktop: graph */}
       <div className="hidden md:block h-[calc(100vh-57px)] bg-gray-50">
-        <FamilyGraph nodes={nodes} edges={edges} />
+        <CanvasController
+          initialNodes={nodes}
+          initialEdges={edges}
+          people={typedPeople}
+          lang={lang}
+        />
       </div>
 
       {/* Mobile: list */}

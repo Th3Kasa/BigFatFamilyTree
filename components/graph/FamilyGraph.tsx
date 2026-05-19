@@ -1,6 +1,10 @@
 "use client";
 
-import { ReactFlow, Background, Controls, MiniMap, type NodeTypes, type Node, type Edge } from "@xyflow/react";
+import {
+  ReactFlow, Background, Controls, MiniMap,
+  type NodeTypes, type Node, type Edge,
+  type Connection, type NodeMouseHandler, type OnNodeDrag,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { PersonNode } from "./PersonNode";
 import type { GraphNode, GraphEdge } from "@/lib/graph/transform";
@@ -10,11 +14,17 @@ const nodeTypes: NodeTypes = { person: PersonNode };
 type Props = {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  onNodeDragStop?: OnNodeDrag;
+  onConnect?: (c: Connection) => void;
+  onNodeContextMenu?: NodeMouseHandler;
+  onPaneContextMenu?: (e: React.MouseEvent | MouseEvent) => void;
 };
 
-export function FamilyGraph({ nodes, edges }: Props) {
+export function FamilyGraph({
+  nodes, edges, onNodeDragStop, onConnect, onNodeContextMenu, onPaneContextMenu,
+}: Props) {
   return (
-    <div style={{ width: "100%", height: "100vh" }}>
+    <div style={{ width: "100%", height: "100%" }}>
       <ReactFlow
         nodes={nodes as Node[]}
         edges={edges as Edge[]}
@@ -23,6 +33,10 @@ export function FamilyGraph({ nodes, edges }: Props) {
         fitViewOptions={{ padding: 0.15 }}
         minZoom={0.2}
         maxZoom={2}
+        onNodeDragStop={onNodeDragStop}
+        onConnect={onConnect}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         proOptions={{ hideAttribution: false }}
       >
         <Background gap={20} size={1} color="#e5e7eb" />

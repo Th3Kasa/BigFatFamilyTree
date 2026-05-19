@@ -36,7 +36,7 @@ export function PersonNode({ data }: NodeProps<PersonNodeType>) {
   return (
     <>
       <Handle type="target" position={Position.Top} />
-      <Link href={`/person/${person.id}`} className="block no-underline">
+      <Link href={`/person/${person.id}`} className="block no-underline" onClick={(e) => e.stopPropagation()}>
         <div
           className={`w-40 h-20 rounded-lg border-2 ${borderColor} bg-white shadow-sm hover:shadow-md hover:border-amber-400 transition-all p-2 flex flex-col items-center justify-center gap-1`}
         >
