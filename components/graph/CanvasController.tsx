@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { useReactFlow, ReactFlowProvider, useNodesState, useEdgesState } from "@xyflow/react";
 import type { Connection, NodeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
 import {
   MousePointer2,
@@ -161,6 +161,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const [toolMode, setToolMode] = useState<ToolMode>("select");
 
   const { fitView } = useReactFlow() as { fitView: (opts?: { padding?: number; duration?: number }) => void };
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any[]);
+  const [edges, , onEdgesChange] = useEdgesState(initialEdges as any[]);
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
     startTransition(async () => {
@@ -244,7 +246,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     setMenu(null);
 
     // Find spouse to link both parents
-    const spouseEdge = initialEdges.find(
+    const spouseEdge = edges.find(
       (e) =>
         e.data?.edgeKind === "spouse" &&
         (e.source === parent.id || e.target === parent.id)
@@ -293,8 +295,10 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   return (
     <div className="relative w-full h-full">
       <FamilyGraph
-        nodes={initialNodes}
-        edges={initialEdges}
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onNodeContextMenu={onNodeContextMenu}

@@ -11,6 +11,8 @@ import {
   type NodeMouseHandler,
   type OnNodeDrag,
   type OnEdgesDelete,
+  type OnNodesChange,
+  type OnEdgesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { PersonNode } from "./PersonNode";
@@ -21,6 +23,8 @@ const nodeTypes: NodeTypes = { person: PersonNode };
 type Props = {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  onNodesChange?: OnNodesChange;
+  onEdgesChange?: OnEdgesChange;
   onNodeDragStop?: OnNodeDrag;
   onConnect?: (c: Connection) => void;
   onNodeContextMenu?: NodeMouseHandler;
@@ -35,6 +39,8 @@ type Props = {
 export function FamilyGraph({
   nodes,
   edges,
+  onNodesChange,
+  onEdgesChange,
   onNodeDragStop,
   onConnect,
   onNodeContextMenu,
@@ -50,6 +56,8 @@ export function FamilyGraph({
       <ReactFlow
         nodes={nodes as Node[]}
         edges={edges as Edge[]}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.15 }}
