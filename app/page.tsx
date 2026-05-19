@@ -35,6 +35,14 @@ export default async function Home() {
       <div className="md:hidden">
         <PeopleList people={people ?? []} lang={lang} />
       </div>
+      {/* FAB */}
+      <a
+        href="/person/new"
+        className="fixed bottom-6 end-6 z-50 w-14 h-14 rounded-full bg-amber-500 hover:bg-amber-600 shadow-lg flex items-center justify-center text-white text-2xl transition-colors"
+        aria-label={lang === "ar" ? "إضافة شخص" : "Add person"}
+      >
+        ＋
+      </a>
     </>
   );
 }
