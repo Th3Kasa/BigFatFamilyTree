@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionState } from "@/lib/actions/people";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const VALID_TYPES = ["spouse", "adopted_by", "raised_by", "godparent"] as const;
+const VALID_STATUSES = ["current", "divorced", "widowed"] as const;
+type RelType = (typeof VALID_TYPES)[number];
+type RelStatus = (typeof VALID_STATUSES)[number];
+
 export async function createRelationship(
   personId: string,
   _prev: ActionState,
@@ -17,13 +24,14 @@ export async function createRelationship(
     return { success: false, error: "All fields are required." };
   }
 
-  const validTypes = ["spouse", "adopted_by", "raised_by", "godparent"] as const;
-  const validStatuses = ["current", "divorced", "widowed"] as const;
+  if (!UUID_RE.test(otherPersonId)) {
+    return { success: false, error: "Invalid person ID." };
+  }
 
-  if (!validTypes.includes(type as (typeof validTypes)[number])) {
+  if (!VALID_TYPES.includes(type as RelType)) {
     return { success: false, error: "Invalid relationship type." };
   }
-  if (!validStatuses.includes(status as (typeof validStatuses)[number])) {
+  if (!VALID_STATUSES.includes(status as RelStatus)) {
     return { success: false, error: "Invalid relationship status." };
   }
 
@@ -31,8 +39,8 @@ export async function createRelationship(
   const { error } = await supabase.from("relationships").insert({
     person_a_id: personId,
     person_b_id: otherPersonId,
-    type: type as (typeof validTypes)[number],
-    status: status as (typeof validStatuses)[number],
+    type: type as RelType,
+    status: status as RelStatus,
   });
 
   if (error) return { success: false, error: error.message };

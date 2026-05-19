@@ -12,14 +12,21 @@ export type ActionState = {
   personId?: string;
 } | null;
 
+function parseFormData(formData: FormData): Record<string, string | null> {
+  return Object.fromEntries(
+    [...formData.entries()].map(([k, v]) => [
+      k,
+      v instanceof File ? null : v === "" ? null : v,
+    ]),
+  );
+}
+
 // ── createPerson ──────────────────────────────────────────────────────────────
 export async function createPerson(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const raw = Object.fromEntries(
-    [...formData.entries()].map(([k, v]) => [k, v === "" ? null : v]),
-  );
+  const raw = parseFormData(formData);
   // coerce boolean and nulls
   const parsed = personSchema.safeParse({
     ...raw,
@@ -56,9 +63,7 @@ export async function updatePerson(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const raw = Object.fromEntries(
-    [...formData.entries()].map(([k, v]) => [k, v === "" ? null : v]),
-  );
+  const raw = parseFormData(formData);
   const parsed = personSchema.safeParse({
     ...raw,
     is_placeholder: raw.is_placeholder === "true",
@@ -78,7 +83,8 @@ export async function updatePerson(
   const { error } = await supabase
     .from("people")
     .update(parsed.data)
-    .eq("id", id);
+    .eq("id", id)
+    .is("deleted_at", null);
 
   if (error) return { success: false, error: error.message };
 
@@ -88,7 +94,7 @@ export async function updatePerson(
 }
 
 // ── deletePerson (soft delete) ────────────────────────────────────────────────
-export async function deletePerson(id: string): Promise<ActionState> {
+export async function deletePerson(id: string) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("people")
