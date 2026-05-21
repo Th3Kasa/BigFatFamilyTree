@@ -56,7 +56,10 @@ export default async function HomePage() {
   return (
     <>
       {/* Canvas — always primary, full viewport */}
-      <div className="h-[calc(100vh-57px)] bg-[#fafafa]">
+      <div
+        className="canvas-stage relative h-[calc(100vh-57px)] overflow-hidden"
+        data-grain="on"
+      >
         <CanvasController
           initialNodes={nodes}
           initialEdges={edges}

@@ -155,11 +155,21 @@ export default async function PersonPage({ params }: Props) {
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
+      {/* Ambient bloom — burgundy + accent behind the hero */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[420px] overflow-hidden"
+        style={{
+          background:
+            "radial-gradient(800px 380px at 50% -10%, oklch(0.34 0.13 18 / 0.18), transparent 70%), radial-gradient(600px 300px at 80% 5%, oklch(0.68 0.18 38 / 0.18), transparent 65%)",
+        }}
+      />
+
       {/* Back nav */}
-      <div className="max-w-2xl mx-auto px-4 pt-6">
+      <div className="relative max-w-2xl mx-auto px-4 pt-6">
         <Link
           href="/"
-          className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-6"
+          className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-sm transition-colors hover:text-[var(--foreground)]"
         >
           <span aria-hidden>{lang === "ar" ? "→" : "←"}</span>
           {lang === "ar" ? "العودة" : "Back"}
@@ -167,12 +177,18 @@ export default async function PersonPage({ params }: Props) {
       </div>
 
       {/* Hero */}
-      <div className="max-w-2xl mx-auto px-4 pb-6">
-        <Card className="overflow-hidden">
+      <div className="relative max-w-2xl mx-auto px-4 pb-6">
+        <Card className="chrome-card relative overflow-hidden rounded-3xl">
+          {/* Top sheen */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[var(--primary)] via-[var(--accent)] to-transparent"
+          />
+
           {/* Top bar with edit button */}
-          <div className="flex justify-end px-6 pt-4 gap-2">
+          <div className="relative flex justify-end px-6 pt-5 gap-2">
             <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/edit`}>
-              <Button variant="outline" size="sm" className="gap-1.5">
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
                 <Edit2 className="h-3.5 w-3.5" />
                 {lang === "ar" ? "تعديل" : "Edit"}
               </Button>
@@ -181,42 +197,58 @@ export default async function PersonPage({ params }: Props) {
           </div>
 
           {/* Avatar + name */}
-          <div className="flex flex-col items-center gap-3 px-6 pb-6 pt-2 text-center">
-            <AvatarPhotoUpload
-              personId={person.id}
-              currentUrl={person.photo_url ?? null}
-              alt={given ?? ""}
-              initials={initials}
-              fallbackGender={person.gender as "m" | "f" | "unknown" | undefined}
-              sizeClass="h-[120px] w-[120px]"
-              wrapperClassName={cn(
-                "border-4",
-                person.gender === "f"
-                  ? "border-rose-200 bg-rose-50"
-                  : "border-sky-200 bg-sky-50"
-              )}
-              fallbackClassName={cn(
-                "text-3xl font-bold",
-                person.gender === "f"
-                  ? "bg-rose-50 text-rose-400"
-                  : "bg-sky-50 text-sky-400"
-              )}
-              lang={lang}
-            />
+          <div className="relative flex flex-col items-center gap-4 px-6 pb-7 pt-3 text-center">
+            <div className="relative">
+              {/* Soft accent halo behind avatar */}
+              <div
+                aria-hidden
+                className="absolute inset-0 -m-3 rounded-full opacity-70 blur-2xl"
+                style={{
+                  background:
+                    person.gender === "f"
+                      ? "radial-gradient(closest-side, oklch(0.78 0.16 12 / 0.45), transparent 70%)"
+                      : "radial-gradient(closest-side, oklch(0.68 0.18 38 / 0.35), transparent 70%)",
+                }}
+              />
+              <AvatarPhotoUpload
+                personId={person.id}
+                currentUrl={person.photo_url ?? null}
+                alt={given ?? ""}
+                initials={initials}
+                fallbackGender={person.gender as "m" | "f" | "unknown" | undefined}
+                sizeClass="h-[128px] w-[128px]"
+                wrapperClassName={cn(
+                  "relative ring-[5px] ring-offset-2 ring-offset-[var(--card)]",
+                  person.gender === "f"
+                    ? "ring-rose-200/80"
+                    : "ring-[oklch(0.86_0.07_38)]/70"
+                )}
+                fallbackClassName={cn(
+                  "text-3xl font-bold",
+                  person.gender === "f"
+                    ? "bg-rose-50 text-rose-500"
+                    : "bg-[oklch(0.96_0.04_60)] text-[var(--primary)]"
+                )}
+                lang={lang}
+              />
+            </div>
 
             <div className="space-y-1">
-              <h1 className="text-[28px] font-bold text-[var(--foreground)] font-[Fraunces,serif] leading-tight">
+              <h1
+                className="text-[34px] font-semibold leading-[1.05] tracking-tight text-[var(--foreground)]"
+                style={{ fontFamily: "var(--font-display)", fontOpticalSizing: "auto" }}
+              >
                 {given ?? "—"}
               </h1>
               {fullNameChain !== given && (
-                <p className="text-sm text-[var(--muted-foreground)]">{fullNameChain}</p>
+                <p className="text-sm tracking-wide text-[var(--muted-foreground)]">{fullNameChain}</p>
               )}
             </div>
 
             {/* Meta badges */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
               {(birthYear || deathYear) && (
-                <Badge variant="outline" className="gap-1.5">
+                <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1">
                   <Calendar className="h-3 w-3" />
                   {birthYear ?? "?"}
                   {deathYear ? ` – ${deathYear}` : ""}
@@ -226,16 +258,17 @@ export default async function PersonPage({ params }: Props) {
                 <Badge
                   variant="secondary"
                   className={cn(
+                    "rounded-full border px-3 py-1 text-xs",
                     person.gender === "f"
-                      ? "bg-rose-50 text-rose-600 border-rose-100"
-                      : "bg-sky-50 text-sky-600 border-sky-100"
+                      ? "border-rose-100 bg-rose-50 text-rose-600"
+                      : "border-[oklch(0.86_0.07_38)]/40 bg-[oklch(0.96_0.04_60)] text-[var(--primary)]"
                   )}
                 >
                   {genderLabel}
                 </Badge>
               )}
               {familyName && (
-                <Badge variant="outline" className="gap-1.5">
+                <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1">
                   <Users className="h-3 w-3" />
                   {familyName}
                 </Badge>

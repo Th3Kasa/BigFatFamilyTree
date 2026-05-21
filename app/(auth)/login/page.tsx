@@ -154,70 +154,96 @@ export default function LoginPage() {
         className={cn(
           "relative flex shrink-0 flex-col items-center justify-center overflow-hidden",
           "h-[30vh] md:h-auto md:w-1/2 lg:w-[52%]",
-          "bg-[oklch(0.26_0.10_15)] text-[oklch(0.99_0_0)]"
+          "text-[oklch(0.99_0.006_60)]"
         )}
         style={{
           background:
-            "linear-gradient(145deg, oklch(0.22 0.09 10) 0%, oklch(0.30 0.13 18) 50%, oklch(0.26 0.11 0) 100%)",
+            "radial-gradient(900px 600px at 80% -10%, oklch(0.62 0.20 38 / 0.55), transparent 60%), radial-gradient(900px 700px at 10% 110%, oklch(0.40 0.18 18 / 0.7), transparent 60%), linear-gradient(155deg, oklch(0.20 0.08 12) 0%, oklch(0.26 0.12 18) 40%, oklch(0.22 0.09 4) 100%)",
         }}
         aria-hidden="false"
       >
-        {/* subtle texture overlay */}
+        {/* ambient drifting grain */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
           style={{
             backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-opacity='1'%3E%3Ccircle cx='1' cy='1' r='1'/%3E%3C/g%3E%3C/svg%3E\")",
+              "url(\"data:image/svg+xml,%3Csvg width='160' height='160' viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+            animation: "ambient-drift 18s ease-in-out infinite",
           }}
         />
 
         {/* desktop: full horizontal logo + tagline */}
-        <div className="hidden flex-col items-center gap-8 px-10 md:flex">
-          <Image
-            src="/logo.png"
-            alt="Big Fat Family"
-            width={1200}
-            height={411}
-            priority
-            className="h-auto w-[min(420px,80%)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)] [filter:brightness(1.05)]"
-            style={{ background: "white", borderRadius: "1.25rem", padding: "1.25rem 1.5rem" }}
-          />
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.32, 0.72, 0.32, 1] }}
+          className="hidden flex-col items-center gap-9 px-10 md:flex"
+        >
+          <div className="relative">
+            {/* Soft accent halo behind the logo */}
+            <div
+              aria-hidden
+              className="absolute inset-0 -m-6 rounded-[2rem] opacity-90 blur-2xl"
+              style={{
+                background:
+                  "radial-gradient(closest-side, oklch(0.68 0.18 38 / 0.55), transparent 70%)",
+              }}
+            />
+            <Image
+              src="/logo.png"
+              alt="Big Fat Family"
+              width={1200}
+              height={411}
+              priority
+              className="relative h-auto w-[min(440px,80%)] rounded-[1.5rem] bg-white px-7 py-6 shadow-[0_20px_60px_-12px_rgba(0,0,0,0.55)] ring-1 ring-white/30 [filter:brightness(1.04)]"
+            />
+          </div>
+
           <p
-            className="max-w-xs text-center text-sm leading-relaxed text-[oklch(0.90_0.03_30)]"
+            className="max-w-sm text-center text-[15px] leading-relaxed text-[oklch(0.93_0.03_30)]"
             dir="auto"
+            style={{ fontFamily: "var(--font-display)", fontOpticalSizing: "auto" }}
           >
             {taglines[lang]}
           </p>
-        </div>
+        </motion.div>
 
         {/* mobile: emblem + tagline */}
-        <div className="flex flex-col items-center gap-3 md:hidden">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.32, 0.72, 0.32, 1] }}
+          className="flex flex-col items-center gap-3 md:hidden"
+        >
           <Image
             src="/logo-mark.png"
             alt="Big Fat Family"
             width={64}
             height={64}
             priority
-            className="h-12 w-12 drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)]"
+            className="h-14 w-14 rounded-full bg-white p-1 shadow-[0_6px_24px_rgba(0,0,0,0.45)] ring-1 ring-white/30"
           />
-          <p className="font-[Fraunces,Georgia,serif] text-2xl font-semibold tracking-tight">
+          <p
+            className="text-2xl font-semibold tracking-tight"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             Big Fat Family
           </p>
-          <p className="max-w-[22ch] text-center text-xs text-[oklch(0.90_0.03_30)]" dir="auto">
+          <p className="max-w-[22ch] text-center text-xs text-[oklch(0.92_0.03_30)]" dir="auto">
             {taglines[lang]}
           </p>
-        </div>
+        </motion.div>
 
         {/* decorative arc at right edge (desktop only) */}
         <svg
-          className="pointer-events-none absolute -right-1 top-0 hidden h-full md:block"
+          className="pointer-events-none absolute -right-px top-0 hidden h-full md:block"
           viewBox="0 0 60 800"
           preserveAspectRatio="none"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           aria-hidden="true"
         >
-          <path d="M60 0 Q0 400 60 800 L60 0Z" fill="oklch(0.99 0.005 80)" />
+          <path d="M60 0 Q0 400 60 800 L60 0Z" fill="var(--background)" />
         </svg>
       </div>
 

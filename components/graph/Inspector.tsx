@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { motion } from "framer-motion";
 import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,12 @@ import {
 } from "@/components/ui/sheet";
 import { deletePerson } from "@/lib/actions/people";
 import type { PersonInput } from "@/lib/graph/transform";
+
+const fadeUp = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+};
+const sectionTransition = { duration: 0.32, ease: [0.32, 0.72, 0.32, 1] as const };
 
 type Props = {
   person: PersonInput | null;
@@ -77,11 +84,22 @@ export function Inspector({ person, lang, onClose, fatherName, motherName }: Pro
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent
         side="right"
-        className="w-80 sm:max-w-80 flex flex-col gap-0 p-0 border-s border-border"
+        className="glass-2 w-[22rem] sm:max-w-[22rem] flex flex-col gap-0 p-0 border-s border-[var(--border)] shadow-[var(--shadow-deep)]"
       >
+        {/* Decorative top sheen — burgundy → accent → transparent */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[var(--primary)] via-[var(--accent)] to-transparent opacity-90"
+        />
+
         {/* Header */}
-        <SheetHeader className="p-6 pb-4 border-b border-border">
-          <div className="flex items-start gap-4">
+        <SheetHeader className="px-6 pt-6 pb-5 border-b border-[var(--border)]">
+          <motion.div
+            initial={fadeUp.initial}
+            animate={fadeUp.animate}
+            transition={sectionTransition}
+            className="flex items-start gap-4"
+          >
             {person ? (
               <AvatarPhotoUpload
                 personId={person.id}
@@ -89,77 +107,91 @@ export function Inspector({ person, lang, onClose, fatherName, motherName }: Pro
                 alt={fullName}
                 initials={initials}
                 fallbackGender={person.gender}
-                sizeClass="h-14 w-14"
+                sizeClass="h-16 w-16"
                 wrapperClassName={cn("ring-2", avatarRingColor)}
                 lang={lang}
               />
             ) : null}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 pt-0.5">
               <SheetTitle
-                className="text-base font-bold leading-tight truncate"
-                style={{ fontFamily: "var(--font-display, 'Fraunces Variable', serif)" }}
+                className="truncate text-xl font-semibold leading-tight tracking-tight"
+                style={{ fontFamily: "var(--font-display)", fontOpticalSizing: "auto" }}
               >
                 {fullName || (lang === "ar" ? "شخص" : "Person")}
               </SheetTitle>
               <Badge
                 variant="outline"
                 className={cn(
-                  "mt-1.5 text-xs",
-                  person?.gender === "f" && "border-rose-200 text-rose-600 bg-rose-50",
-                  person?.gender === "m" && "border-sky-200 text-sky-600 bg-sky-50"
+                  "mt-2 rounded-full px-2.5 text-[10px] uppercase tracking-wider",
+                  person?.gender === "f" && "border-rose-200/80 bg-rose-50/80 text-rose-600",
+                  person?.gender === "m" && "border-sky-200/80 bg-sky-50/80 text-sky-600",
                 )}
               >
                 {genderLabel}
               </Badge>
             </div>
-          </div>
+          </motion.div>
         </SheetHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <motion.div
+          initial="initial"
+          animate="animate"
+          variants={{ animate: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } } }}
+          className="scrollbar-thin flex-1 space-y-5 overflow-y-auto px-6 py-6"
+        >
           {/* Placeholder notice */}
           {person?.is_placeholder && (
-            <div className="rounded-lg border border-dashed border-border bg-muted/50 p-3">
-              <p className="text-xs text-muted-foreground text-center">
+            <motion.div
+              variants={fadeUp}
+              transition={sectionTransition}
+              className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/55 p-3"
+            >
+              <p className="text-center text-xs text-[var(--muted-foreground)]">
                 {lang === "ar" ? "شخص مبهم — أضف معلوماته" : "Placeholder — add their info"}
               </p>
-            </div>
+            </motion.div>
           )}
 
           {/* Family links */}
           {(person?.father_id || person?.mother_id) && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
                 {lang === "ar" ? "الوالدان" : "Parents"}
               </p>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex flex-wrap gap-2">
                 {person?.father_id && (
-                  <Badge variant="secondary" className="text-xs gap-1">
-                    <span className="text-muted-foreground">{lang === "ar" ? "الأب:" : "Father:"}</span>
+                  <Badge variant="secondary" className="gap-1 rounded-full bg-[var(--secondary)] px-3 py-1 text-xs">
+                    <span className="text-[var(--muted-foreground)]">{lang === "ar" ? "الأب:" : "Father:"}</span>
                     {fatherName ?? (lang === "ar" ? "غير معروف" : "Unknown")}
                   </Badge>
                 )}
                 {person?.mother_id && (
-                  <Badge variant="secondary" className="text-xs gap-1">
-                    <span className="text-muted-foreground">{lang === "ar" ? "الأم:" : "Mother:"}</span>
+                  <Badge variant="secondary" className="gap-1 rounded-full bg-[var(--secondary)] px-3 py-1 text-xs">
+                    <span className="text-[var(--muted-foreground)]">{lang === "ar" ? "الأم:" : "Mother:"}</span>
                     {motherName ?? (lang === "ar" ? "غير معروف" : "Unknown")}
                   </Badge>
                 )}
               </div>
-            </div>
+            </motion.div>
           )}
-        </div>
+        </motion.div>
 
         {/* Footer actions */}
-        <div className="p-6 pt-4 border-t border-border space-y-2">
-          <Button asChild className="w-full" size="sm">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: [0.32, 0.72, 0.32, 1], delay: 0.18 }}
+          className="space-y-2 border-t border-[var(--border)] px-6 py-5"
+        >
+          <Button asChild size="sm" className="w-full rounded-full">
             <Link href={person ? `/person/${person.slug ?? person.id}/edit` : "#"}>
-              <Pencil className="w-3.5 h-3.5" />
+              <Pencil className="h-3.5 w-3.5" />
               {lang === "ar" ? "تعديل" : "Edit"}
             </Link>
           </Button>
           <div className="grid grid-cols-2 gap-2">
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm" className="rounded-full">
               <Link
                 href={
                   person
@@ -167,33 +199,33 @@ export function Inspector({ person, lang, onClose, fatherName, motherName }: Pro
                     : "#"
                 }
               >
-                <PlusCircle className="w-3.5 h-3.5" />
+                <PlusCircle className="h-3.5 w-3.5" />
                 {lang === "ar" ? "إضافة طفل" : "Add child"}
               </Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm" className="rounded-full">
               <Link href={person ? `/person/new?spouse=${person.id}` : "#"}>
-                <UserPlus className="w-3.5 h-3.5" />
+                <UserPlus className="h-3.5 w-3.5" />
                 {lang === "ar" ? "إضافة زوج/ة" : "Add spouse"}
               </Link>
             </Button>
           </div>
-          <Button asChild variant="outline" size="sm" className="w-full">
+          <Button asChild variant="outline" size="sm" className="w-full rounded-full">
             <Link href={person ? `/person/${person.slug ?? person.id}` : "#"}>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="h-3.5 w-3.5" />
               {lang === "ar" ? "الصفحة الكاملة" : "Full profile"}
             </Link>
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="w-full text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/5"
+            className="w-full rounded-full border-[var(--destructive)]/30 text-[var(--destructive)] hover:bg-[var(--destructive)]/5 hover:text-[var(--destructive)]"
             onClick={handleDelete}
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="h-3.5 w-3.5" />
             {lang === "ar" ? "حذف" : "Delete"}
           </Button>
-        </div>
+        </motion.div>
       </SheetContent>
     </Sheet>
   );

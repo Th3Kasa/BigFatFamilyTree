@@ -32,10 +32,10 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         <Handle type="target" position={Position.Top} className="!border-border !bg-muted" />
         <div
           className={cn(
-            "w-[220px] h-20 rounded-xl border-2 border-dashed border-border bg-muted/50",
-            "flex items-center justify-center transition-all duration-200",
-            selected && "ring-2 ring-primary ring-offset-1",
-            hovered && "scale-[1.02] border-primary/40"
+            "w-[220px] h-20 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--muted)]/55",
+            "flex items-center justify-center transition-[transform,border-color] duration-300 ease-out",
+            selected && "border-[var(--primary)]/60",
+            hovered && "-translate-y-px border-[var(--accent)]/60"
           )}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
@@ -77,10 +77,12 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
       />
       <div
         className={cn(
-          "w-[220px] h-20 rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(20_20_20/0.06),0_4px_12px_rgb(20_20_20/0.08)]",
-          "flex items-center gap-3 px-3 transition-all duration-200 cursor-default relative overflow-hidden",
-          selected && "ring-2 ring-primary ring-offset-1 shadow-[0_1px_2px_rgb(20_20_20/0.06),0_8px_24px_rgb(20_20_20/0.12)]",
-          hovered && "scale-[1.02] shadow-[0_1px_2px_rgb(20_20_20/0.06),0_8px_24px_rgb(20_20_20/0.12)]"
+          "relative w-[220px] h-20 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]",
+          "flex items-center gap-3 px-3.5 cursor-default",
+          "shadow-[var(--shadow-floating)] transition-[transform,box-shadow,border-color] duration-300 ease-out",
+          "before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[var(--accent)]/35 before:to-transparent",
+          selected && "border-[var(--primary)]/60 shadow-[var(--shadow-glow)]",
+          hovered && "-translate-y-px shadow-[var(--shadow-deep)]"
         )}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -113,37 +115,37 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         {/* Quick-action overlay on hover */}
         <div
           className={cn(
-            "absolute inset-0 flex items-center justify-end gap-1 px-2",
-            "bg-card/90 backdrop-blur-sm rounded-xl",
-            "transition-opacity duration-150",
+            "absolute inset-0 flex items-center justify-end gap-1.5 px-2.5",
+            "glass-2 rounded-2xl",
+            "transition-opacity duration-200 ease-out",
             hovered ? "opacity-100" : "opacity-0 pointer-events-none"
           )}
         >
           <Link
             href={`/person/${person.slug ?? person.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center justify-center w-8 h-8 rounded-lg bg-background border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] shadow-sm transition-[transform,background-color,color] duration-200 hover:-translate-y-px hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]"
             title={lang === "ar" ? "عرض" : "View"}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="h-3.5 w-3.5" />
           </Link>
           <Link
             href={spouseId
               ? `/person/new?father=${person.gender !== "f" ? person.id : spouseId}&mother=${person.gender === "f" ? person.id : spouseId}`
               : `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center justify-center w-8 h-8 rounded-lg bg-background border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] shadow-sm transition-[transform,background-color,color] duration-200 hover:-translate-y-px hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]"
             title={lang === "ar" ? "إضافة طفل" : "Add child"}
           >
-            <PlusCircle className="w-3.5 h-3.5" />
+            <PlusCircle className="h-3.5 w-3.5" />
           </Link>
           <Link
             href={`/person/new?spouse=${person.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center justify-center w-8 h-8 rounded-lg bg-background border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] shadow-sm transition-[transform,background-color,color] duration-200 hover:-translate-y-px hover:bg-[var(--highlight)] hover:text-[var(--highlight-foreground)]"
             title={lang === "ar" ? "إضافة زوج/ة" : "Add spouse"}
           >
-            <UserPlus className="w-3.5 h-3.5" />
+            <UserPlus className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>

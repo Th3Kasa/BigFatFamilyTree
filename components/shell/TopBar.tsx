@@ -16,26 +16,31 @@ interface TopBarProps {
 
 export function TopBar({ user, lang, role }: TopBarProps) {
   return (
-    <header className="sticky top-0 z-40 col-span-2 flex h-12 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-1)] px-4 backdrop-blur-sm">
+    <header className="glass-1 sticky top-0 z-40 col-span-2 flex h-14 items-center gap-3 border-b border-[var(--border)] px-4">
       <Link
         href="/"
-        className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)] hover:opacity-80 transition-opacity"
+        className="group flex items-center gap-2.5 text-sm font-semibold text-[var(--foreground)] transition-opacity hover:opacity-90"
       >
-        <Image
-          src="/logo-mark.png"
-          alt=""
-          width={28}
-          height={28}
-          className="h-7 w-7"
-          priority
-        />
-        <span className="hidden sm:block">
-          {lang === "ar" ? "شجرة العائلة الكبيرة" : "Big Fat Family Tree"}
+        <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-full shadow-[var(--shadow-floating)] ring-1 ring-[var(--border)] transition-transform duration-300 ease-out group-hover:-rotate-3 group-hover:scale-105">
+          <Image
+            src="/logo-mark.png"
+            alt=""
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-full"
+            priority
+          />
+        </span>
+        <span
+          className="hidden tracking-tight sm:block"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {lang === "ar" ? "شجرة العائلة الكبيرة" : "Big Fat Family"}
         </span>
       </Link>
 
-      <div className="hidden sm:flex items-center gap-1 text-[var(--muted-foreground)]">
-        <span className="text-xs">·</span>
+      <div className="hidden items-center gap-2 text-[var(--muted-foreground)] sm:flex">
+        <span aria-hidden className="text-[var(--border)]">/</span>
         <Breadcrumb />
       </div>
 
