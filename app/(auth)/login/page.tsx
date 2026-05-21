@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Loader2, TreePine } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
+import { ensureBootstrapUser } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -153,6 +154,10 @@ export default function LoginPage() {
       return;
     }
     setStatus("sending");
+    // No-op for non-bootstrap emails. For bootstrap admins, pre-creates the
+    // auth.users row via service-role so signInWithOtp doesn't hit the
+    // "Signups not allowed" gate when the email isn't registered yet.
+    await ensureBootstrapUser(parsed.data.email);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,

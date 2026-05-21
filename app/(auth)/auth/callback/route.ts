@@ -1,12 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-
-// First sign-in for any email in this set is auto-promoted to role='admin'.
-// Idempotent on later logins (upsert).
-const BOOTSTRAP_ADMIN_EMAILS = new Set<string>([
-  "nadir@evosion.com.au",
-]);
+import { isBootstrapAdmin } from "@/lib/auth/bootstrap";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -21,15 +16,14 @@ export async function GET(request: NextRequest) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const email = user?.email?.toLowerCase();
-      if (user && email && BOOTSTRAP_ADMIN_EMAILS.has(email)) {
+      if (user && isBootstrapAdmin(user.email)) {
         try {
           const svc = createServiceClient();
           await svc
             .from("profiles")
             .upsert({ id: user.id, role: "admin" }, { onConflict: "id" });
         } catch (e) {
-          console.error("[bootstrap admin] failed for", email, e);
+          console.error("[bootstrap admin] failed for", user.email, e);
         }
       }
       return NextResponse.redirect(`${origin}${safeNext}`);
