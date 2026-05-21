@@ -20,6 +20,8 @@ describe("personSchema", () => {
     photo_url: null,
     notes_en: null,
     notes_ar: null,
+    birth_date: null,
+    death_date: null,
   };
 
   it("accepts a valid person with only given_en", () => {

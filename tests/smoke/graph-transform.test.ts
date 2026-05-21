@@ -3,21 +3,21 @@ import { buildGraphElements, autoLayoutPositions } from "@/lib/graph/transform";
 
 const people = [
   {
-    id: "p1", given_en: "Alice", given_ar: "أليس",
+    id: "p1", slug: null, given_en: "Alice", given_ar: "أليس",
     family_name_en: "Smith", family_name_ar: "سميث",
     father_id: null, mother_id: null,
     gender: "f" as const, is_placeholder: false, photo_url: null,
     pos_x: null, pos_y: null,
   },
   {
-    id: "p2", given_en: null, given_ar: null,
+    id: "p2", slug: null, given_en: null, given_ar: null,
     family_name_en: null, family_name_ar: null,
     father_id: null, mother_id: null,
     gender: "m" as const, is_placeholder: true, photo_url: null,
     pos_x: null, pos_y: null,
   },
   {
-    id: "p3", given_en: "Carol", given_ar: "كارول",
+    id: "p3", slug: null, given_en: "Carol", given_ar: "كارول",
     family_name_en: "Smith", family_name_ar: "سميث",
     father_id: "p2", mother_id: "p1",
     gender: "f" as const, is_placeholder: false, photo_url: null,
@@ -75,7 +75,7 @@ describe("buildGraphElements", () => {
 
   it("honors stored positions when present", () => {
     const people = [
-      { id: "p1", given_en: "A", given_ar: null, family_name_en: null, family_name_ar: null,
+      { id: "p1", slug: null, given_en: "A", given_ar: null, family_name_en: null, family_name_ar: null,
         father_id: null, mother_id: null, gender: "m" as const, is_placeholder: false, photo_url: null,
         pos_x: 100, pos_y: 200 },
     ];
@@ -85,10 +85,10 @@ describe("buildGraphElements", () => {
 
   it("autoLayoutPositions returns dagre coords for every person", () => {
     const people = [
-      { id: "p1", given_en: "Parent", given_ar: null, family_name_en: null, family_name_ar: null,
+      { id: "p1", slug: null, given_en: "Parent", given_ar: null, family_name_en: null, family_name_ar: null,
         father_id: null, mother_id: null, gender: "m" as const, is_placeholder: false, photo_url: null,
         pos_x: null, pos_y: null },
-      { id: "p2", given_en: "Child", given_ar: null, family_name_en: null, family_name_ar: null,
+      { id: "p2", slug: null, given_en: "Child", given_ar: null, family_name_en: null, family_name_ar: null,
         father_id: "p1", mother_id: null, gender: "f" as const, is_placeholder: false, photo_url: null,
         pos_x: null, pos_y: null },
     ];
