@@ -40,10 +40,9 @@ type Props = {
   submitLabel: string;
 };
 
-const GENDER_LABELS: Record<"f" | "m" | "unknown", { en: string; ar: string }> = {
-  f:       { en: "Female",  ar: "أنثى" },
-  m:       { en: "Male",    ar: "ذكر" },
-  unknown: { en: "Unknown", ar: "غير محدد" },
+const GENDER_LABELS: Record<"f" | "m", { en: string; ar: string }> = {
+  f: { en: "Female", ar: "أنثى" },
+  m: { en: "Male",   ar: "ذكر" },
 };
 
 const INPUT_CLS = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400";
@@ -209,13 +208,17 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       <div>
         <p className="text-xs text-gray-500 mb-2">{lang === "ar" ? "الجنس" : "Gender"}</p>
         <div className="flex gap-4">
-          {(["f", "m", "unknown"] as const).map((g) => (
+          {(["f", "m"] as const).map((g) => (
             <label key={g} className="flex items-center gap-2 text-sm cursor-pointer">
               <input
                 type="radio"
                 name="gender"
                 value={g}
-                defaultChecked={(initialData?.gender ?? "unknown") === g}
+                defaultChecked={
+                  initialData?.gender === "f" || initialData?.gender === "m"
+                    ? initialData.gender === g
+                    : g === "m"
+                }
                 className="accent-amber-500"
               />
               {GENDER_LABELS[g][lang]}

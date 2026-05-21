@@ -71,6 +71,16 @@ export async function createPerson(
 
   if (error) return { success: false, error: error.message };
 
+  const spouseId = raw.spouse_id;
+  if (spouseId && UUID_RE.test(spouseId)) {
+    await supabase.from("relationships").insert({
+      person_a_id: data.id,
+      person_b_id: spouseId,
+      type: "spouse",
+      status: "current",
+    });
+  }
+
   revalidatePath("/");
   redirect(`/person/${data.slug ?? data.id}`);
 }

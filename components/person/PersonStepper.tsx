@@ -30,6 +30,7 @@ type Props = {
   motherIdProp?: string | null;
   fatherName?: string | null;
   motherName?: string | null;
+  spouseId?: string | null;
 };
 
 const INPUT_CLS =
@@ -73,6 +74,7 @@ export function PersonStepper({
   motherIdProp,
   fatherName,
   motherName,
+  spouseId,
 }: Props) {
   const [state, formAction] = useActionState(action, null);
   const [step, setStep] = useState(0);
@@ -90,7 +92,7 @@ export function PersonStepper({
     family_name_ar: "",
     birth_date: "",
     death_date: "",
-    gender: "unknown" as "m" | "f" | "unknown",
+    gender: "m" as "m" | "f",
     notes_en: "",
     notes_ar: "",
   });
@@ -157,7 +159,6 @@ export function PersonStepper({
     gender: lang === "ar" ? "الجنس" : "Gender",
     male: lang === "ar" ? "ذكر" : "Male",
     female: lang === "ar" ? "أنثى" : "Female",
-    unknown: lang === "ar" ? "غير محدد" : "Unknown",
     notesLabel: lang === "ar" ? "ملاحظات" : "Notes",
     confirmTitle: lang === "ar" ? "مراجعة قبل الحفظ" : "Review before saving",
     name: lang === "ar" ? "الاسم" : "Name",
@@ -237,6 +238,7 @@ export function PersonStepper({
             <input type="hidden" name="photo_url" value={photoUrl ?? ""} />
             {fatherId && <input type="hidden" name="father_id" value={fatherId} />}
             {motherIdProp && <input type="hidden" name="mother_id" value={motherIdProp} />}
+            {spouseId && <input type="hidden" name="spouse_id" value={spouseId} />}
             <input type="hidden" name="given_en" value={fields.given_en} />
             <input type="hidden" name="given_ar" value={fields.given_ar} />
             <input type="hidden" name="family_name_en" value={fields.family_name_en} />
@@ -422,7 +424,7 @@ export function PersonStepper({
                         {t.gender}
                       </p>
                       <div className="flex gap-3">
-                        {(["m", "f", "unknown"] as const).map((g) => (
+                        {(["m", "f"] as const).map((g) => (
                           <label
                             key={g}
                             className={cn(
@@ -438,7 +440,7 @@ export function PersonStepper({
                               checked={fields.gender === g}
                               onChange={() => setFields((f) => ({ ...f, gender: g }))}
                             />
-                            {g === "m" ? t.male : g === "f" ? t.female : t.unknown}
+                            {g === "m" ? t.male : t.female}
                           </label>
                         ))}
                       </div>
@@ -474,7 +476,7 @@ export function PersonStepper({
                       </div>
                       <div className="flex justify-between">
                         <span className="text-[var(--muted-foreground)]">{t.gender}</span>
-                        <span className="font-medium capitalize">{fields.gender}</span>
+                        <span className="font-medium">{fields.gender === "m" ? t.male : t.female}</span>
                       </div>
                       {(fields.birth_date || fields.death_date) && (
                         <div className="flex justify-between">

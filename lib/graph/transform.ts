@@ -128,7 +128,7 @@ export function buildGraphElements(
         targetHandle: "left-target",
         type: "straight",
         data: { edgeKind: "spouse", relationshipId: r.id },
-        style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
+        style: { stroke: "#fda4af", strokeWidth: 2 },
       });
     }
   }

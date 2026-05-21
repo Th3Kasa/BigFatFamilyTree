@@ -94,10 +94,10 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
           <div>
             <label className="block text-xs text-gray-500 mb-2">{lang === "ar" ? "الجنس" : "Gender"}</label>
             <div className="flex gap-3">
-              {(["f", "m", "unknown"] as const).map((g) => (
+              {(["m", "f"] as const).map((g) => (
                 <label key={g} className="flex items-center gap-1 text-sm cursor-pointer">
-                  <input type="radio" name="gender" value={g} defaultChecked={g === "unknown"} className="accent-amber-500" />
-                  {g === "f" ? (lang === "ar" ? "أنثى" : "Female") : g === "m" ? (lang === "ar" ? "ذكر" : "Male") : (lang === "ar" ? "غير معروف" : "Unknown")}
+                  <input type="radio" name="gender" value={g} defaultChecked={g === "m"} className="accent-amber-500" />
+                  {g === "f" ? (lang === "ar" ? "أنثى" : "Female") : (lang === "ar" ? "ذكر" : "Male")}
                 </label>
               ))}
             </div>

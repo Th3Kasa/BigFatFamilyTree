@@ -5,7 +5,7 @@ import { createPerson } from "@/lib/actions/people";
 import { PersonStepper } from "@/components/person/PersonStepper";
 
 type Props = {
-  searchParams: Promise<{ father?: string; mother?: string }>;
+  searchParams: Promise<{ father?: string; mother?: string; spouse?: string }>;
 };
 
 export default async function NewPersonPage({ searchParams }: Props) {
@@ -14,40 +14,34 @@ export default async function NewPersonPage({ searchParams }: Props) {
 
   const fatherId = sp.father ?? null;
   const motherId = sp.mother ?? null;
+  const spouseId = sp.spouse ?? null;
 
-  const [{ data: people }, { data: fatherRow }, { data: motherRow }] = await Promise.all([
-    supabase
-      .from("people")
-      .select("id, given_en, given_ar, family_name_en, family_name_ar")
-      .is("deleted_at", null)
-      .order("given_en"),
-    fatherId
-      ? supabase
-          .from("people")
-          .select("given_en, given_ar")
-          .eq("id", fatherId)
-          .single()
-      : Promise.resolve({ data: null }),
-    motherId
-      ? supabase
-          .from("people")
-          .select("given_en, given_ar")
-          .eq("id", motherId)
-          .single()
-      : Promise.resolve({ data: null }),
-  ]);
+  const [{ data: people }, { data: fatherRow }, { data: motherRow }, { data: spouseRow }] =
+    await Promise.all([
+      supabase
+        .from("people")
+        .select("id, given_en, given_ar, family_name_en, family_name_ar")
+        .is("deleted_at", null)
+        .order("given_en"),
+      fatherId
+        ? supabase.from("people").select("given_en, given_ar").eq("id", fatherId).single()
+        : Promise.resolve({ data: null }),
+      motherId
+        ? supabase.from("people").select("given_en, given_ar").eq("id", motherId).single()
+        : Promise.resolve({ data: null }),
+      spouseId
+        ? supabase.from("people").select("given_en, given_ar").eq("id", spouseId).single()
+        : Promise.resolve({ data: null }),
+    ]);
 
-  const fatherName = fatherRow
-    ? (lang === "ar"
-        ? (fatherRow.given_ar ?? fatherRow.given_en)
-        : (fatherRow.given_en ?? fatherRow.given_ar)) ?? null
-    : null;
+  function pickName(row: { given_en?: string | null; given_ar?: string | null } | null) {
+    if (!row) return null;
+    return (lang === "ar" ? (row.given_ar ?? row.given_en) : (row.given_en ?? row.given_ar)) ?? null;
+  }
 
-  const motherName = motherRow
-    ? (lang === "ar"
-        ? (motherRow.given_ar ?? motherRow.given_en)
-        : (motherRow.given_en ?? motherRow.given_ar)) ?? null
-    : null;
+  const pageTitle = spouseId
+    ? (lang === "ar" ? `إضافة زوج/زوجة لـ ${pickName(spouseRow) ?? ""}` : `Add spouse of ${pickName(spouseRow) ?? ""}`)
+    : (lang === "ar" ? "إضافة شخص" : "Add person");
 
   return (
     <main className="min-h-screen bg-[var(--background)] flex flex-col items-center px-4 py-10">
@@ -61,7 +55,7 @@ export default async function NewPersonPage({ searchParams }: Props) {
         </Link>
 
         <h1 className="text-2xl font-bold text-[var(--foreground)] mb-8 font-[Fraunces,serif]">
-          {lang === "ar" ? "إضافة شخص" : "Add person"}
+          {pageTitle}
         </h1>
 
         <PersonStepper
@@ -70,8 +64,9 @@ export default async function NewPersonPage({ searchParams }: Props) {
           lang={lang}
           fatherId={fatherId}
           motherIdProp={motherId}
-          fatherName={fatherName}
-          motherName={motherName}
+          fatherName={pickName(fatherRow)}
+          motherName={pickName(motherRow)}
+          spouseId={spouseId}
         />
       </div>
     </main>

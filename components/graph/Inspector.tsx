@@ -21,9 +21,11 @@ type Props = {
   person: PersonInput | null;
   lang: "ar" | "en";
   onClose: () => void;
+  fatherName?: string | null;
+  motherName?: string | null;
 };
 
-export function Inspector({ person, lang, onClose }: Props) {
+export function Inspector({ person, lang, onClose, fatherName, motherName }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -128,13 +130,15 @@ export function Inspector({ person, lang, onClose }: Props) {
               </p>
               <div className="flex gap-2 flex-wrap">
                 {person?.father_id && (
-                  <Badge variant="secondary" className="text-xs">
-                    {lang === "ar" ? "الأب" : "Father"}
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <span className="text-muted-foreground">{lang === "ar" ? "الأب:" : "Father:"}</span>
+                    {fatherName ?? (lang === "ar" ? "غير معروف" : "Unknown")}
                   </Badge>
                 )}
                 {person?.mother_id && (
-                  <Badge variant="secondary" className="text-xs">
-                    {lang === "ar" ? "الأم" : "Mother"}
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <span className="text-muted-foreground">{lang === "ar" ? "الأم:" : "Mother:"}</span>
+                    {motherName ?? (lang === "ar" ? "غير معروف" : "Unknown")}
                   </Badge>
                 )}
               </div>

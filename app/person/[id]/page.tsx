@@ -128,22 +128,24 @@ export default async function PersonPage({ params }: Props) {
       ? (person.notes_ar ?? person.notes_en)
       : (person.notes_en ?? person.notes_ar);
 
-  // Birth / death year from events
-  const birthEvent = events?.find((e) => e.type === "birth");
-  const deathEvent = events?.find((e) => e.type === "death");
-  const birthYear = birthEvent?.date_value
-    ? String(birthEvent.date_value).slice(0, 4)
-    : null;
-  const deathYear = deathEvent?.date_value
-    ? String(deathEvent.date_value).slice(0, 4)
-    : null;
+  // Birth / death year — prefer person record fields, fall back to events
+  const birthYear = person.birth_date
+    ? String(person.birth_date).slice(0, 4)
+    : events?.find((e) => e.type === "birth")?.date_value
+      ? String(events.find((e) => e.type === "birth")!.date_value).slice(0, 4)
+      : null;
+  const deathYear = person.death_date
+    ? String(person.death_date).slice(0, 4)
+    : events?.find((e) => e.type === "death")?.date_value
+      ? String(events.find((e) => e.type === "death")!.date_value).slice(0, 4)
+      : null;
 
   const genderLabel =
     person.gender === "m"
       ? lang === "ar" ? "ذكر" : "Male"
       : person.gender === "f"
         ? lang === "ar" ? "أنثى" : "Female"
-        : lang === "ar" ? "غير محدد" : "Unknown";
+        : null;
 
   // Linked transcript IDs via events
   const transcriptIds = Array.from(
@@ -221,18 +223,18 @@ export default async function PersonPage({ params }: Props) {
                   {deathYear ? ` – ${deathYear}` : ""}
                 </Badge>
               )}
-              <Badge
-                variant="secondary"
-                className={cn(
-                  person.gender === "f"
-                    ? "bg-rose-50 text-rose-600 border-rose-100"
-                    : person.gender === "m"
-                      ? "bg-sky-50 text-sky-600 border-sky-100"
-                      : ""
-                )}
-              >
-                {genderLabel}
-              </Badge>
+              {genderLabel && (
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    person.gender === "f"
+                      ? "bg-rose-50 text-rose-600 border-rose-100"
+                      : "bg-sky-50 text-sky-600 border-sky-100"
+                  )}
+                >
+                  {genderLabel}
+                </Badge>
+              )}
               {familyName && (
                 <Badge variant="outline" className="gap-1.5">
                   <Users className="h-3 w-3" />

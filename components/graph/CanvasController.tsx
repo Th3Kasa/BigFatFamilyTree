@@ -214,7 +214,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         targetHandle: c.targetHandle ?? undefined,
         type: "straight",
         data: { edgeKind: "spouse" },
-        style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
+        style: { stroke: "#fda4af", strokeWidth: 2 },
       },
     ]);
     const fd = new FormData();
@@ -376,6 +376,22 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         person={selectedPerson}
         lang={lang}
         onClose={() => setSelectedPerson(null)}
+        fatherName={
+          selectedPerson?.father_id
+            ? (() => {
+                const p = people.find((x) => x.id === selectedPerson.father_id);
+                return p ? (lang === "ar" ? (p.given_ar ?? p.given_en) : (p.given_en ?? p.given_ar)) ?? null : null;
+              })()
+            : null
+        }
+        motherName={
+          selectedPerson?.mother_id
+            ? (() => {
+                const p = people.find((x) => x.id === selectedPerson.mother_id);
+                return p ? (lang === "ar" ? (p.given_ar ?? p.given_en) : (p.given_en ?? p.given_ar)) ?? null : null;
+              })()
+            : null
+        }
       />
 
       {menu && (
