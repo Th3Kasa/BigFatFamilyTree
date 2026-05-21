@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
 import {
   Sheet,
   SheetContent,
@@ -82,14 +82,18 @@ export function Inspector({ person, lang, onClose, fatherName, motherName }: Pro
         {/* Header */}
         <SheetHeader className="p-6 pb-4 border-b border-border">
           <div className="flex items-start gap-4">
-            <Avatar className={cn("h-14 w-14 shrink-0 ring-2", avatarRingColor)}>
-              {person?.photo_url && (
-                <AvatarImage src={person.photo_url} alt={fullName} className="object-cover" />
-              )}
-              <AvatarFallback className="text-base font-semibold bg-muted">
-                {initials || (person?.gender === "f" ? "♀" : "♂")}
-              </AvatarFallback>
-            </Avatar>
+            {person ? (
+              <AvatarPhotoUpload
+                personId={person.id}
+                currentUrl={person.photo_url}
+                alt={fullName}
+                initials={initials}
+                fallbackGender={person.gender}
+                sizeClass="h-14 w-14"
+                wrapperClassName={cn("ring-2", avatarRingColor)}
+                lang={lang}
+              />
+            ) : null}
             <div className="flex-1 min-w-0">
               <SheetTitle
                 className="text-base font-bold leading-tight truncate"

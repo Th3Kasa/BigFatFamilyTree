@@ -226,6 +226,41 @@ export async function linkParentChild(parentId: string, childId: string): Promis
   return { success: true };
 }
 
+// ── updatePersonPhoto ─────────────────────────────────────────────────────────
+// Lightweight photo-only update — bypasses the full personSchema so that
+// inline avatar upload doesn't require all the other fields to be present.
+export async function updatePersonPhoto(
+  id: string,
+  photoUrl: string | null,
+): Promise<{ success: boolean; error?: string }> {
+  if (photoUrl !== null && !/^https?:\/\//.test(photoUrl)) {
+    return { success: false, error: "Invalid photo URL" };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("people")
+    .select("slug")
+    .eq("id", id)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("people")
+    .update({ photo_url: photoUrl })
+    .eq("id", id)
+    .is("deleted_at", null);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/");
+  const slug = (existing as { slug?: string | null } | null)?.slug;
+  if (slug) revalidatePath(`/person/${slug}`);
+  revalidatePath(`/person/${id}`);
+
+  return { success: true };
+}
+
 // ── deletePerson (soft delete) ────────────────────────────────────────────────
 export async function deletePerson(id: string) {
   const supabase = await createClient();

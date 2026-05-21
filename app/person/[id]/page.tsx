@@ -5,11 +5,7 @@ import { getLang } from "@/lib/lang/server";
 import { deletePerson } from "@/lib/actions/people";
 import { createRelationship } from "@/lib/actions/relationships";
 import { RelationshipForm } from "@/components/forms/RelationshipForm";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
+import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
 import {
   Tabs,
   TabsContent,
@@ -185,25 +181,27 @@ export default async function PersonPage({ params }: Props) {
 
           {/* Avatar + name */}
           <div className="flex flex-col items-center gap-3 px-6 pb-6 pt-2 text-center">
-            <Avatar
-              className={cn(
-                "h-[120px] w-[120px] text-3xl font-bold border-4",
+            <AvatarPhotoUpload
+              personId={person.id}
+              currentUrl={person.photo_url ?? null}
+              alt={given ?? ""}
+              initials={initials}
+              fallbackGender={person.gender as "m" | "f" | "unknown" | undefined}
+              sizeClass="h-[120px] w-[120px]"
+              wrapperClassName={cn(
+                "border-4",
                 person.gender === "f"
                   ? "border-rose-200 bg-rose-50"
                   : "border-sky-200 bg-sky-50"
               )}
-            >
-              <AvatarImage src={person.photo_url ?? undefined} alt={given ?? ""} />
-              <AvatarFallback
-                className={
-                  person.gender === "f"
-                    ? "bg-rose-50 text-rose-400"
-                    : "bg-sky-50 text-sky-400"
-                }
-              >
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+              fallbackClassName={cn(
+                "text-3xl font-bold",
+                person.gender === "f"
+                  ? "bg-rose-50 text-rose-400"
+                  : "bg-sky-50 text-sky-400"
+              )}
+              lang={lang}
+            />
 
             <div className="space-y-1">
               <h1 className="text-[28px] font-bold text-[var(--foreground)] font-[Fraunces,serif] leading-tight">
