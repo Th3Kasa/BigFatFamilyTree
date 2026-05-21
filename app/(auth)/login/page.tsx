@@ -208,7 +208,7 @@ export default function LoginPage() {
               className="font-[Fraunces,Georgia,serif] text-4xl font-semibold tracking-tight"
               style={{ fontOpticalSizing: "auto" } as React.CSSProperties}
             >
-              Family Tree
+              Big Fat Family Tree
             </p>
             <p
               className="mt-3 max-w-xs text-sm leading-relaxed text-[oklch(0.88_0.04_100)]"

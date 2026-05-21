@@ -23,7 +23,7 @@ export function TopBar({ user, lang, role }: TopBarProps) {
       >
         <TreePine className="h-5 w-5 text-[var(--primary)]" />
         <span className="hidden sm:block">
-          {lang === "ar" ? "شجرة العائلة" : "Family Tree"}
+          {lang === "ar" ? "شجرة العائلة الكبيرة" : "Big Fat Family Tree"}
         </span>
       </Link>
 
