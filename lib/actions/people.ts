@@ -365,6 +365,182 @@ export async function convertParentToSpouse(
   return { success: true };
 }
 
+// ── linkSpouse ────────────────────────────────────────────────────────────────
+// Creates a spouse relationship between two existing people. Idempotent.
+export async function linkSpouse(
+  personAId: string,
+  personBId: string,
+): Promise<{ success: boolean; error?: string; relationshipId?: string }> {
+  if (personAId === personBId) {
+    return { success: false, error: "Cannot marry a person to themselves." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("relationships")
+    .select("id")
+    .eq("type", "spouse")
+    .or(
+      `and(person_a_id.eq.${personAId},person_b_id.eq.${personBId}),and(person_a_id.eq.${personBId},person_b_id.eq.${personAId})`,
+    )
+    .maybeSingle();
+
+  if (existing) {
+    revalidatePath("/");
+    return { success: true, relationshipId: (existing as { id: string }).id };
+  }
+
+  const { data, error } = await supabase
+    .from("relationships")
+    .insert({
+      person_a_id: personAId,
+      person_b_id: personBId,
+      type: "spouse",
+      status: "current",
+    })
+    .select("id")
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/");
+  return { success: true, relationshipId: (data as { id: string }).id };
+}
+
+// ── linkChild ─────────────────────────────────────────────────────────────────
+// Sets parentId as the father_id or mother_id of childId, based on parent's
+// gender. Idempotent.
+export async function linkChild(
+  parentId: string,
+  childId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (parentId === childId) {
+    return { success: false, error: "Cannot link a person to themselves." };
+  }
+
+  const supabase = await createClient();
+  const { data: parent } = await supabase
+    .from("people")
+    .select("gender")
+    .eq("id", parentId)
+    .maybeSingle();
+  if (!parent) return { success: false, error: "Parent not found." };
+
+  const field = (parent as { gender: string }).gender === "f" ? "mother_id" : "father_id";
+  const { error } = await supabase
+    .from("people")
+    .update({ [field]: parentId })
+    .eq("id", childId)
+    .is("deleted_at", null);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/");
+  return { success: true };
+}
+
+// ── addSibling ────────────────────────────────────────────────────────────────
+// Marks two people as siblings. Siblings are implicit through a shared parent,
+// so this action either reuses an existing common parent or creates a
+// placeholder parent and assigns both children.
+//
+// Resolution order (first match wins):
+//   1. Already siblings → no-op, success
+//   2. personA has a father/mother → copy that FK to personB
+//   3. personB has a father/mother → copy that FK to personA
+//   4. Neither has a parent → create a placeholder person and assign both as
+//      father_id (since gender unknown, default to the father slot to keep
+//      mother_id free for a future real mother).
+export async function addSibling(
+  personAId: string,
+  personBId: string,
+): Promise<{ success: boolean; error?: string; placeholderId?: string }> {
+  if (personAId === personBId) {
+    return { success: false, error: "Cannot link a person to themselves." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: rows } = await supabase
+    .from("people")
+    .select("id, father_id, mother_id, slug")
+    .in("id", [personAId, personBId]);
+
+  const records = (rows ?? []) as Array<{
+    id: string;
+    father_id: string | null;
+    mother_id: string | null;
+    slug: string | null;
+  }>;
+  const a = records.find((r) => r.id === personAId);
+  const b = records.find((r) => r.id === personBId);
+  if (!a || !b) return { success: false, error: "Person not found." };
+
+  const shareFather =
+    a.father_id && b.father_id && a.father_id === b.father_id;
+  const shareMother =
+    a.mother_id && b.mother_id && a.mother_id === b.mother_id;
+  if (shareFather || shareMother) {
+    return { success: true };
+  }
+
+  // Case 2: a has a parent → copy to b
+  if (a.father_id && !b.father_id) {
+    const { error } = await supabase
+      .from("people")
+      .update({ father_id: a.father_id })
+      .eq("id", personBId);
+    if (error) return { success: false, error: error.message };
+  } else if (a.mother_id && !b.mother_id) {
+    const { error } = await supabase
+      .from("people")
+      .update({ mother_id: a.mother_id })
+      .eq("id", personBId);
+    if (error) return { success: false, error: error.message };
+  } else if (b.father_id && !a.father_id) {
+    const { error } = await supabase
+      .from("people")
+      .update({ father_id: b.father_id })
+      .eq("id", personAId);
+    if (error) return { success: false, error: error.message };
+  } else if (b.mother_id && !a.mother_id) {
+    const { error } = await supabase
+      .from("people")
+      .update({ mother_id: b.mother_id })
+      .eq("id", personAId);
+    if (error) return { success: false, error: error.message };
+  } else {
+    // Case 4: neither has a free father slot → create a placeholder parent.
+    const { data: placeholder, error: createErr } = await supabase
+      .from("people")
+      .insert({
+        is_placeholder: true,
+        gender: "unknown",
+      })
+      .select("id")
+      .single();
+    if (createErr || !placeholder) {
+      return { success: false, error: createErr?.message ?? "Could not create placeholder parent." };
+    }
+    const phId = (placeholder as { id: string }).id;
+    const { error: linkErr } = await supabase
+      .from("people")
+      .update({ father_id: phId })
+      .in("id", [personAId, personBId]);
+    if (linkErr) return { success: false, error: linkErr.message };
+    revalidatePath("/");
+    if (a.slug) revalidatePath(`/person/${a.slug}`);
+    if (b.slug) revalidatePath(`/person/${b.slug}`);
+    return { success: true, placeholderId: phId };
+  }
+
+  revalidatePath("/");
+  if (a.slug) revalidatePath(`/person/${a.slug}`);
+  if (b.slug) revalidatePath(`/person/${b.slug}`);
+  return { success: true };
+}
+
 // ── deletePerson (soft delete) ────────────────────────────────────────────────
 export async function deletePerson(id: string) {
   const supabase = await createClient();

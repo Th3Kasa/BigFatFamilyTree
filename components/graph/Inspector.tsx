@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off } from "lucide-react";
+import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,12 @@ import {
   deletePerson,
   unlinkParent,
   convertParentToSpouse,
+  linkSpouse,
+  linkChild,
+  linkParentChild,
+  addSibling,
 } from "@/lib/actions/people";
+import { PersonPicker, type PickablePerson } from "./PersonPicker";
 import type { PersonInput } from "@/lib/graph/transform";
 
 const fadeUp = {
@@ -139,11 +144,15 @@ type Props = {
   onClose: () => void;
   fatherName?: string | null;
   motherName?: string | null;
+  people?: PickablePerson[];
 };
 
-export function Inspector({ person, lang, onClose, fatherName, motherName }: Props) {
+type PickerKind = "spouse" | "child" | "parent" | "sibling" | null;
+
+export function Inspector({ person, lang, onClose, fatherName, motherName, people = [] }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [picker, setPicker] = useState<PickerKind>(null);
 
   function handleDelete() {
     if (!person) return;
@@ -314,23 +323,45 @@ export function Inspector({ person, lang, onClose, fatherName, motherName }: Pro
             </Link>
           </Button>
           <div className="grid grid-cols-2 gap-2">
-            <Button asChild variant="outline" size="sm" className="rounded-full">
-              <Link
-                href={
-                  person
-                    ? `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`
-                    : "#"
-                }
-              >
-                <PlusCircle className="h-3.5 w-3.5" />
-                {lang === "ar" ? "إضافة طفل" : "Add child"}
-              </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPicker("spouse")}
+            >
+              <Heart className="h-3.5 w-3.5" />
+              {lang === "ar" ? "إضافة زوج/ة" : "Add spouse"}
             </Button>
-            <Button asChild variant="outline" size="sm" className="rounded-full">
-              <Link href={person ? `/person/new?spouse=${person.id}` : "#"}>
-                <UserPlus className="h-3.5 w-3.5" />
-                {lang === "ar" ? "إضافة زوج/ة" : "Add spouse"}
-              </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPicker("child")}
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              {lang === "ar" ? "إضافة طفل" : "Add child"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPicker("sibling")}
+            >
+              <Users className="h-3.5 w-3.5" />
+              {lang === "ar" ? "إضافة شقيق/ة" : "Add sibling"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPicker("parent")}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              {lang === "ar" ? "إضافة أب/أم" : "Add parent"}
             </Button>
           </div>
           <Button asChild variant="outline" size="sm" className="w-full rounded-full">
@@ -350,6 +381,50 @@ export function Inspector({ person, lang, onClose, fatherName, motherName }: Pro
           </Button>
         </motion.div>
       </SheetContent>
+
+      {/* Relationship pickers — share existing person OR create new */}
+      {person && picker && (() => {
+        const createHrefs: Record<Exclude<PickerKind, null>, string> = {
+          spouse:  `/person/new?spouse=${person.id}`,
+          child:   `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`,
+          parent:  `/person/new?child=${person.id}`,
+          sibling: `/person/new?sibling=${person.id}`,
+        };
+        const titles: Record<Exclude<PickerKind, null>, { en: string; ar: string }> = {
+          spouse:  { en: "Add spouse", ar: "إضافة زوج/ة" },
+          child:   { en: "Add child",  ar: "إضافة طفل" },
+          parent:  { en: "Add parent", ar: "إضافة أب/أم" },
+          sibling: { en: "Add sibling", ar: "إضافة شقيق/ة" },
+        };
+        const subtitle = lang === "ar"
+          ? "اختر شخصاً موجوداً أو أنشئ شخصاً جديداً"
+          : "Pick an existing person or create a new one";
+        const excludeIds = [person.id];
+        const handlePick = async (otherId: string) => {
+          if (picker === "spouse") {
+            await linkSpouse(person.id, otherId);
+          } else if (picker === "child") {
+            await linkChild(person.id, otherId);
+          } else if (picker === "parent") {
+            await linkParentChild(otherId, person.id);
+          } else if (picker === "sibling") {
+            await addSibling(person.id, otherId);
+          }
+        };
+        return (
+          <PersonPicker
+            open
+            onOpenChange={(o) => { if (!o) setPicker(null); }}
+            title={titles[picker][lang]}
+            description={subtitle}
+            people={people}
+            lang={lang}
+            excludeIds={excludeIds}
+            onPick={handlePick}
+            createHref={createHrefs[picker]}
+          />
+        );
+      })()}
     </Sheet>
   );
 }

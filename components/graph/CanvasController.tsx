@@ -397,6 +397,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         person={selectedPerson}
         lang={lang}
         onClose={() => setSelectedPerson(null)}
+        people={people}
         fatherName={
           selectedPerson?.father_id
             ? (() => {
