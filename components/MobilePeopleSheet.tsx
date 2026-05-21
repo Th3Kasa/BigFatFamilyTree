@@ -27,7 +27,7 @@ export function MobilePeopleSheet({ people, lang }: Props) {
   return (
     <>
       {/* FABs — only visible on mobile */}
-      <div className="fixed bottom-6 end-6 z-50 flex flex-col items-end gap-3 md:hidden">
+      <div className="fixed bottom-20 end-6 z-50 flex flex-col items-end gap-3 md:hidden">
         {/* Add person */}
         <a
           href="/person/new"

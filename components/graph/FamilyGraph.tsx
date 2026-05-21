@@ -59,8 +59,7 @@ export function FamilyGraph({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.15 }}
+
         minZoom={0.1}
         maxZoom={2.5}
         onNodeDragStop={onNodeDragStop}

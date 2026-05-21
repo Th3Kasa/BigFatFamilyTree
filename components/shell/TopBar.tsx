@@ -11,9 +11,10 @@ import type { User } from "@supabase/supabase-js";
 interface TopBarProps {
   user: User | null;
   lang: Lang;
+  role?: string;
 }
 
-export function TopBar({ user, lang }: TopBarProps) {
+export function TopBar({ user, lang, role }: TopBarProps) {
   return (
     <header className="sticky top-0 z-40 col-span-2 flex h-12 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-1)] px-4 backdrop-blur-sm">
       <Link
@@ -37,7 +38,7 @@ export function TopBar({ user, lang }: TopBarProps) {
       <LangToggle current={lang} />
       <ThemeSwitcher />
 
-      {user && <UserMenu user={user} />}
+      {user && <UserMenu user={user} role={role} />}
     </header>
   );
 }

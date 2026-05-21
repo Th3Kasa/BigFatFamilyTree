@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useReactFlow, ReactFlowProvider, useNodesState, useEdgesState } from "@xyflow/react";
 import type { Connection, NodeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
@@ -17,7 +17,7 @@ import { NodeContextMenu, type ContextMenuTarget } from "./NodeContextMenu";
 import { QuickAddDialog, type QuickAddRelation } from "./QuickAddDialog";
 import { updateNodePosition, autoLayoutAll } from "@/lib/actions/canvas";
 import { createRelationship, deleteRelationship } from "@/lib/actions/relationships";
-import { deletePerson } from "@/lib/actions/people";
+import { deletePerson, linkParentChild } from "@/lib/actions/people";
 import {
   Tooltip,
   TooltipContent,
@@ -164,6 +164,16 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges as any[]);
 
+  useEffect(() => { setNodes(initialNodes as any[]); }, [initialNodes, setNodes]);
+  useEffect(() => { setEdges(initialEdges as any[]); }, [initialEdges, setEdges]);
+
+  // Fit view once after initial mount
+  useEffect(() => {
+    const t = setTimeout(() => fitView({ padding: 0.15, duration: 400 }), 100);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onNodeDragStop: OnNodeDrag = (_, node) => {
     startTransition(async () => {
       await updateNodePosition(node.id, node.position.x, node.position.y);
@@ -172,6 +182,27 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
 
   const onConnect = (c: Connection) => {
     if (!c.source || !c.target) return;
+    if (c.source === c.target) return;
+
+    // Left/Right handles → spouse. Top/Bottom handles (no id) → parent-child.
+    const isSpouse = c.sourceHandle === "right" || c.sourceHandle === "left";
+
+    if (!isSpouse) {
+      // c.source = parent node, c.target = child node
+      startTransition(async () => {
+        await linkParentChild(c.source!, c.target!);
+        router.refresh();
+      });
+      return;
+    }
+
+    const exists = edges.some(e => {
+      const k = (e.data as any)?.edgeKind;
+      if (k !== "spouse") return false;
+      return (e.source === c.source && e.target === c.target) || (e.source === c.target && e.target === c.source);
+    });
+    if (exists) return;
+
     const tempId = `spouse-temp-${c.source}-${c.target}`;
     setEdges((eds) => [
       ...eds,

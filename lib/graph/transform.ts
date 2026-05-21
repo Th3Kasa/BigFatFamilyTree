@@ -2,7 +2,7 @@ import type React from "react";
 import * as dagre from "@dagrejs/dagre";
 import type { Lang } from "@/lib/lang/server";
 
-const NODE_WIDTH = 160;
+const NODE_WIDTH = 220;
 const NODE_HEIGHT = 80;
 
 export type PersonInput = {
@@ -48,6 +48,8 @@ export type GraphEdge = {
   source: string;
   target: string;
   type: "smoothstep" | "straight";
+  sourceHandle?: string;
+  targetHandle?: string;
   data?: { edgeKind: "parent" | "spouse"; relationshipId?: string };
   style?: React.CSSProperties;
   animated?: boolean;
@@ -87,19 +89,6 @@ export function buildGraphElements(
     }
   }
 
-  for (const r of relationships) {
-    if (r.type === "spouse") {
-      edges.push({
-        id: `s-${r.person_a_id}-${r.person_b_id}`,
-        source: r.person_a_id,
-        target: r.person_b_id,
-        type: "straight",
-        data: { edgeKind: "spouse", relationshipId: r.id },
-        style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
-      });
-    }
-  }
-
   // Only nodes WITHOUT stored positions go through dagre
   const unpositioned = nodes.filter((n) => {
     const p = (n.data as PersonNodeData).person;
@@ -109,7 +98,7 @@ export function buildGraphElements(
   if (unpositioned.length > 0) {
     const g = new dagre.graphlib.Graph();
     g.setDefaultEdgeLabel(() => ({}));
-    g.setGraph({ rankdir: "TB", nodesep: 50, ranksep: 90, marginx: 20, marginy: 20 });
+    g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 90, marginx: 20, marginy: 20 });
     unpositioned.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
     edges
       .filter((e) => e.data?.edgeKind === "parent")
@@ -122,6 +111,26 @@ export function buildGraphElements(
         n.position = { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 };
       }
     });
+  }
+
+  // Build spouse edges after layout so we can route based on actual positions
+  const posMap = new Map(nodes.map((n) => [n.id, n.position]));
+  for (const r of relationships) {
+    if (r.type === "spouse") {
+      const posA = posMap.get(r.person_a_id);
+      const posB = posMap.get(r.person_b_id);
+      const aIsLeft = !posA || !posB || posA.x <= posB.x;
+      edges.push({
+        id: `s-${r.person_a_id}-${r.person_b_id}`,
+        source: aIsLeft ? r.person_a_id : r.person_b_id,
+        target: aIsLeft ? r.person_b_id : r.person_a_id,
+        sourceHandle: "right",
+        targetHandle: "left-target",
+        type: "straight",
+        data: { edgeKind: "spouse", relationshipId: r.id },
+        style: { stroke: "#f43f5e", strokeDasharray: "5 4", strokeWidth: 1.5 },
+      });
+    }
   }
 
   return { nodes, edges };

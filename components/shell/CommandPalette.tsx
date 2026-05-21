@@ -15,18 +15,21 @@ import { useRouter } from "next/navigation";
 
 interface Person {
   id: string;
+  slug?: string | null;
   given_en?: string | null;
   given_ar?: string | null;
-  family_name?: string | null;
+  family_name_en?: string | null;
+  family_name_ar?: string | null;
 }
 
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   people?: Person[];
+  lang?: "ar" | "en";
 }
 
-export function CommandPalette({ open, onOpenChange, people = [] }: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, people = [], lang = "en" }: CommandPaletteProps) {
   const router = useRouter();
 
   const run = (fn: () => void) => {
@@ -42,14 +45,18 @@ export function CommandPalette({ open, onOpenChange, people = [] }: CommandPalet
 
         {people.length > 0 && (
           <CommandGroup heading="People">
-            {people.slice(0, 8).map((p) => (
-              <CommandItem
-                key={p.id}
-                onSelect={() => run(() => router.push(`/person/${p.id}`))}
-              >
-                {[p.given_en || p.given_ar, p.family_name].filter(Boolean).join(" ")}
-              </CommandItem>
-            ))}
+            {people.slice(0, 8).map((p) => {
+              const family = lang === "ar" ? p.family_name_ar : p.family_name_en;
+              const given = lang === "ar" ? (p.given_ar || p.given_en) : (p.given_en || p.given_ar);
+              return (
+                <CommandItem
+                  key={p.id}
+                  onSelect={() => run(() => router.push(`/person/${p.slug ?? p.id}`))}
+                >
+                  {[given, family].filter(Boolean).join(" ")}
+                </CommandItem>
+              );
+            })}
           </CommandGroup>
         )}
 
@@ -80,7 +87,8 @@ export function CommandPalette({ open, onOpenChange, people = [] }: CommandPalet
           <CommandItem
             onSelect={() => {
               const next = document.cookie.includes("lang=ar") ? "en" : "ar";
-              document.cookie = `lang=${next}; path=/; max-age=31536000; SameSite=Lax; Secure`;
+              const secure = location.protocol === "https:" ? "; Secure" : "";
+              document.cookie = `lang=${next}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
               run(() => window.location.reload());
             }}
           >

@@ -41,6 +41,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { data: profile } = user
+    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    : { data: null };
+  const role = (profile as { role?: string | null } | null)?.role ?? undefined;
+
   return (
     <html
       lang={lang}
@@ -51,23 +56,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="antialiased">
         <ThemeProvider>
           <CommandProvider>
-            <div className="grid grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
-              {/* Top bar spans both columns */}
-              <TopBar user={user} lang={lang} />
+            {user ? (
+              <>
+                <div className="grid grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
+                  <TopBar user={user} lang={lang} role={role} />
+                  <NavRail lang={lang} role={role} />
+                  <main className="overflow-auto pb-16 md:pb-0">
+                    {children}
+                  </main>
+                </div>
+                <MobileNav />
+              </>
+            ) : (
+              children
+            )}
 
-              {/* Nav rail: left col, row 2, desktop only */}
-              <NavRail lang={lang} />
-
-              {/* Main content: right col, row 2 */}
-              <main className="overflow-auto pb-16 md:pb-0">
-                {children}
-              </main>
-            </div>
-
-            {/* Mobile bottom nav */}
-            <MobileNav />
-
-            {/* Toast notifications */}
             <Toaster position="bottom-right" />
           </CommandProvider>
         </ThemeProvider>

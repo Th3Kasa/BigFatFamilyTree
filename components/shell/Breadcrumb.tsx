@@ -18,7 +18,7 @@ const segmentLabels: Record<string, string> = {
   login: "Login",
 };
 
-export function Breadcrumb({ className }: { className?: string }) {
+export function Breadcrumb({ className, lang = "en" }: { className?: string; lang?: "ar" | "en" }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
 
@@ -26,12 +26,17 @@ export function Breadcrumb({ className }: { className?: string }) {
     { label: "Family", href: "/" },
     ...segments.reduce<{ label: string; href: string }[]>((acc, seg, i) => {
       const href = "/" + segments.slice(0, i + 1).join("/");
-      if (UUID_RE.test(seg)) {
-        // Attach UUID href to the previous crumb so it stays clickable
+      const prev = segments[i - 1];
+      if (UUID_RE.test(seg) || prev === "person") {
+        // Hide UUIDs and slugs under /person/ — attach href to the previous crumb
         if (acc.length > 0) acc[acc.length - 1].href = href;
         return acc;
       }
-      acc.push({ label: segmentLabels[seg] ?? seg, href });
+      const label =
+        seg === "person"
+          ? (lang === "ar" ? "شخص" : "Person")
+          : (segmentLabels[seg] ?? seg);
+      acc.push({ label, href });
       return acc;
     }, []),
   ];

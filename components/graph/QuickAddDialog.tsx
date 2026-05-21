@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import type { ActionState } from "@/lib/actions/people";
-import { createPerson } from "@/lib/actions/people";
+import { createPersonQuick } from "@/lib/actions/people";
 
 export type QuickAddRelation =
   | { kind: "child"; parentId: string; parentGender: "m" | "f" | "unknown" }
@@ -31,7 +31,7 @@ function SubmitButton({ lang }: { lang: "ar" | "en" }) {
 }
 
 export function QuickAddDialog({ relation, lang, onClose }: Props) {
-  const [state, formAction] = useActionState<ActionState, FormData>(createPerson, null);
+  const [state, formAction] = useActionState<ActionState, FormData>(createPersonQuick, null);
   const firstInput = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -43,8 +43,15 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Close dialog after successful save (no redirect in createPersonQuick)
+  useEffect(() => {
+    if (state?.success) onClose();
+  }, [state?.success, onClose]);
+
   const fatherId = relation.kind === "child" && relation.parentGender !== "f" ? relation.parentId : null;
   const motherId = relation.kind === "child" && relation.parentGender === "f" ? relation.parentId : null;
+  const spouseId = relation.kind === "spouse" ? relation.otherId : null;
+  const childId = relation.kind === "parent" ? relation.childId : null;
 
   const title =
     relation.kind === "child" ? (lang === "ar" ? "إضافة ابن/ابنة" : "Add child")
@@ -98,6 +105,8 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
 
           <input type="hidden" name="father_id" value={fatherId ?? ""} />
           <input type="hidden" name="mother_id" value={motherId ?? ""} />
+          <input type="hidden" name="spouse_id" value={spouseId ?? ""} />
+          <input type="hidden" name="child_id" value={childId ?? ""} />
           <input type="hidden" name="is_placeholder" value="false" />
           <input type="hidden" name="photo_url" value="" />
           <input type="hidden" name="father_name_en" value="" />

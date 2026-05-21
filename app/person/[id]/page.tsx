@@ -68,32 +68,33 @@ export default async function PersonPage({ params }: Props) {
     ? supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single()
     : supabase.from("people").select("*").eq("slug", id).is("deleted_at", null).single();
 
+  const { data: person } = await personQuery;
+  if (!person) notFound();
+
+  const personId = person.id as string;
+
   const [
-    { data: person },
     { data: events },
     { data: people },
     { data: relationships },
   ] = await Promise.all([
-    personQuery,
     supabase
       .from("events")
       .select("*")
-      .eq("person_id", id)
+      .eq("person_id", personId)
       .order("date_value", { ascending: true }),
     supabase
       .from("people")
       .select("id, given_en, given_ar, family_name_en, family_name_ar")
       .is("deleted_at", null)
-      .neq("id", id),
+      .neq("id", personId),
     supabase
       .from("relationships")
       .select(
         "*, person_a:people!relationships_person_a_id_fkey(id,given_en,given_ar), person_b:people!relationships_person_b_id_fkey(id,given_en,given_ar)"
       )
-      .or(`person_a_id.eq.${id},person_b_id.eq.${id}`),
+      .or(`person_a_id.eq.${personId},person_b_id.eq.${personId}`),
   ]);
-
-  if (!person) notFound();
 
   async function handleDelete() {
     "use server";
@@ -436,7 +437,7 @@ export default async function PersonPage({ params }: Props) {
                   <div className="flex flex-wrap gap-2">
                     {relationships.map((r) => {
                       const other =
-                        r.person_a_id === id
+                        r.person_a_id === personId
                           ? (r.person_b as {
                               id: string;
                               given_en: string | null;

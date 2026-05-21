@@ -26,6 +26,8 @@ type PersonRow = {
   photo_url?: string | null;
   notes_en?: string | null;
   notes_ar?: string | null;
+  birth_date?: string | null;
+  death_date?: string | null;
 };
 
 type PeopleLookup = Pick<PersonRow, "id" | "given_en" | "given_ar" | "family_name_en" | "family_name_ar">[];
@@ -285,6 +287,35 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
           dir="rtl"
           className={`${INPUT_CLS} resize-none`}
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="birth_date" className="block text-xs text-gray-500 mb-1">
+            {lang === "ar" ? "تاريخ الميلاد" : "Birth date"}
+          </label>
+          <input
+            type="text"
+            id="birth_date"
+            name="birth_date"
+            defaultValue={initialData?.birth_date ?? ""}
+            placeholder="YYYY-MM-DD"
+            className={INPUT_CLS}
+          />
+        </div>
+        <div>
+          <label htmlFor="death_date" className="block text-xs text-gray-500 mb-1">
+            {lang === "ar" ? "تاريخ الوفاة" : "Death date"}
+          </label>
+          <input
+            type="text"
+            id="death_date"
+            name="death_date"
+            defaultValue={initialData?.death_date ?? ""}
+            placeholder="YYYY-MM-DD"
+            className={INPUT_CLS}
+          />
+        </div>
       </div>
 
       <input type="hidden" name="is_placeholder" value="false" />
