@@ -3,7 +3,7 @@ import * as dagre from "@dagrejs/dagre";
 import type { Lang } from "@/lib/lang/server";
 
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 80;
+const NODE_HEIGHT = 240;
 
 export type PersonInput = {
   id: string;

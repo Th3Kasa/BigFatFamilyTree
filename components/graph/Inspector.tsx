@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus } from "lucide-react";
+import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { deletePerson } from "@/lib/actions/people";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  deletePerson,
+  unlinkParent,
+  convertParentToSpouse,
+} from "@/lib/actions/people";
 import type { PersonInput } from "@/lib/graph/transform";
 
 const fadeUp = {
@@ -23,6 +33,105 @@ const fadeUp = {
   animate: { opacity: 1, y: 0 },
 };
 const sectionTransition = { duration: 0.32, ease: [0.32, 0.72, 0.32, 1] as const };
+
+function ParentRow({
+  label,
+  name,
+  parentId,
+  childId,
+  lang,
+  onChange,
+}: {
+  label: string;
+  name: string | null | undefined;
+  parentId: string;
+  childId: string;
+  lang: "ar" | "en";
+  onChange: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function handleUnlink() {
+    const ok = window.confirm(
+      lang === "ar" ? `إزالة هذا الرابط مع ${name ?? "?"}؟` : `Remove this link with ${name ?? "?"}?`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    await unlinkParent(parentId, childId);
+    setBusy(false);
+    onChange();
+  }
+
+  async function handleConvert() {
+    const ok = window.confirm(
+      lang === "ar"
+        ? `تحويل ${name ?? "?"} إلى زوج/ة بدلاً من والد/ة؟`
+        : `Convert ${name ?? "?"} from parent to spouse?`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    await convertParentToSpouse(parentId, childId);
+    setBusy(false);
+    onChange();
+  }
+
+  return (
+    <div className="group flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-sm">
+      <div className="flex flex-col leading-tight min-w-0 flex-1">
+        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+          {label}
+        </span>
+        <span className="truncate text-sm font-medium text-[var(--foreground)]">
+          {name ?? (lang === "ar" ? "غير معروف" : "Unknown")}
+        </span>
+      </div>
+      <TooltipProvider delayDuration={250}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleConvert}
+              disabled={busy}
+              aria-label={lang === "ar" ? "تحويل إلى زوج/ة" : "Convert to spouse"}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
+                "transition-[transform,background-color,color] duration-200",
+                "hover:-translate-y-px hover:bg-[var(--highlight)] hover:text-[var(--highlight-foreground)]",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+              )}
+            >
+              <Heart className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {lang === "ar" ? "تحويل إلى زوج/ة" : "Convert to spouse"}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleUnlink}
+              disabled={busy}
+              aria-label={lang === "ar" ? "إزالة الرابط" : "Unlink"}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
+                "transition-[transform,background-color,color] duration-200",
+                "hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+              )}
+            >
+              <Link2Off className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {lang === "ar" ? "إزالة الرابط" : "Unlink"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
+}
 
 type Props = {
   person: PersonInput | null;
@@ -153,24 +262,38 @@ export function Inspector({ person, lang, onClose, fatherName, motherName }: Pro
             </motion.div>
           )}
 
-          {/* Family links */}
-          {(person?.father_id || person?.mother_id) && (
+          {/* Parents — with quick-fix actions */}
+          {person && (person.father_id || person.mother_id) && (
             <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
                 {lang === "ar" ? "الوالدان" : "Parents"}
               </p>
-              <div className="flex flex-wrap gap-2">
-                {person?.father_id && (
-                  <Badge variant="secondary" className="gap-1 rounded-full bg-[var(--secondary)] px-3 py-1 text-xs">
-                    <span className="text-[var(--muted-foreground)]">{lang === "ar" ? "الأب:" : "Father:"}</span>
-                    {fatherName ?? (lang === "ar" ? "غير معروف" : "Unknown")}
-                  </Badge>
+              <div className="space-y-2">
+                {person.father_id && (
+                  <ParentRow
+                    label={lang === "ar" ? "الأب" : "Father"}
+                    name={fatherName}
+                    parentId={person.father_id}
+                    childId={person.id}
+                    lang={lang}
+                    onChange={() => {
+                      onClose();
+                      router.refresh();
+                    }}
+                  />
                 )}
-                {person?.mother_id && (
-                  <Badge variant="secondary" className="gap-1 rounded-full bg-[var(--secondary)] px-3 py-1 text-xs">
-                    <span className="text-[var(--muted-foreground)]">{lang === "ar" ? "الأم:" : "Mother:"}</span>
-                    {motherName ?? (lang === "ar" ? "غير معروف" : "Unknown")}
-                  </Badge>
+                {person.mother_id && (
+                  <ParentRow
+                    label={lang === "ar" ? "الأم" : "Mother"}
+                    name={motherName}
+                    parentId={person.mother_id}
+                    childId={person.id}
+                    lang={lang}
+                    onChange={() => {
+                      onClose();
+                      router.refresh();
+                    }}
+                  />
                 )}
               </div>
             </motion.div>

@@ -262,6 +262,109 @@ export async function updatePersonPhoto(
   return { success: true };
 }
 
+// ── unlinkParent ──────────────────────────────────────────────────────────────
+// Clears father_id or mother_id on the child (whichever currently points to parentId).
+export async function unlinkParent(
+  parentId: string,
+  childId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const { data: child } = await supabase
+    .from("people")
+    .select("father_id, mother_id, slug")
+    .eq("id", childId)
+    .maybeSingle();
+
+  if (!child) return { success: false, error: "Child not found." };
+
+  const ch = child as { father_id: string | null; mother_id: string | null; slug: string | null };
+  const field =
+    ch.father_id === parentId
+      ? "father_id"
+      : ch.mother_id === parentId
+        ? "mother_id"
+        : null;
+
+  if (!field) return { success: false, error: "Parent link not found." };
+
+  const { error } = await supabase
+    .from("people")
+    .update({ [field]: null })
+    .eq("id", childId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/");
+  if (ch.slug) revalidatePath(`/person/${ch.slug}`);
+  revalidatePath(`/person/${childId}`);
+  return { success: true };
+}
+
+// ── convertParentToSpouse ─────────────────────────────────────────────────────
+// One-shot: unlinks the parent-child relationship AND inserts a spouse rel.
+// Used when a parent link was created by mistake and the two people are
+// actually partners.
+export async function convertParentToSpouse(
+  parentId: string,
+  childId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (parentId === childId) {
+    return { success: false, error: "Cannot link a person to themselves." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: child } = await supabase
+    .from("people")
+    .select("father_id, mother_id, slug")
+    .eq("id", childId)
+    .maybeSingle();
+
+  if (!child) return { success: false, error: "Person not found." };
+
+  const ch = child as { father_id: string | null; mother_id: string | null; slug: string | null };
+  const field =
+    ch.father_id === parentId
+      ? "father_id"
+      : ch.mother_id === parentId
+        ? "mother_id"
+        : null;
+
+  if (field) {
+    const { error: unlinkErr } = await supabase
+      .from("people")
+      .update({ [field]: null })
+      .eq("id", childId);
+    if (unlinkErr) return { success: false, error: unlinkErr.message };
+  }
+
+  const { data: existing } = await supabase
+    .from("relationships")
+    .select("id")
+    .eq("type", "spouse")
+    .or(
+      `and(person_a_id.eq.${parentId},person_b_id.eq.${childId}),and(person_a_id.eq.${childId},person_b_id.eq.${parentId})`,
+    )
+    .maybeSingle();
+
+  if (!existing) {
+    const { error: insertErr } = await supabase.from("relationships").insert({
+      person_a_id: parentId,
+      person_b_id: childId,
+      type: "spouse",
+      status: "current",
+    });
+    if (insertErr) return { success: false, error: insertErr.message };
+  }
+
+  revalidatePath("/");
+  if (ch.slug) revalidatePath(`/person/${ch.slug}`);
+  revalidatePath(`/person/${childId}`);
+  revalidatePath(`/person/${parentId}`);
+  return { success: true };
+}
+
 // ── deletePerson (soft delete) ────────────────────────────────────────────────
 export async function deletePerson(id: string) {
   const supabase = await createClient();
