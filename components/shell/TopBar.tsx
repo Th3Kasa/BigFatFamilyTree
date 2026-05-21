@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TreePine } from "lucide-react";
+import Image from "next/image";
 import { LangToggle } from "@/components/LangToggle";
 import { Breadcrumb } from "@/components/shell/Breadcrumb";
 import { UserMenu } from "@/components/shell/UserMenu";
@@ -19,9 +19,16 @@ export function TopBar({ user, lang, role }: TopBarProps) {
     <header className="sticky top-0 z-40 col-span-2 flex h-12 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-1)] px-4 backdrop-blur-sm">
       <Link
         href="/"
-        className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)] hover:text-[var(--primary)] transition-colors"
+        className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)] hover:opacity-80 transition-opacity"
       >
-        <TreePine className="h-5 w-5 text-[var(--primary)]" />
+        <Image
+          src="/logo-mark.png"
+          alt=""
+          width={28}
+          height={28}
+          className="h-7 w-7"
+          priority
+        />
         <span className="hidden sm:block">
           {lang === "ar" ? "شجرة العائلة الكبيرة" : "Big Fat Family Tree"}
         </span>

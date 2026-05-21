@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Loader2, TreePine } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
 import { ensureBootstrapUser } from "./actions";
@@ -68,41 +69,6 @@ function FloatingInput({
         {label}
       </label>
     </div>
-  );
-}
-
-/* ─── inline tree SVG ────────────────────────────────────────── */
-function TreeIllustration({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 200 220"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      {/* trunk */}
-      <rect x="93" y="160" width="14" height="50" rx="4" fill="oklch(0.55 0.07 100 / 0.6)" />
-      {/* roots */}
-      <path d="M93 205 Q75 215 60 210" stroke="oklch(0.55 0.07 100 / 0.5)" strokeWidth="3" strokeLinecap="round" />
-      <path d="M107 205 Q125 215 140 210" stroke="oklch(0.55 0.07 100 / 0.5)" strokeWidth="3" strokeLinecap="round" />
-      {/* main canopy layers */}
-      <ellipse cx="100" cy="130" rx="55" ry="40" fill="oklch(0.42 0.07 130 / 0.55)" />
-      <ellipse cx="100" cy="108" rx="45" ry="36" fill="oklch(0.48 0.08 130 / 0.60)" />
-      <ellipse cx="100" cy="88" rx="36" ry="30" fill="oklch(0.52 0.09 130 / 0.65)" />
-      <ellipse cx="100" cy="68" rx="28" ry="26" fill="oklch(0.56 0.10 130 / 0.70)" />
-      <ellipse cx="100" cy="52" rx="20" ry="20" fill="oklch(0.60 0.11 130 / 0.75)" />
-      {/* accent fruit dots */}
-      <circle cx="78" cy="102" r="5" fill="oklch(0.78 0.14 75 / 0.85)" />
-      <circle cx="122" cy="95" r="4" fill="oklch(0.78 0.14 75 / 0.85)" />
-      <circle cx="95" cy="75" r="4" fill="oklch(0.78 0.14 75 / 0.85)" />
-      <circle cx="115" cy="118" r="3.5" fill="oklch(0.78 0.14 75 / 0.75)" />
-      <circle cx="84" cy="120" r="3" fill="oklch(0.78 0.14 75 / 0.75)" />
-      {/* subtle branch lines */}
-      <path d="M100 160 Q90 140 72 128" stroke="oklch(0.35 0.06 120 / 0.35)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M100 160 Q110 138 128 125" stroke="oklch(0.35 0.06 120 / 0.35)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M100 155 Q100 135 100 115" stroke="oklch(0.35 0.06 120 / 0.30)" strokeWidth="2" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -188,11 +154,11 @@ export default function LoginPage() {
         className={cn(
           "relative flex shrink-0 flex-col items-center justify-center overflow-hidden",
           "h-[30vh] md:h-auto md:w-1/2 lg:w-[52%]",
-          "bg-[oklch(0.36_0.07_130)] text-[oklch(0.99_0_0)]"
+          "bg-[oklch(0.26_0.10_15)] text-[oklch(0.99_0_0)]"
         )}
         style={{
           background:
-            "linear-gradient(145deg, oklch(0.32 0.07 130) 0%, oklch(0.42 0.07 130) 45%, oklch(0.38 0.09 110) 100%)",
+            "linear-gradient(145deg, oklch(0.22 0.09 10) 0%, oklch(0.30 0.13 18) 50%, oklch(0.26 0.11 0) 100%)",
         }}
         aria-hidden="false"
       >
@@ -205,32 +171,39 @@ export default function LoginPage() {
           }}
         />
 
-        {/* desktop: full illustration */}
-        <div className="hidden flex-col items-center gap-6 px-10 md:flex">
-          <TreeIllustration className="h-56 w-auto drop-shadow-lg" />
-          <div className="text-center">
-            <p
-              className="font-[Fraunces,Georgia,serif] text-4xl font-semibold tracking-tight"
-              style={{ fontOpticalSizing: "auto" } as React.CSSProperties}
-            >
-              Big Fat Family Tree
-            </p>
-            <p
-              className="mt-3 max-w-xs text-sm leading-relaxed text-[oklch(0.88_0.04_100)]"
-              dir="auto"
-            >
-              {taglines[lang]}
-            </p>
-          </div>
+        {/* desktop: full horizontal logo + tagline */}
+        <div className="hidden flex-col items-center gap-8 px-10 md:flex">
+          <Image
+            src="/logo.png"
+            alt="Big Fat Family"
+            width={1200}
+            height={411}
+            priority
+            className="h-auto w-[min(420px,80%)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)] [filter:brightness(1.05)]"
+            style={{ background: "white", borderRadius: "1.25rem", padding: "1.25rem 1.5rem" }}
+          />
+          <p
+            className="max-w-xs text-center text-sm leading-relaxed text-[oklch(0.90_0.03_30)]"
+            dir="auto"
+          >
+            {taglines[lang]}
+          </p>
         </div>
 
-        {/* mobile: compact hero */}
+        {/* mobile: emblem + tagline */}
         <div className="flex flex-col items-center gap-3 md:hidden">
-          <TreePine className="h-10 w-10 text-[oklch(0.78_0.14_75)]" strokeWidth={1.5} />
+          <Image
+            src="/logo-mark.png"
+            alt="Big Fat Family"
+            width={64}
+            height={64}
+            priority
+            className="h-12 w-12 drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)]"
+          />
           <p className="font-[Fraunces,Georgia,serif] text-2xl font-semibold tracking-tight">
-            Family Tree
+            Big Fat Family
           </p>
-          <p className="max-w-[22ch] text-center text-xs text-[oklch(0.88_0.04_100)]" dir="auto">
+          <p className="max-w-[22ch] text-center text-xs text-[oklch(0.90_0.03_30)]" dir="auto">
             {taglines[lang]}
           </p>
         </div>
