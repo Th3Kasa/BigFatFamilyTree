@@ -3,7 +3,7 @@ import { buildGraphElements, autoLayoutPositions } from "@/lib/graph/transform";
 
 const people = [
   {
-    id: "p1", slug: null, given_en: "Alice", given_ar: "أليس",
+    id: "p1", slug: "alice-smith", given_en: "Alice", given_ar: "أليس",
     family_name_en: "Smith", family_name_ar: "سميث",
     father_id: null, mother_id: null,
     gender: "f" as const, is_placeholder: false, photo_url: null,
@@ -17,7 +17,7 @@ const people = [
     pos_x: null, pos_y: null,
   },
   {
-    id: "p3", slug: null, given_en: "Carol", given_ar: "كارول",
+    id: "p3", slug: "carol-smith", given_en: "Carol", given_ar: "كارول",
     family_name_en: "Smith", family_name_ar: "سميث",
     father_id: "p2", mother_id: "p1",
     gender: "f" as const, is_placeholder: false, photo_url: null,

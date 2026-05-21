@@ -94,7 +94,8 @@ export default async function PersonPage({ params }: Props) {
 
   async function handleDelete() {
     "use server";
-    await deletePerson(person.id);
+    const result = await deletePerson(person.id);
+    if (result && !result.success) throw new Error(result.error ?? "Delete failed");
   }
 
   // Derived display values
@@ -160,7 +161,7 @@ export default async function PersonPage({ params }: Props) {
           href="/"
           className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-6"
         >
-          <span aria-hidden>←</span>
+          <span aria-hidden>{lang === "ar" ? "→" : "←"}</span>
           {lang === "ar" ? "العودة" : "Back"}
         </Link>
       </div>

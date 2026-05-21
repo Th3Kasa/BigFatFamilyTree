@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
@@ -8,6 +9,9 @@ import type { PersonInput } from "@/lib/graph/transform";
 
 export default async function HomePage() {
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const [{ data: people }, { data: relationships }] = await Promise.all([
     supabase

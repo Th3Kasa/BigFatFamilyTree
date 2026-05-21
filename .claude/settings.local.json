@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk git *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)",
+      "Bash(npm install *)",
+      "Bash(npm list *)",
+      "Bash(rtk npm *)",
+      "Bash(rtk gh *)",
+      "Bash(codeburn --version)",
+      "Bash(codeburn status *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk tsc *)",
+      "Bash(node -e \"const x = require\\('@xyflow/react'\\); console.log\\(Object.keys\\(x\\).filter\\(k => k.toLowerCase\\(\\).includes\\('click'\\) || k.toLowerCase\\(\\).includes\\('handler'\\)\\)\\)\")",
+      "Bash(node -e \"const x = require\\('@xyflow/react'\\); console.log\\(Object.keys\\(x\\).filter\\(k => k.toLowerCase\\(\\).includes\\('node'\\)\\)\\)\")",
+      "Skill(agent-browser)",
+      "PowerShell(agent-browser *)",
+      "PowerShell(cd \"C:\\\\Users\\\\hanan\\\\Documents\\\\Claude\\\\Family Tree\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -notmatch \"tests/\" })"
+    ]
+  }
+}

@@ -203,6 +203,7 @@ export async function createPersonQuick(
 // Used when dragging a connection from a parent node's bottom handle to a
 // child node's top handle on the canvas.
 export async function linkParentChild(parentId: string, childId: string): Promise<ActionState> {
+  if (parentId === childId) return { success: false, error: "A person cannot be their own parent." };
   const supabase = await createClient();
 
   const { data: parent } = await supabase
@@ -264,6 +265,13 @@ export async function updatePersonPhoto(
 // ── deletePerson (soft delete) ────────────────────────────────────────────────
 export async function deletePerson(id: string) {
   const supabase = await createClient();
+
+  // Null out references from children so they don't point to a deleted person
+  await Promise.all([
+    supabase.from("people").update({ father_id: null }).eq("father_id", id).is("deleted_at", null),
+    supabase.from("people").update({ mother_id: null }).eq("mother_id", id).is("deleted_at", null),
+  ]);
+
   const { error } = await supabase
     .from("people")
     .update({ deleted_at: new Date().toISOString() })

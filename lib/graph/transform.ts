@@ -62,12 +62,12 @@ export function buildGraphElements(
 ): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const idSet = new Set(people.map((p) => p.id));
 
-  // Build spouse map for "add child" links
+  // Build spouse map for "add child" links (first spouse wins for the node data hint)
   const spouseMap = new Map<string, string>();
   for (const r of relationships) {
     if (r.type === "spouse") {
-      spouseMap.set(r.person_a_id, r.person_b_id);
-      spouseMap.set(r.person_b_id, r.person_a_id);
+      if (!spouseMap.has(r.person_a_id)) spouseMap.set(r.person_a_id, r.person_b_id);
+      if (!spouseMap.has(r.person_b_id)) spouseMap.set(r.person_b_id, r.person_a_id);
     }
   }
 

@@ -231,6 +231,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
               : e
           )
         );
+      } else {
+        setEdges((eds) => eds.filter((e) => e.id !== tempId));
       }
     });
   };
@@ -288,6 +290,22 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
           await deleteRelationship(rid, pid);
           router.refresh();
         });
+      } else if (data?.edgeKind === "parent") {
+        // Determine which FK to clear: edge.id is "f-{childId}" or "m-{childId}"
+        const childId = edge.target as string;
+        const parentId = edge.source as string;
+        startTransition(async () => {
+          const supabase = (await import("@/lib/supabase/client")).createClient();
+          const { data: child } = await supabase
+            .from("people")
+            .select("father_id, mother_id")
+            .eq("id", childId)
+            .maybeSingle();
+          if (!child) return;
+          const field = child.father_id === parentId ? "father_id" : "mother_id";
+          await supabase.from("people").update({ [field]: null }).eq("id", childId);
+          router.refresh();
+        });
       }
     }
   }, [router, startTransition]);
@@ -307,9 +325,12 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     if (spouseEdge) {
       const spouseId = spouseEdge.source === parent.id ? spouseEdge.target : spouseEdge.source;
       const spouse = personById(spouseId);
-      const fatherId = parent.gender !== "f" ? parent.id : (spouse?.gender !== "f" ? spouseId : parent.id);
-      const motherId = parent.gender === "f" ? parent.id : (spouse?.gender === "f" ? spouseId : spouseId);
-      router.push(`/person/new?father=${fatherId}&mother=${motherId}`);
+      const fatherId = parent.gender !== "f" ? parent.id : (spouse?.gender !== "f" ? spouseId : undefined);
+      const motherId = parent.gender === "f" ? parent.id : (spouse?.gender === "f" ? spouseId : undefined);
+      const params = new URLSearchParams();
+      if (fatherId) params.set("father", fatherId);
+      if (motherId) params.set("mother", motherId);
+      router.push(`/person/new?${params.toString()}`);
     } else {
       setQuickAdd({ kind: "child", parentId: parent.id, parentGender: parent.gender });
     }

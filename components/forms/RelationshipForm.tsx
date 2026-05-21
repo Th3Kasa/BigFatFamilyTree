@@ -56,7 +56,7 @@ export function RelationshipForm({ people, lang, action }: Props) {
             className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
           >
             <option value="">{lang === "ar" ? "— اختر —" : "— select —"}</option>
-            {people.map((p) => (
+            {people.filter((p) => p.id).map((p) => (
               <option key={p.id} value={p.id}>{personLabel(p)}</option>
             ))}
           </select>

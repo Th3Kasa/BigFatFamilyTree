@@ -47,7 +47,7 @@ const GENDER_LABELS: Record<"f" | "m", { en: string; ar: string }> = {
 
 const INPUT_CLS = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400";
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({ label, lang }: { label: string; lang: "ar" | "en" }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -55,7 +55,7 @@ function SubmitButton({ label }: { label: string }) {
       disabled={pending}
       className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold transition-colors"
     >
-      {pending ? "Saving…" : label}
+      {pending ? (lang === "ar" ? "جارٍ الحفظ…" : "Saving…") : label}
     </button>
   );
 }
@@ -325,7 +325,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       <input type="hidden" name="great_grandfather_name_en" value={initialData?.great_grandfather_name_en ?? ""} />
       <input type="hidden" name="great_grandfather_name_ar" value={initialData?.great_grandfather_name_ar ?? ""} />
 
-      <SubmitButton label={submitLabel} />
+      <SubmitButton label={submitLabel} lang={lang} />
     </form>
   );
 }

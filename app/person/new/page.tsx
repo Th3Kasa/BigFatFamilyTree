@@ -50,7 +50,7 @@ export default async function NewPersonPage({ searchParams }: Props) {
           href="/"
           className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-8 transition-colors"
         >
-          <span aria-hidden>←</span>
+          <span aria-hidden>{lang === "ar" ? "→" : "←"}</span>
           {lang === "ar" ? "العودة" : "Back"}
         </Link>
 
