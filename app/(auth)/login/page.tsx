@@ -142,10 +142,13 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password });
     setLoading(false);
     if (error) {
-      const hint = bootstrapResult && "details" in bootstrapResult && bootstrapResult.details
-        ? ` [bootstrap: ${bootstrapResult.details}]`
-        : "";
-      setErrorMsg(`${error.message}${hint}`);
+      // Always show bootstrap state so we know whether the bootstrap action ran
+      const tag = bootstrapResult.ok
+        ? bootstrapResult.details
+          ? `[bootstrap ok: ${bootstrapResult.details}]`
+          : "[bootstrap ok]"
+        : `[bootstrap failed: ${bootstrapResult.reason}${bootstrapResult.details ? ` — ${bootstrapResult.details}` : ""}]`;
+      setErrorMsg(`${error.message} ${tag}`);
       return;
     }
     window.location.href = "/";
