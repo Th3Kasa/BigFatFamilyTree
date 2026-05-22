@@ -1,16 +1,10 @@
 ---
-description: Display Alfred's full team roster with roles, specialties, assigned skills, and active integrations.
+description: Display Alfred's full team roster with roles, assigned skills, and active integrations.
 ---
 
-Display the team roster. Read CLAUDE.md for current information.
+Display the team roster. Read CLAUDE.md for current info. Output:
 
-Output exactly this:
-
----
-
-# Alfred's Team
-
-**You talk to Alfred. Alfred runs the team.**
+# Alfred's Team — You talk to Alfred. Alfred runs the team.
 
 ```
 Me  → Alfred
@@ -29,8 +23,7 @@ Me  → Alfred
 └── 🔧 tech-curator       — tool vetting & maintenance
 ```
 
-## Skills & Plugins (Auto-assigned — You Never Need to Call These Manually)
-
+## Skills & Plugins (Auto-assigned)
 | Skill / Plugin | Agent |
 |----------------|-------|
 | `claude-api` | 🤖 ai-automation |
@@ -46,8 +39,4 @@ Me  → Alfred
 | Google Drive MCP | 📋 business-analyst + 🔌 integrations |
 
 ## Commands
-`/alfred` — full orchestration mode · `/team` — this roster · `/maintain` — system audit · `/approve-plugin [name]` — tool vetting
-
----
-
-Then check `.claude/shared/lessons.md` — if it has entries, show the 3 most recent under **Recent Lessons**.
+`/alfred` · `/team` · `/maintain` · `/approve-plugin [name]`

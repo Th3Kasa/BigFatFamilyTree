@@ -1,22 +1,16 @@
 ---
-description: Trigger tech-curator's full system health audit. Checks dependencies, plugin health, agent configurations, permissions, and security advisories. All findings reported to Alfred.
+description: Trigger tech-curator's full system health audit — dependencies, plugins, agent configs, permissions, and security advisories.
 ---
 
-Deploy tech-curator for a full system maintenance audit.
+Deploy tech-curator (`subagent_type: "tech-curator"`) with this brief:
 
-Use the Agent tool with `subagent_type: "tech-curator"` with this brief:
+"Run a full system health audit:
+1. `npm audit` — report high/critical vulnerabilities
+2. `npm outdated` — flag packages > 2 major versions behind
+3. `npx tsc --noEmit` — report errors
+4. Read all `.claude/agents/*.md` — check for contradictions with CLAUDE.md, unincorporated lessons
+5. Read `.claude/shared/plugin-registry.md` — flag stale tools
+6. Read `.claude/settings*.json` — flag overly broad permissions
+Update the Last Audited date in the plugin registry."
 
-"Run a full system health audit on this project. In order:
-
-1. **Dependency security**: run `npm audit` — report any high or critical vulnerabilities with CVE IDs and whether a fix is available
-2. **Package currency**: run `npm outdated` — flag packages > 2 major versions behind
-3. **TypeScript integrity**: run `npx tsc --noEmit` — report any errors
-4. **Agent config review**: read all `.claude/agents/*.md` files — verify tools lists are minimal, check for contradictions with CLAUDE.md, identify any lessons from `.claude/shared/lessons.md` not yet incorporated
-5. **Plugin registry review**: read `.claude/shared/plugin-registry.md` — flag tools last audited > 90 days ago, or with stale last commit dates
-6. **Permission audit**: read `.claude/settings.json` and `.claude/settings.local.json` — flag overly broad or stale permissions
-
-After auditing, update the Last Audited date in the plugin registry.
-
-Report back to Alfred: findings by category, severity (critical/high/medium/low), recommended actions, and anything requiring Alfred's explicit approval before proceeding."
-
-After tech-curator reports, Alfred presents to the user: organized by severity, with clear next steps and any decisions the user needs to make.
+Alfred presents findings organized by severity with clear next steps.

@@ -1,29 +1,20 @@
 # Team Lessons Learned
 
-When any agent makes a mistake or identifies a recurring pattern, it's logged here. Aria reviews this file during maintenance runs and updates agent prompts when patterns emerge. Alfred is notified of all critical lessons.
-
----
+Mistakes and patterns logged here. tech-curator reviews and updates agent prompts when patterns emerge.
 
 ## Format
-
 ```
-### [Date] — [Severity: Critical/High/Medium/Low]
-**Agent:** [Who made the mistake or identified the pattern]
-**What happened:** [Specific description]
-**Root cause:** [Why it happened]
+### [Date] — [Severity]
+**Agent:** [Who]
+**What happened:** [Description]
+**Root cause:** [Why]
 **Fix applied:** [What was corrected]
-**Prevention:** [What will stop this happening again]
-**Prompt update needed:** [Yes/No — if Yes, Aria will update the agent file]
+**Prevention:** [What stops this recurring]
+**Prompt update needed:** [Yes/No]
 ```
-
----
 
 ## Active Lessons
-
-_No lessons logged yet. This file grows as the team works and learns._
-
----
+_No entries yet._
 
 ## Incorporated Lessons
-
-_Lessons that have already been incorporated into agent prompts are moved here for reference._
+_Lessons already incorporated into agent prompts are archived here._
