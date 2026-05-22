@@ -41,7 +41,7 @@ export function CommandPalette({ open, onOpenChange, people = [], lang = "en" }:
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      className="max-w-full sm:max-w-[640px] mx-0 sm:mx-auto rounded-none sm:rounded-xl top-0 sm:top-[20%] translate-y-0 sm:-translate-y-1/2"
+      contentClassName="max-w-[calc(100vw-2rem)] sm:max-w-[640px]"
     >
       <CommandInput placeholder="Search people, transcripts, actions…" />
       <CommandList>
