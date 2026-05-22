@@ -186,7 +186,7 @@ export function PersonStepper({
                       </label>
                       <input
                         className={INPUT_CLS}
-                        placeholder="e.g. Samuel"
+                        placeholder="e.g. Esmak"
                         value={fields.given_en}
                         onChange={(e) => setFields((f) => ({ ...f, given_en: e.target.value }))}
                       />
@@ -198,7 +198,7 @@ export function PersonStepper({
                       </label>
                       <input
                         className={INPUT_CLS}
-                        placeholder="e.g. Abdullah"
+                        placeholder="e.g. Ahlak"
                         value={fields.family_name_en}
                         onChange={(e) => setFields((f) => ({ ...f, family_name_en: e.target.value }))}
                       />
@@ -239,9 +239,8 @@ export function PersonStepper({
                           Birth date
                         </label>
                         <input
-                          type="text"
+                          type="date"
                           className={INPUT_CLS}
-                          placeholder="YYYY or YYYY-MM-DD"
                           value={fields.birth_date}
                           onChange={(e) => setFields((f) => ({ ...f, birth_date: e.target.value }))}
                         />
@@ -251,9 +250,8 @@ export function PersonStepper({
                           Death date
                         </label>
                         <input
-                          type="text"
+                          type="date"
                           className={INPUT_CLS}
-                          placeholder="YYYY or YYYY-MM-DD"
                           value={fields.death_date}
                           onChange={(e) => setFields((f) => ({ ...f, death_date: e.target.value }))}
                         />

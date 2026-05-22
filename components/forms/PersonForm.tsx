@@ -92,7 +92,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
             id="given_en"
             name="given_en"
             defaultValue={initialData?.given_en ?? ""}
-            placeholder="e.g. Marcelle"
+            placeholder="e.g. Esmak"
             className={INPUT_CLS}
           />
           {fieldError("given_en") && (
@@ -103,7 +103,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
 
       <div>
         <label htmlFor="family_name_en" className="block text-xs text-gray-500 mb-1">Family name (EN)</label>
-        <input id="family_name_en" name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} className={INPUT_CLS} />
+        <input id="family_name_en" name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} placeholder="e.g. Ahlak" className={INPUT_CLS} />
       </div>
 
       <div>
@@ -191,22 +191,20 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
         <div>
           <label htmlFor="birth_date" className="block text-xs text-gray-500 mb-1">Birth date</label>
           <input
-            type="text"
+            type="date"
             id="birth_date"
             name="birth_date"
             defaultValue={initialData?.birth_date ?? ""}
-            placeholder="YYYY-MM-DD"
             className={INPUT_CLS}
           />
         </div>
         <div>
           <label htmlFor="death_date" className="block text-xs text-gray-500 mb-1">Death date</label>
           <input
-            type="text"
+            type="date"
             id="death_date"
             name="death_date"
             defaultValue={initialData?.death_date ?? ""}
-            placeholder="YYYY-MM-DD"
             className={INPUT_CLS}
           />
         </div>

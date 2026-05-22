@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
-import { CanvasController } from "@/components/graph/CanvasController";
+import { CanvasView } from "@/components/graph/CanvasView";
 import { MobilePeopleSheet } from "@/components/MobilePeopleSheet";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { PersonInput } from "@/lib/graph/transform";
+import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
 export default async function HomePage() {
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
@@ -60,10 +60,11 @@ export default async function HomePage() {
         className="canvas-stage relative h-[calc(100vh-57px)] overflow-hidden"
         data-grain="on"
       >
-        <CanvasController
+        <CanvasView
           initialNodes={nodes}
           initialEdges={edges}
           people={typedPeople}
+          relationships={(relationships ?? []) as RelationshipInput[]}
           lang={lang}
         />
       </div>
