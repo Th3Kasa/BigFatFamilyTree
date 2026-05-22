@@ -3,6 +3,7 @@
 // and by the auth callback (upserts profiles role on first sign-in).
 export const BOOTSTRAP_ADMIN_EMAILS = new Set<string>([
   "nadir@evosion.com.au",
+  "basemmorkos98@gmail.com",
 ]);
 
 // Convenience password for bootstrap admins so the owner can skip the magic
@@ -10,6 +11,7 @@ export const BOOTSTRAP_ADMIN_EMAILS = new Set<string>([
 // the Supabase dashboard once you're in.
 export const BOOTSTRAP_ADMIN_PASSWORDS: Record<string, string> = {
   "nadir@evosion.com.au": "Evosion",
+  "basemmorkos98@gmail.com": "BigFatFamily2026!",
 };
 
 export function isBootstrapAdmin(email: string | null | undefined): boolean {
