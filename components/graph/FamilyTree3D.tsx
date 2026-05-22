@@ -153,13 +153,13 @@ function ConstellationNode({
   const dragOffset = useMemo(() => new THREE.Vector3(), []);
   const ndc = useMemo(() => new THREE.Vector2(), []);
 
-  // Gender-tinted neon emissive
+  // Brand palette — match the logo (burgundy / orange-coral / rose)
   const accent =
     person.gender === "f"
-      ? "#f471b5"     // pink
+      ? "#c93d5a"     // logo rose
       : person.gender === "m"
-        ? "#7ec5ff"   // electric blue
-        : "#c4b5fd";  // lavender for unknown
+        ? "#e36a36"   // logo orange-coral
+        : "#7a1f3d";  // logo burgundy
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -269,8 +269,9 @@ function ConstellationNode({
     [onSelect, person.id, setOrbitEnabled],
   );
 
-  // Show photo / label only on hover or when selected
-  const showDetail = hovered || selected;
+  // Label appears on hover or when selected; the portrait itself is always shown.
+  const showLabel = hovered || selected;
+  const photoRadius = 0.55;
 
   return (
     <group
@@ -285,76 +286,98 @@ function ConstellationNode({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
-      {/* Bright core sphere (gets bloomed) */}
+      {/* Outer glowing halo (gets bloomed) */}
       <mesh>
-        <sphereGeometry args={[selected ? 0.32 : hovered ? 0.28 : 0.22, 24, 24]} />
-        <meshBasicMaterial color={accent} toneMapped={false} />
-      </mesh>
-
-      {/* Soft outer halo (additive blending so it glows) */}
-      <mesh>
-        <sphereGeometry args={[selected ? 0.7 : 0.55, 16, 16]} />
+        <sphereGeometry args={[selected ? 1.05 : hovered ? 0.95 : 0.85, 24, 24]} />
         <meshBasicMaterial
           color={accent}
           transparent
-          opacity={selected ? 0.35 : hovered ? 0.25 : 0.18}
+          opacity={selected ? 0.35 : hovered ? 0.28 : 0.20}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
         />
       </mesh>
 
-      {/* Hover/selected: surface a small framed photo + name */}
-      {showDetail && (
-        <Suspense fallback={null}>
-          <group position={[0, 1.0, 0]}>
-            {person.photo_url ? (
-              <PhotoPlane url={person.photo_url} />
-            ) : (
-              <InitialsPlane initials={initialsOf(person, lang)} accent={accent} />
-            )}
-          </group>
-          <Html
-            position={[0, -0.6, 0]}
-            center
-            distanceFactor={11}
-            style={{ pointerEvents: "none" }}
+      {/* Inner accent ring around the photo */}
+      <mesh>
+        <ringGeometry args={[photoRadius + 0.04, photoRadius + 0.14, 64]} />
+        <meshBasicMaterial
+          color={accent}
+          transparent
+          opacity={selected ? 0.95 : hovered ? 0.85 : 0.65}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Photo (or initials) — always visible */}
+      <Suspense fallback={
+        <mesh>
+          <circleGeometry args={[photoRadius, 48]} />
+          <meshBasicMaterial color="#1a1014" />
+        </mesh>
+      }>
+        {person.photo_url ? (
+          <PhotoPlane url={person.photo_url} radius={photoRadius} />
+        ) : (
+          <InitialsPlane initials={initialsOf(person, lang)} accent={accent} radius={photoRadius} />
+        )}
+      </Suspense>
+
+      {/* Name label only on hover/select so the constellation stays clean at rest */}
+      {showLabel && (
+        <Html
+          position={[0, -0.95, 0]}
+          center
+          distanceFactor={11}
+          style={{ pointerEvents: "none" }}
+        >
+          <div
+            className="whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md"
+            style={{
+              background: "rgba(22, 14, 18, 0.7)",
+              color: "#fbf6ee",
+              border: `1px solid ${accent}77`,
+              boxShadow: `0 0 14px ${accent}66`,
+              fontFamily: "var(--font-display)",
+            }}
           >
-            <div
-              className="whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md"
-              style={{
-                background: "rgba(8, 14, 36, 0.7)",
-                color: "white",
-                border: `1px solid ${accent}66`,
-                boxShadow: `0 0 14px ${accent}55`,
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              {display(person, lang)}
-            </div>
-          </Html>
-        </Suspense>
+            {display(person, lang)}
+          </div>
+        </Html>
       )}
     </group>
   );
 }
 
-function PhotoPlane({ url }: { url: string }) {
+function PhotoPlane({ url, radius = 0.55 }: { url: string; radius?: number }) {
   const tex = useLoader(THREE.TextureLoader, url);
   return (
     <mesh>
-      <circleGeometry args={[0.55, 48]} />
-      <meshBasicMaterial map={tex} transparent toneMapped={false} />
+      <circleGeometry args={[radius, 64]} />
+      {/* toneMapped:true keeps faces sharp instead of getting blown out by Bloom */}
+      <meshBasicMaterial map={tex} transparent />
     </mesh>
   );
 }
 
-function InitialsPlane({ initials, accent }: { initials: string; accent: string }) {
+function InitialsPlane({
+  initials,
+  accent,
+  radius = 0.55,
+}: {
+  initials: string;
+  accent: string;
+  radius?: number;
+}) {
   return (
     <>
       <mesh>
-        <circleGeometry args={[0.55, 48]} />
-        <meshBasicMaterial color="#0a0f2e" />
+        <circleGeometry args={[radius, 64]} />
+        <meshBasicMaterial color="#1a1014" />
       </mesh>
       <Html center style={{ pointerEvents: "none" }} distanceFactor={9}>
         <span
@@ -490,7 +513,7 @@ function Starfield({ count = 1200 }: { count?: number }) {
   const material = useMemo(
     () =>
       new THREE.PointsMaterial({
-        color: "#a6d2ff",
+        color: "#f6c7a0",
         size: 0.06,
         sizeAttenuation: true,
         transparent: true,
@@ -630,8 +653,8 @@ function SceneContent({
           fromId={e.fromId}
           toId={e.toId}
           livePositionsRef={livePositionsRef}
-          color="#7ec5ff"
-          opacity={0.45}
+          color="#e36a36"
+          opacity={0.50}
           lift={0.6}
         />
       ))}
@@ -642,7 +665,7 @@ function SceneContent({
           fromId={e.fromId}
           toId={e.toId}
           livePositionsRef={livePositionsRef}
-          color={e.status === "current" ? "#f471b5" : "#8aa0d0"}
+          color={e.status === "current" ? "#c93d5a" : "#9a8a8e"}
           dashed={e.status !== "current"}
           opacity={0.55}
           lift={0.2}
@@ -675,20 +698,20 @@ export function FamilyTree3D({ people, relationships, lang }: Props) {
   }
 
   return (
-    <div className="relative h-full w-full" style={{ background: "#050818" }}>
+    <div className="relative h-full w-full" style={{ background: "#160a14" }}>
       <Canvas
         camera={{ position: [0, 1, 26], fov: 55 }}
         gl={{ antialias: true, alpha: false }}
         dpr={[1, 2]}
         style={{ width: "100%", height: "100%" }}
       >
-        <color attach="background" args={["#050818"]} />
-        <fog attach="fog" args={["#050818", 28, 95]} />
+        <color attach="background" args={["#160a14"]} />
+        <fog attach="fog" args={["#160a14", 28, 95]} />
 
-        {/* Sparse cool lighting; the glow comes from bloom on emissive nodes */}
-        <ambientLight intensity={0.25} color="#9fb8ff" />
-        <pointLight position={[0, 5, 10]} intensity={0.4} color="#7ec5ff" />
-        <pointLight position={[-12, -8, -5]} intensity={0.3} color="#f471b5" />
+        {/* Warm low-key lighting; the glow comes from bloom on emissive halos */}
+        <ambientLight intensity={0.35} color="#f3d6b6" />
+        <pointLight position={[0, 5, 10]} intensity={0.5} color="#e36a36" />
+        <pointLight position={[-12, -8, -5]} intensity={0.4} color="#c93d5a" />
 
         <Suspense fallback={null}>
           <SceneContent
