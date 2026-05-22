@@ -16,20 +16,18 @@ export default async function NewTranscriptPage() {
     .order("given_en");
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8">
+    <main className="max-w-2xl mx-auto px-4 py-6 pb-24 md:pb-8">
       <Link
         href="/transcripts"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ChevronLeft className="h-4 w-4" />
-        {lang === "ar" ? "العودة" : "Back"}
+        Back
       </Link>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">
-            {lang === "ar" ? "رفع تسجيل صوتي" : "Upload Transcript"}
-          </CardTitle>
+          <CardTitle className="text-xl">Upload Transcript</CardTitle>
         </CardHeader>
         <CardContent>
           <TranscriptForm action={createTranscript} people={people ?? []} lang={lang} />

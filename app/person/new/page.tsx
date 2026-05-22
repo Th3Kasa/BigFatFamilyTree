@@ -40,21 +40,21 @@ export default async function NewPersonPage({ searchParams }: Props) {
   }
 
   const pageTitle = spouseId
-    ? (lang === "ar" ? `إضافة زوج/زوجة لـ ${pickName(spouseRow) ?? ""}` : `Add spouse of ${pickName(spouseRow) ?? ""}`)
-    : (lang === "ar" ? "إضافة شخص" : "Add person");
+    ? `Add spouse of ${pickName(spouseRow) ?? ""}`
+    : "Add person";
 
   return (
-    <main className="min-h-screen bg-[var(--background)] flex flex-col items-center px-4 py-10">
+    <main className="min-h-screen bg-[var(--background)] flex flex-col items-center px-4 py-8 pb-24 md:pb-10">
       <div className="w-full max-w-lg">
         <Link
           href="/"
           className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-8 transition-colors"
         >
-          <span aria-hidden>{lang === "ar" ? "→" : "←"}</span>
-          {lang === "ar" ? "العودة" : "Back"}
+          <span aria-hidden>←</span>
+          Back
         </Link>
 
-        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-8 font-[Fraunces,serif]">
+        <h1 className="text-xl sm:text-2xl font-bold text-[var(--foreground)] mb-8 font-[Fraunces,serif]">
           {pageTitle}
         </h1>
 

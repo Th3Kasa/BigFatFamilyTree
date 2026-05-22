@@ -12,7 +12,7 @@ type PeopleLookup = Pick<PersonRow, "id" | "given_en" | "given_ar">[];
 type Props = {
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   people: PeopleLookup;
-  lang: "ar" | "en";
+  lang?: "ar" | "en";
 };
 
 function SubmitButton() {
@@ -33,7 +33,7 @@ export function TranscriptForm({ action, people, lang }: Props) {
   const [audioPath, setAudioPath] = useState<string | null>(null);
 
   const personLabel = (p: PeopleLookup[number]) =>
-    (lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar) ?? "?";
+    (p.given_en ?? p.given_ar) ?? "?";
 
   return (
     <form action={formAction} className="space-y-6">

@@ -12,18 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-/* ─── language detection ─────────────────────────────────────── */
-function detectLang(): "ar" | "en" {
-  if (typeof navigator === "undefined") return "en";
-  const lang = navigator.language || "en";
-  return lang.startsWith("ar") ? "ar" : "en";
-}
-
-const taglines = {
-  ar: "حافظ على ذاكرة عائلتك للأجيال القادمة",
-  en: "Preserve your family's memory for generations to come",
-};
-
 /* ─── floating-label input ───────────────────────────────────── */
 function FloatingInput({
   id,
@@ -103,9 +91,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [lang] = useState<"ar" | "en">(() =>
-    typeof window !== "undefined" ? detectLang() : "en"
-  );
 
   const resendRemaining = useResendCountdown(status === "sent");
   const canResend = resendRemaining === 0;
@@ -201,10 +186,9 @@ export default function LoginPage() {
 
           <p
             className="max-w-sm text-center text-[15px] leading-relaxed text-[oklch(0.93_0.03_30)]"
-            dir="auto"
             style={{ fontFamily: "var(--font-display)", fontOpticalSizing: "auto" }}
           >
-            {taglines[lang]}
+            Preserve your family&apos;s memory for generations to come
           </p>
         </motion.div>
 
@@ -229,8 +213,8 @@ export default function LoginPage() {
           >
             Big Fat Family
           </p>
-          <p className="max-w-[22ch] text-center text-xs text-[oklch(0.92_0.03_30)]" dir="auto">
-            {taglines[lang]}
+          <p className="max-w-[22ch] text-center text-xs text-[oklch(0.92_0.03_30)]">
+            Preserve your family&apos;s memory for generations to come
           </p>
         </motion.div>
 
@@ -248,7 +232,7 @@ export default function LoginPage() {
       </div>
 
       {/* ── form panel ── */}
-      <div className="flex flex-1 items-center justify-center bg-[var(--background)] px-6 py-12">
+      <div className="flex flex-1 items-center justify-center bg-[var(--background)] px-4 py-8 sm:px-6 sm:py-12">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

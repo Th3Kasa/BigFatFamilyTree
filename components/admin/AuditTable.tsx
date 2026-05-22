@@ -105,10 +105,10 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
                 <th className="text-start px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Table
                 </th>
-                <th className="text-start px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <th className="hidden sm:table-cell text-start px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Row ID
                 </th>
-                <th className="text-start px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <th className="hidden sm:table-cell text-start px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Actor
                 </th>
               </tr>
@@ -137,10 +137,10 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
                     </span>
                   </td>
                   <td className="px-4 py-2 font-mono text-foreground">{r.table_name}</td>
-                  <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                  <td className="hidden sm:table-cell px-4 py-2 font-mono text-xs text-muted-foreground">
                     {r.row_id?.slice(0, 8) ?? "—"}…
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                  <td className="hidden sm:table-cell px-4 py-2 font-mono text-xs text-muted-foreground">
                     {r.actor_id?.slice(0, 8) ?? "—"}…
                   </td>
                 </tr>
@@ -159,7 +159,7 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {page > 1 && (
             <a
               href={`/admin/audit?page=${page - 1}`}
@@ -179,7 +179,7 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
               Next →
             </a>
           )}
-          <span className="ms-auto text-xs text-muted-foreground">{count} total entries</span>
+          <span className="sm:ms-auto text-xs text-muted-foreground">{count} total entries</span>
         </div>
       )}
 

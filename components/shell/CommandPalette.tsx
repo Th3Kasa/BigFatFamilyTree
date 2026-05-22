@@ -26,7 +26,7 @@ interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   people?: Person[];
-  lang?: "ar" | "en";
+  lang?: "ar" | "en"; // kept for API compat; UI is English-only
 }
 
 export function CommandPalette({ open, onOpenChange, people = [], lang = "en" }: CommandPaletteProps) {
@@ -38,7 +38,11 @@ export function CommandPalette({ open, onOpenChange, people = [], lang = "en" }:
   };
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      className="max-w-full sm:max-w-[640px] mx-0 sm:mx-auto rounded-none sm:rounded-xl top-0 sm:top-[20%] translate-y-0 sm:-translate-y-1/2"
+    >
       <CommandInput placeholder="Search people, transcripts, actions…" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -46,8 +50,8 @@ export function CommandPalette({ open, onOpenChange, people = [], lang = "en" }:
         {people.length > 0 && (
           <CommandGroup heading="People">
             {people.slice(0, 8).map((p) => {
-              const family = lang === "ar" ? p.family_name_ar : p.family_name_en;
-              const given = lang === "ar" ? (p.given_ar || p.given_en) : (p.given_en || p.given_ar);
+              const family = p.family_name_en ?? p.family_name_ar;
+              const given = p.given_en ?? p.given_ar;
               return (
                 <CommandItem
                   key={p.id}

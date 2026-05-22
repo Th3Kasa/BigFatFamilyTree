@@ -58,7 +58,7 @@ export default async function TranscriptsPage({ searchParams }: Props) {
   });
 
   return (
-    <main className="h-[calc(100vh-4rem)] overflow-hidden">
+    <main className="h-[calc(100vh-3.5rem-4rem)] md:h-[calc(100vh-3.5rem)] overflow-hidden">
       <TranscriptsSplitView
         transcripts={enriched}
         lang={lang}
