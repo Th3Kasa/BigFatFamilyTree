@@ -252,6 +252,19 @@ body {
   background-color: oklch(0.34 0.13 18 / 0.40);
 }
 
+/* ── React Flow handles — discoverable drag targets ── */
+.react-flow__handle {
+  cursor: crosshair !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+.react-flow__handle:hover {
+  transform: scale(1.4) !important;
+  box-shadow: 0 0 0 3px oklch(0.62 0.20 18 / 0.35), 0 0 8px oklch(0.62 0.20 18 / 0.50) !important;
+}
+.react-flow__handle-connecting {
+  transform: scale(1.5) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
