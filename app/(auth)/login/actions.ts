@@ -104,3 +104,49 @@ export async function ensureBootstrapUser(
 
   return { ok: true, details: updateError ?? undefined };
 }
+
+// ── signInBootstrapAdmin ──────────────────────────────────────────────────────
+// Workaround for Supabase projects with email/password login disabled.
+//
+// 1. Verify the email is a known bootstrap admin and the password matches the
+//    one baked into BOOTSTRAP_ADMIN_PASSWORDS.
+// 2. Ensure the user exists in auth.users (idempotent).
+// 3. Use the admin API to mint a magic-link token bound to that email and
+//    return its `token_hash`.
+// 4. The client then exchanges that hash for a session via
+//    supabase.auth.verifyOtp({ token_hash, type: "magiclink" }) — no email
+//    round-trip and no dependency on the password provider being enabled.
+export async function signInBootstrapAdmin(
+  rawEmail: string,
+  password: string,
+): Promise<
+  | { ok: true; tokenHash: string }
+  | { ok: false; error: string }
+> {
+  const email = (rawEmail ?? "").toLowerCase().trim();
+  if (!email || !BOOTSTRAP_ADMIN_EMAILS.has(email)) {
+    return { ok: false, error: "Email not in admin allowlist" };
+  }
+  const expected = bootstrapPasswordFor(email);
+  if (!expected || password !== expected) {
+    return { ok: false, error: "Invalid password" };
+  }
+
+  // Make sure the user + admin role + password are in place
+  await ensureBootstrapUser(email);
+
+  const svc = createServiceClient();
+  const { data, error } = await svc.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  });
+
+  if (error || !data?.properties?.hashed_token) {
+    return {
+      ok: false,
+      error: `Could not mint session token: ${error?.message ?? "no token returned"}`,
+    };
+  }
+
+  return { ok: true, tokenHash: data.properties.hashed_token };
+}

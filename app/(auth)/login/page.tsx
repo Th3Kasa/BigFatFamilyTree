@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
-import { ensureBootstrapUser } from "./actions";
+import { ensureBootstrapUser, signInBootstrapAdmin } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -137,18 +137,42 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    const bootstrapResult = await ensureBootstrapUser(parsed.data.email);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password });
+
+    // Path 1: bootstrap-admin login (works even if Supabase's email/password
+    // provider is disabled — we verify the password server-side and exchange
+    // a service-role-minted magic-link token for a session).
+    const adminAttempt = await signInBootstrapAdmin(parsed.data.email, password);
+    if (adminAttempt.ok) {
+      const { error: verifyErr } = await supabase.auth.verifyOtp({
+        token_hash: adminAttempt.tokenHash,
+        type: "magiclink",
+      });
+      setLoading(false);
+      if (verifyErr) {
+        setErrorMsg(`Verify failed: ${verifyErr.message}`);
+        return;
+      }
+      window.location.href = "/";
+      return;
+    }
+
+    // Path 2: regular Supabase password sign-in (works when the provider is
+    // enabled in the project settings).
+    const bootstrapResult = await ensureBootstrapUser(parsed.data.email);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: parsed.data.email,
+      password,
+    });
     setLoading(false);
     if (error) {
-      // Always show bootstrap state so we know whether the bootstrap action ran
       const tag = bootstrapResult.ok
         ? bootstrapResult.details
           ? `[bootstrap ok: ${bootstrapResult.details}]`
           : "[bootstrap ok]"
         : `[bootstrap failed: ${bootstrapResult.reason}${bootstrapResult.details ? ` — ${bootstrapResult.details}` : ""}]`;
-      setErrorMsg(`${error.message} ${tag}`);
+      const adminTag = adminAttempt.ok === false ? ` [admin: ${adminAttempt.error}]` : "";
+      setErrorMsg(`${error.message} ${tag}${adminTag}`);
       return;
     }
     window.location.href = "/";
