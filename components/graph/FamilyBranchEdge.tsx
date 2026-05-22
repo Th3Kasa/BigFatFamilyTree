@@ -12,10 +12,19 @@ type FamilyBranchData = {
   childIds: string[];
 };
 
-export function FamilyBranchEdge({ data }: EdgeProps) {
+export function FamilyBranchEdge({ data, sourceX, sourceY }: EdgeProps) {
   const nodes = useNodes();
   const edges = useEdges();
   const { fatherId, motherId, childIds } = (data ?? {}) as FamilyBranchData;
+
+  // sourceX/sourceY from EdgeProps are updated every drag frame by React Flow
+  // (they represent the bottom handle of the source parent).
+  // Derive source parent's card-centre X and marriage-line Y from them directly
+  // so the primary parent's position is always lag-free.
+  // sourceX = node centre X (bottom handle is horizontally centred)
+  // sourceY = node bottom Y  →  midY = sourceY - MID_Y
+  const srcCentreX = sourceX;
+  const srcMidY    = sourceY - NODE_HEIGHT / 2;
 
   const fatherNode = fatherId ? nodes.find((n) => n.id === fatherId) : null;
   const motherNode = motherId ? nodes.find((n) => n.id === motherId) : null;
@@ -49,33 +58,30 @@ export function FamilyBranchEdge({ data }: EdgeProps) {
   const MID_Y = NODE_HEIGHT / 2;
 
   if (fatherNode && motherNode) {
-    // Both parents explicit — drop from the midpoint of the marriage line
-    startX = (fatherNode.position.x + NODE_WIDTH / 2 + motherNode.position.x + NODE_WIDTH / 2) / 2;
-    startY = Math.max(
-      fatherNode.position.y + MID_Y,
-      motherNode.position.y + MID_Y,
-    );
+    // Both parents explicit — midpoint of their marriage line.
+    // Use srcCentreX/srcMidY for the source (father) for lag-free drag;
+    // fall back to useNodes() for the other parent.
+    startX = (srcCentreX + motherNode.position.x + NODE_WIDTH / 2) / 2;
+    startY = Math.max(srcMidY, motherNode.position.y + MID_Y);
   } else if (fatherNode) {
     // Only father in the data — look for a spouse on canvas
     const spouse = findSpouseNode(fatherId!);
     if (spouse) {
-      startX = (fatherNode.position.x + NODE_WIDTH / 2 + spouse.position.x + NODE_WIDTH / 2) / 2;
-      startY = Math.max(fatherNode.position.y + MID_Y, spouse.position.y + MID_Y);
+      startX = (srcCentreX + spouse.position.x + NODE_WIDTH / 2) / 2;
+      startY = Math.max(srcMidY, spouse.position.y + MID_Y);
     } else {
-      // No spouse on canvas — drop from the father's bottom handle
-      startX = fatherNode.position.x + NODE_WIDTH / 2;
-      startY = fatherNode.position.y + NODE_HEIGHT;
+      startX = srcCentreX;
+      startY = sourceY; // bottom handle, no spouse
     }
   } else if (motherNode) {
     // Only mother in the data — look for a spouse on canvas
     const spouse = findSpouseNode(motherId!);
     if (spouse) {
-      startX = (motherNode.position.x + NODE_WIDTH / 2 + spouse.position.x + NODE_WIDTH / 2) / 2;
-      startY = Math.max(motherNode.position.y + MID_Y, spouse.position.y + MID_Y);
+      startX = (srcCentreX + spouse.position.x + NODE_WIDTH / 2) / 2;
+      startY = Math.max(srcMidY, spouse.position.y + MID_Y);
     } else {
-      // No spouse on canvas — drop from the mother's bottom handle
-      startX = motherNode.position.x + NODE_WIDTH / 2;
-      startY = motherNode.position.y + NODE_HEIGHT;
+      startX = srcCentreX;
+      startY = sourceY; // bottom handle, no spouse
     }
   } else {
     return null;

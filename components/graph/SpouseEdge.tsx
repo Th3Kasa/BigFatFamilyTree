@@ -1,9 +1,6 @@
 "use client";
 
-import { useNodes, type EdgeProps } from "@xyflow/react";
-
-const NODE_WIDTH = 220;
-const MID_Y = 120; // NODE_HEIGHT / 2 — same constant as FamilyBranchEdge
+import type { EdgeProps } from "@xyflow/react";
 
 type SpouseData = {
   edgeKind: "spouse";
@@ -11,33 +8,28 @@ type SpouseData = {
   status?: "current" | "divorced" | "widowed";
 };
 
-// Renders the marriage line as a guaranteed-horizontal segment at the LOWER
-// of the two spouses' mid-heights, with vertical stubs connecting each spouse
-// to that horizontal line when they sit at different heights.
-// This Y formula exactly matches FamilyBranchEdge's startY calculation so the
-// T-junction bracket always hangs from the same line visually.
-export function SpouseEdge({ source, target, selected, data }: EdgeProps) {
-  const nodes = useNodes();
-  const srcNode = nodes.find((n) => n.id === source);
-  const tgtNode = nodes.find((n) => n.id === target);
-  if (!srcNode || !tgtNode) return null;
-
+// Renders the marriage line as a guaranteed-horizontal segment.
+// Uses sourceX/Y and targetX/Y from EdgeProps — React Flow keeps these
+// in sync with every drag frame, eliminating the "gap during drag" bug
+// that occurs when reading from useNodes() (which lags behind).
+//
+// The marriage bar sits at Math.max(sourceY, targetY) so it is always
+// horizontal even when spouses are positioned at different heights.
+// FamilyBranchEdge uses the same Math.max formula for its startY, so the
+// T-junction bracket always hangs from exactly this line.
+export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data }: EdgeProps) {
   const { status = "current" } = (data ?? {}) as SpouseData;
 
-  // Right-handle of source (left spouse), left-handle of target (right spouse)
-  const srcRight = srcNode.position.x + NODE_WIDTH;
-  const srcMidY  = srcNode.position.y + MID_Y;
-  const tgtLeft  = tgtNode.position.x;
-  const tgtMidY  = tgtNode.position.y + MID_Y;
-
-  // Marriage bar is always at the lower mid-height.
-  // FamilyBranchEdge uses the same Math.max so the T-junction aligns perfectly.
-  const lineY = Math.max(srcMidY, tgtMidY);
+  // Horizontal marriage bar at the LOWER of the two handle Y coordinates
+  const lineY = Math.max(sourceY, targetY);
 
   const parts: string[] = [];
-  if (srcMidY < lineY) parts.push(`M ${srcRight} ${srcMidY} L ${srcRight} ${lineY}`);
-  if (tgtMidY < lineY) parts.push(`M ${tgtLeft} ${tgtMidY} L ${tgtLeft} ${lineY}`);
-  parts.push(`M ${srcRight} ${lineY} L ${tgtLeft} ${lineY}`);
+  // Vertical stub from source handle down to lineY (only when source is higher)
+  if (sourceY < lineY) parts.push(`M ${sourceX} ${sourceY} L ${sourceX} ${lineY}`);
+  // Vertical stub from target handle down to lineY (only when target is higher)
+  if (targetY < lineY) parts.push(`M ${targetX} ${targetY} L ${targetX} ${lineY}`);
+  // Horizontal marriage bar
+  parts.push(`M ${sourceX} ${lineY} L ${targetX} ${lineY}`);
 
   const d = parts.join(" ");
 
@@ -62,7 +54,7 @@ export function SpouseEdge({ source, target, selected, data }: EdgeProps) {
           strokeDasharray: strokeDash,
         }}
       />
-      {/* Wider invisible path so the thin line is easy to click */}
+      {/* Wider invisible path for easier clicking on a thin line */}
       <path
         d={d}
         style={{ stroke: "transparent", strokeWidth: 14, fill: "none", cursor: "pointer" }}

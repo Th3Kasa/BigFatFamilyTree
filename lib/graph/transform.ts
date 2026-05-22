@@ -244,21 +244,91 @@ export function buildGraphElements(
 
 export function autoLayoutPositions(
   people: PersonInput[],
+  relationships: RelationshipInput[] = [],
 ): Map<string, { x: number; y: number }> {
   const idSet = new Set(people.map((p) => p.id));
+
+  // ── 1. Build parent-pair groups (for T-junction couples) ─────────────────
+  // Key: sorted "fid|mid" so the same couple is always one entry.
+  const pairGroups = new Map<string, { fid: string; mid: string; childIds: string[] }>();
+  for (const p of people) {
+    const fid = p.father_id && idSet.has(p.father_id) ? p.father_id : null;
+    const mid = p.mother_id && idSet.has(p.mother_id) ? p.mother_id : null;
+    if (!fid || !mid) continue;
+    const key = `${fid}|${mid}`;
+    if (!pairGroups.has(key)) pairGroups.set(key, { fid, mid, childIds: [] });
+    pairGroups.get(key)!.childIds.push(p.id);
+  }
+
+  // ── 2. Build Dagre graph with virtual couple nodes ────────────────────────
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "TB", nodesep: 50, ranksep: 90, marginx: 20, marginy: 20 });
+  g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 90, marginx: 40, marginy: 40 });
+
+  // Real person nodes
   people.forEach((p) => g.setNode(p.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
-  for (const p of people) {
-    if (p.father_id && idSet.has(p.father_id)) g.setEdge(p.father_id, p.id);
-    if (p.mother_id && idSet.has(p.mother_id)) g.setEdge(p.mother_id, p.id);
+
+  // Virtual couple node (1×1) per two-parent family
+  for (const key of pairGroups.keys()) {
+    g.setNode(`__c__${key}`, { width: 1, height: 1 });
   }
+
+  // Couple edges: both parents → couple node (high weight keeps them together)
+  for (const [key, { fid, mid }] of pairGroups) {
+    g.setEdge(fid, `__c__${key}`, { weight: 2 });
+    g.setEdge(mid, `__c__${key}`, { weight: 2 });
+  }
+
+  // Couple node → each child
+  for (const [key, { childIds }] of pairGroups) {
+    for (const cid of childIds) {
+      g.setEdge(`__c__${key}`, cid);
+    }
+  }
+
+  // Single-parent children (father or mother only)
+  for (const p of people) {
+    const fid = p.father_id && idSet.has(p.father_id) ? p.father_id : null;
+    const mid = p.mother_id && idSet.has(p.mother_id) ? p.mother_id : null;
+    if (fid && mid) continue; // already handled via couple node above
+    if (fid) g.setEdge(fid, p.id);
+    else if (mid) g.setEdge(mid, p.id);
+  }
+
   dagre.layout(g);
+
+  // ── 3. Extract positions (ignore virtual couple nodes) ────────────────────
   const out = new Map<string, { x: number; y: number }>();
   people.forEach((p) => {
     const pos = g.node(p.id);
     if (pos) out.set(p.id, { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 });
   });
+
+  // ── 4. Snap spouses to the same Y level ──────────────────────────────────
+  // Two-parent families: snap to the lower of the two dagre Y values so the
+  // marriage line is always horizontal and the T-junction formula aligns.
+  for (const [, { fid, mid }] of pairGroups) {
+    const pA = out.get(fid);
+    const pB = out.get(mid);
+    if (pA && pB) {
+      const alignY = Math.max(pA.y, pB.y);
+      out.set(fid, { ...pA, y: alignY });
+      out.set(mid, { ...pB, y: alignY });
+    }
+  }
+
+  // Registered spouse pairs without shared children in this tree
+  for (const r of relationships) {
+    if (r.type !== "spouse") continue;
+    if (!idSet.has(r.person_a_id) || !idSet.has(r.person_b_id)) continue;
+    const pA = out.get(r.person_a_id);
+    const pB = out.get(r.person_b_id);
+    if (pA && pB) {
+      const alignY = Math.max(pA.y, pB.y);
+      out.set(r.person_a_id, { ...pA, y: alignY });
+      out.set(r.person_b_id, { ...pB, y: alignY });
+    }
+  }
+
   return out;
 }
