@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Loader2 } from "lucide-react";
+import { Mail, Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
 import { ensureBootstrapUser } from "./actions";
@@ -21,6 +21,7 @@ function FloatingInput({
   disabled,
   type = "email",
   autoComplete,
+  showToggle,
 }: {
   id: string;
   label: string;
@@ -29,15 +30,18 @@ function FloatingInput({
   disabled: boolean;
   type?: "email" | "password" | "text";
   autoComplete?: string;
+  showToggle?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  const [visible, setVisible] = useState(false);
   const lifted = focused || value.length > 0;
+  const inputType = type === "password" ? (visible ? "text" : "password") : type;
 
   return (
     <div className="relative">
       <input
         id={id}
-        type={type}
+        type={inputType}
         autoComplete={autoComplete ?? (type === "password" ? "current-password" : "email")}
         required
         value={value}
@@ -46,7 +50,8 @@ function FloatingInput({
         onBlur={() => setFocused(false)}
         disabled={disabled}
         className={cn(
-          "peer w-full rounded-lg border border-[var(--border)] bg-transparent px-4 pb-2 pt-5 text-sm text-[var(--foreground)] shadow-sm transition-colors",
+          "peer w-full rounded-lg border border-[var(--border)] bg-transparent pb-2 pt-5 text-sm text-[var(--foreground)] shadow-sm transition-colors",
+          showToggle ? "px-4 pr-10" : "px-4",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
           "disabled:cursor-not-allowed disabled:opacity-50"
         )}
@@ -60,6 +65,16 @@ function FloatingInput({
       >
         {label}
       </label>
+      {showToggle && type === "password" && (
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setVisible((v) => !v)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+        >
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      )}
     </div>
   );
 }
@@ -90,74 +105,100 @@ function useResendCountdown(active: boolean, seconds = 30) {
   return remaining;
 }
 
+type Screen = "signin" | "magic" | "signup" | "forgot" | "sent-magic" | "sent-signup" | "sent-reset";
+
 /* ─── main page ──────────────────────────────────────────────── */
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"password" | "magic">("password");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [screen, setScreen] = useState<Screen>("signin");
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const resendRemaining = useResendCountdown(status === "sent");
+  const resendRemaining = useResendCountdown(screen === "sent-magic");
   const canResend = resendRemaining === 0;
 
-  async function onSubmit(e: React.FormEvent) {
+  function goTo(s: Screen) {
+    setScreen(s);
+    setErrorMsg(null);
+  }
+
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
     const parsed = magicLinkSchema.safeParse({ email });
     if (!parsed.success) {
-      setStatus("error");
       setErrorMsg("Enter a valid email address.");
       return;
     }
-    setStatus("sending");
-
-    // Ensure bootstrap admins exist + their password is set on Supabase.
-    // No-op for non-bootstrap emails.
-    await ensureBootstrapUser(parsed.data.email);
-    const supabase = createClient();
-
-    if (mode === "password") {
-      if (!password) {
-        setStatus("error");
-        setErrorMsg("Enter your password.");
-        return;
-      }
-      const { error } = await supabase.auth.signInWithPassword({
-        email: parsed.data.email,
-        password,
-      });
-      if (error) {
-        setStatus("error");
-        setErrorMsg(error.message);
-        return;
-      }
-      // Signed in — go home
-      window.location.href = "/";
+    if (!password) {
+      setErrorMsg("Enter your password.");
       return;
     }
+    setLoading(true);
+    await ensureBootstrapUser(parsed.data.email);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password });
+    setLoading(false);
+    if (error) { setErrorMsg(error.message); return; }
+    window.location.href = "/";
+  }
 
-    // Magic-link fallback
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMsg(null);
+    const parsed = magicLinkSchema.safeParse({ email });
+    if (!parsed.success) { setErrorMsg("Enter a valid email address."); return; }
+    setLoading(true);
+    await ensureBootstrapUser(parsed.data.email);
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
-    if (error) {
-      setStatus("error");
-      setErrorMsg(error.message);
-      return;
-    }
-    setStatus("sent");
+    setLoading(false);
+    if (error) { setErrorMsg(error.message); return; }
+    goTo("sent-magic");
   }
 
   async function handleResend() {
     if (!canResend) return;
-    await onSubmit({ preventDefault: () => {} } as React.FormEvent);
+    await handleMagicLink({ preventDefault: () => {} } as React.FormEvent);
   }
 
-  function handleReset() {
-    setStatus("idle");
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault();
     setErrorMsg(null);
+    const parsed = magicLinkSchema.safeParse({ email });
+    if (!parsed.success) { setErrorMsg("Enter a valid email address."); return; }
+    if (password.length < 6) { setErrorMsg("Password must be at least 6 characters."); return; }
+    if (password !== confirmPassword) { setErrorMsg("Passwords do not match."); return; }
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signUp({
+      email: parsed.data.email,
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    setLoading(false);
+    if (error) { setErrorMsg(error.message); return; }
+    goTo("sent-signup");
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMsg(null);
+    const parsed = magicLinkSchema.safeParse({ email });
+    if (!parsed.success) { setErrorMsg("Enter a valid email address."); return; }
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+    });
+    setLoading(false);
+    if (error) { setErrorMsg(error.message); return; }
+    goTo("sent-reset");
   }
 
   return (
@@ -175,7 +216,6 @@ export default function LoginPage() {
         }}
         aria-hidden="false"
       >
-        {/* ambient drifting grain */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
           style={{
@@ -185,7 +225,6 @@ export default function LoginPage() {
           }}
         />
 
-        {/* desktop: full horizontal logo + tagline */}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -193,7 +232,6 @@ export default function LoginPage() {
           className="hidden flex-col items-center gap-9 px-10 md:flex"
         >
           <div className="relative">
-            {/* Soft accent halo behind the logo */}
             <div
               aria-hidden
               className="absolute inset-0 -m-6 rounded-[2rem] opacity-90 blur-2xl"
@@ -220,7 +258,6 @@ export default function LoginPage() {
           </p>
         </motion.div>
 
-        {/* mobile: emblem + tagline */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -246,7 +283,6 @@ export default function LoginPage() {
           </p>
         </motion.div>
 
-        {/* decorative arc at right edge (desktop only) */}
         <svg
           className="pointer-events-none absolute -right-px top-0 hidden h-full md:block"
           viewBox="0 0 60 800"
@@ -272,10 +308,11 @@ export default function LoginPage() {
             style={{ background: "var(--surface-2, white)" }}
           >
             <AnimatePresence mode="wait" initial={false}>
-              {status === "sent" ? (
-                /* ── success state ── */
+
+              {/* ── sent: magic link ── */}
+              {screen === "sent-magic" && (
                 <motion.div
-                  key="sent"
+                  key="sent-magic"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -293,7 +330,7 @@ export default function LoginPage() {
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3 text-center">
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      Didn't receive it? Check your spam folder.
+                      Didn&apos;t receive it? Check your spam folder.
                     </p>
                     <Button
                       type="button"
@@ -303,23 +340,88 @@ export default function LoginPage() {
                       onClick={handleResend}
                       className="w-full"
                     >
-                      {canResend
-                        ? "Resend link"
-                        : `Resend in ${resendRemaining}s`}
+                      {canResend ? "Resend link" : `Resend in ${resendRemaining}s`}
                     </Button>
                     <button
                       type="button"
-                      onClick={handleReset}
+                      onClick={() => goTo("signin")}
                       className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
                     >
-                      Use a different email
+                      Back to sign in
                     </button>
                   </CardContent>
                 </motion.div>
-              ) : (
-                /* ── form state ── */
+              )}
+
+              {/* ── sent: sign up confirm ── */}
+              {screen === "sent-signup" && (
                 <motion.div
-                  key="form"
+                  key="sent-signup"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  <CardHeader className="items-center text-center">
+                    <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
+                      <Mail className="h-7 w-7 text-[var(--primary)]" strokeWidth={1.5} />
+                    </div>
+                    <CardTitle className="text-xl">Confirm your account</CardTitle>
+                    <CardDescription className="mt-1">
+                      Check your email to confirm your account at{" "}
+                      <span className="font-medium text-[var(--foreground)]">{email}</span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3 text-center">
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Didn&apos;t receive it? Check your spam folder.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => goTo("signin")}
+                      className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
+                    >
+                      Back to sign in
+                    </button>
+                  </CardContent>
+                </motion.div>
+              )}
+
+              {/* ── sent: password reset ── */}
+              {screen === "sent-reset" && (
+                <motion.div
+                  key="sent-reset"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  <CardHeader className="items-center text-center">
+                    <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
+                      <Mail className="h-7 w-7 text-[var(--primary)]" strokeWidth={1.5} />
+                    </div>
+                    <CardTitle className="text-xl">Check your email</CardTitle>
+                    <CardDescription className="mt-1">
+                      Password reset link sent — check your inbox at{" "}
+                      <span className="font-medium text-[var(--foreground)]">{email}</span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => goTo("signin")}
+                      className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
+                    >
+                      Back to sign in
+                    </button>
+                  </CardContent>
+                </motion.div>
+              )}
+
+              {/* ── sign in (password) ── */}
+              {screen === "signin" && (
+                <motion.div
+                  key="signin"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -327,33 +429,37 @@ export default function LoginPage() {
                 >
                   <CardHeader>
                     <CardTitle className="text-xl">Sign in</CardTitle>
-                    <CardDescription>
-                      {mode === "password"
-                        ? "Enter your email and password."
-                        : "Enter your email — we'll send you a magic link."}
-                    </CardDescription>
+                    <CardDescription>Enter your email and password.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <form onSubmit={onSubmit} className="space-y-4" noValidate>
+                    <form onSubmit={handleSignIn} className="space-y-4" noValidate>
                       <FloatingInput
                         id="email"
                         label="Email address"
                         value={email}
                         onChange={setEmail}
-                        disabled={status === "sending"}
+                        disabled={loading}
+                      />
+                      <FloatingInput
+                        id="password"
+                        label="Password"
+                        type="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={setPassword}
+                        disabled={loading}
+                        showToggle
                       />
 
-                      {mode === "password" && (
-                        <FloatingInput
-                          id="password"
-                          label="Password"
-                          type="password"
-                          autoComplete="current-password"
-                          value={password}
-                          onChange={setPassword}
-                          disabled={status === "sending"}
-                        />
-                      )}
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => goTo("forgot")}
+                          className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
 
                       {errorMsg && (
                         <Alert variant="destructive" className="py-2">
@@ -361,39 +467,212 @@ export default function LoginPage() {
                         </Alert>
                       )}
 
-                      <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={status === "sending"}
-                      >
-                        {status === "sending" ? (
-                          <>
-                            <Loader2 className="animate-spin" />
-                            {mode === "password" ? "Signing in…" : "Sending…"}
-                          </>
-                        ) : mode === "password" ? (
-                          "Sign in"
-                        ) : (
-                          "Send magic link"
-                        )}
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? (
+                          <><Loader2 className="animate-spin" /> Signing in…</>
+                        ) : "Sign in"}
                       </Button>
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setMode((m) => (m === "password" ? "magic" : "password"));
-                          setErrorMsg(null);
-                        }}
+                        onClick={() => goTo("magic")}
                         className="block w-full text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
                       >
-                        {mode === "password"
-                          ? "Use a magic link instead"
-                          : "Use email + password instead"}
+                        Use a magic link instead
+                      </button>
+
+                      <p className="text-center text-xs text-[var(--muted-foreground)]">
+                        Don&apos;t have an account?{" "}
+                        <button
+                          type="button"
+                          onClick={() => goTo("signup")}
+                          className="font-medium text-[var(--foreground)] underline-offset-4 hover:underline"
+                        >
+                          Sign up
+                        </button>
+                      </p>
+                    </form>
+                  </CardContent>
+                </motion.div>
+              )}
+
+              {/* ── magic link ── */}
+              {screen === "magic" && (
+                <motion.div
+                  key="magic"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  <CardHeader>
+                    <CardTitle className="text-xl">Sign in</CardTitle>
+                    <CardDescription>Enter your email — we&apos;ll send you a magic link.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleMagicLink} className="space-y-4" noValidate>
+                      <FloatingInput
+                        id="email-magic"
+                        label="Email address"
+                        value={email}
+                        onChange={setEmail}
+                        disabled={loading}
+                      />
+
+                      {errorMsg && (
+                        <Alert variant="destructive" className="py-2">
+                          <AlertDescription>{errorMsg}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? (
+                          <><Loader2 className="animate-spin" /> Sending…</>
+                        ) : "Send magic link"}
+                      </Button>
+
+                      <button
+                        type="button"
+                        onClick={() => goTo("signin")}
+                        className="block w-full text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
+                      >
+                        Use email + password instead
+                      </button>
+
+                      <p className="text-center text-xs text-[var(--muted-foreground)]">
+                        Don&apos;t have an account?{" "}
+                        <button
+                          type="button"
+                          onClick={() => goTo("signup")}
+                          className="font-medium text-[var(--foreground)] underline-offset-4 hover:underline"
+                        >
+                          Sign up
+                        </button>
+                      </p>
+                    </form>
+                  </CardContent>
+                </motion.div>
+              )}
+
+              {/* ── sign up ── */}
+              {screen === "signup" && (
+                <motion.div
+                  key="signup"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  <CardHeader>
+                    <CardTitle className="text-xl">Create account</CardTitle>
+                    <CardDescription>Enter your details to get started.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleSignUp} className="space-y-4" noValidate>
+                      <FloatingInput
+                        id="email-signup"
+                        label="Email address"
+                        value={email}
+                        onChange={setEmail}
+                        disabled={loading}
+                      />
+                      <FloatingInput
+                        id="password-signup"
+                        label="Password"
+                        type="password"
+                        autoComplete="new-password"
+                        value={password}
+                        onChange={setPassword}
+                        disabled={loading}
+                        showToggle
+                      />
+                      <FloatingInput
+                        id="confirm-password"
+                        label="Confirm password"
+                        type="password"
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                        disabled={loading}
+                        showToggle
+                      />
+
+                      {errorMsg && (
+                        <Alert variant="destructive" className="py-2">
+                          <AlertDescription>{errorMsg}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? (
+                          <><Loader2 className="animate-spin" /> Creating account…</>
+                        ) : "Create account"}
+                      </Button>
+
+                      <p className="text-center text-xs text-[var(--muted-foreground)]">
+                        Already have an account?{" "}
+                        <button
+                          type="button"
+                          onClick={() => goTo("signin")}
+                          className="font-medium text-[var(--foreground)] underline-offset-4 hover:underline"
+                        >
+                          Sign in
+                        </button>
+                      </p>
+                    </form>
+                  </CardContent>
+                </motion.div>
+              )}
+
+              {/* ── forgot password ── */}
+              {screen === "forgot" && (
+                <motion.div
+                  key="forgot"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  <CardHeader>
+                    <CardTitle className="text-xl">Forgot password?</CardTitle>
+                    <CardDescription>
+                      Enter your email and we&apos;ll send you a reset link.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleForgotPassword} className="space-y-4" noValidate>
+                      <FloatingInput
+                        id="email-forgot"
+                        label="Email address"
+                        value={email}
+                        onChange={setEmail}
+                        disabled={loading}
+                      />
+
+                      {errorMsg && (
+                        <Alert variant="destructive" className="py-2">
+                          <AlertDescription>{errorMsg}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? (
+                          <><Loader2 className="animate-spin" /> Sending…</>
+                        ) : "Send reset link"}
+                      </Button>
+
+                      <button
+                        type="button"
+                        onClick={() => goTo("signin")}
+                        className="block w-full text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
+                      >
+                        Back to sign in
                       </button>
                     </form>
                   </CardContent>
                 </motion.div>
               )}
+
             </AnimatePresence>
           </Card>
         </motion.div>
