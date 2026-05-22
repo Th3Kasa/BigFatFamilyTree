@@ -586,28 +586,12 @@ export async function addSibling(
       .eq("id", personAId);
     if (error) return { success: false, error: error.message };
   } else {
-    // Case 4: neither has a free father slot → create a placeholder parent.
-    const { data: placeholder, error: createErr } = await supabase
-      .from("people")
-      .insert({
-        is_placeholder: true,
-        gender: "unknown",
-      })
-      .select("id")
-      .single();
-    if (createErr || !placeholder) {
-      return { success: false, error: createErr?.message ?? "Could not create placeholder parent." };
-    }
-    const phId = (placeholder as { id: string }).id;
-    const { error: linkErr } = await supabase
-      .from("people")
-      .update({ father_id: phId })
-      .in("id", [personAId, personBId]);
-    if (linkErr) return { success: false, error: linkErr.message };
-    revalidatePath("/");
-    if (a.slug) revalidatePath(`/person/${a.slug}`);
-    if (b.slug) revalidatePath(`/person/${b.slug}`);
-    return { success: true, placeholderId: phId };
+    // Neither has a free parent slot. Refuse instead of fabricating a ghost.
+    return {
+      success: false,
+      error:
+        "Add a parent for at least one of them first — once they share a parent, they'll automatically be siblings.",
+    };
   }
 
   revalidatePath("/");

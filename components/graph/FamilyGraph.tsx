@@ -9,6 +9,7 @@ import {
   type Edge,
   type Connection,
   type NodeMouseHandler,
+  type EdgeMouseHandler,
   type OnNodeDrag,
   type OnEdgesDelete,
   type OnNodesChange,
@@ -28,8 +29,10 @@ type Props = {
   onNodeDragStop?: OnNodeDrag;
   onConnect?: (c: Connection) => void;
   onNodeContextMenu?: NodeMouseHandler;
+  onEdgeContextMenu?: EdgeMouseHandler;
   onPaneContextMenu?: (e: React.MouseEvent | MouseEvent) => void;
   onNodeClick?: NodeMouseHandler;
+  onEdgeClick?: EdgeMouseHandler;
   onPaneClick?: () => void;
   onEdgesDelete?: OnEdgesDelete;
   panOnDrag?: boolean | number[];
@@ -44,8 +47,10 @@ export function FamilyGraph({
   onNodeDragStop,
   onConnect,
   onNodeContextMenu,
+  onEdgeContextMenu,
   onPaneContextMenu,
   onNodeClick,
+  onEdgeClick,
   onPaneClick,
   onEdgesDelete,
   panOnDrag = [1, 2],
@@ -65,8 +70,10 @@ export function FamilyGraph({
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
         onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onEdgesDelete={onEdgesDelete}
         panOnDrag={panOnDrag}

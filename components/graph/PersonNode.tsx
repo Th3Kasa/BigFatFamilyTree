@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { Eye, Plus, Heart } from "lucide-react";
+import { toast } from "sonner";
+import { Eye, Plus, Heart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { deletePerson } from "@/lib/actions/people";
 import type { PersonNodeData } from "@/lib/graph/transform";
 
 type PersonNodeType = Node<PersonNodeData, "person">;
@@ -46,6 +49,26 @@ const STACKED_TARGET_STYLE: React.CSSProperties = {
 export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
   const { person, spouseId, lang } = data;
   const [hovered, setHovered] = useState(false);
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  async function handleDeletePlaceholder(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ok = window.confirm(
+      lang === "ar"
+        ? "حذف هذا الوالد المؤقت؟ سيتم فصل أطفاله."
+        : "Remove this placeholder parent? Its children will be detached.",
+    );
+    if (!ok) return;
+    const r = await deletePerson(person.id);
+    if (r && !(r as { success?: boolean }).success) {
+      toast.error((r as { error?: string }).error ?? "Couldn't remove");
+      return;
+    }
+    toast.success(lang === "ar" ? "تمت الإزالة" : "Placeholder removed");
+    startTransition(() => router.refresh());
+  }
 
   const givenName =
     lang === "ar"
@@ -89,12 +112,27 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         >
           <div
             className={cn(
-              "flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--card)]/70 px-3 py-3 text-center transition-[transform,border-color,box-shadow] duration-300 ease-out",
+              "relative flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--card)]/70 px-4 py-3 text-center transition-[transform,border-color,box-shadow] duration-300 ease-out",
               "shadow-[0_2px_10px_-4px_rgba(40,10,15,0.10)]",
               selected && "border-[var(--primary)]/60 shadow-[var(--shadow-glow)]",
               hovered && "-translate-y-px border-[var(--accent)]/70",
             )}
           >
+            <button
+              type="button"
+              onClick={handleDeletePlaceholder}
+              aria-label={lang === "ar" ? "إزالة" : "Remove placeholder"}
+              title={lang === "ar" ? "إزالة" : "Remove placeholder"}
+              className={cn(
+                "absolute -right-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full",
+                "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
+                "shadow-sm transition-[transform,background-color,color,opacity] duration-200",
+                "hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
+                hovered ? "opacity-100" : "opacity-0 pointer-events-none",
+              )}
+            >
+              <X className="h-3 w-3" />
+            </button>
             <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-[var(--muted-foreground)]/50 bg-[var(--muted)]/40 text-[var(--muted-foreground)]">
               <span className="text-base">?</span>
             </div>

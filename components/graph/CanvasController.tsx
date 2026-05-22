@@ -3,7 +3,7 @@
 import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useReactFlow, ReactFlowProvider, useNodesState, useEdgesState } from "@xyflow/react";
-import type { Connection, NodeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
+import type { Connection, NodeMouseHandler, EdgeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
 import { toast } from "sonner";
 import {
   MousePointer2,
@@ -31,6 +31,7 @@ import {
   linkGuardian,
   linkParentChild,
   linkSpouse,
+  unlinkParent,
 } from "@/lib/actions/people";
 import {
   Tooltip,
@@ -280,6 +281,66 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     setMenu({ kind: "node", personId: node.id, x: e.clientX, y: e.clientY });
   };
 
+  // Edge context menu — right-click an edge for "Remove this connection"
+  const [edgeMenu, setEdgeMenu] = useState<{
+    x: number;
+    y: number;
+    edgeId: string;
+    source: string;
+    target: string;
+    edgeKind: "parent" | "spouse";
+    relationshipId?: string;
+    label: string;
+  } | null>(null);
+
+  const onEdgeContextMenu: EdgeMouseHandler = (e, edge) => {
+    e.preventDefault();
+    const data = edge.data as
+      | { edgeKind?: "parent" | "spouse"; relationshipId?: string }
+      | undefined;
+    if (!data?.edgeKind) return;
+    const srcName = people.find((p) => p.id === edge.source);
+    const tgtName = people.find((p) => p.id === edge.target);
+    const fmt = (p?: PersonInput) =>
+      p
+        ? (lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar) ??
+          "?"
+        : "?";
+    const label = `${fmt(srcName)} ↔ ${fmt(tgtName)}`;
+    setEdgeMenu({
+      x: e.clientX,
+      y: e.clientY,
+      edgeId: edge.id,
+      source: edge.source as string,
+      target: edge.target as string,
+      edgeKind: data.edgeKind,
+      relationshipId: data.relationshipId,
+      label,
+    });
+  };
+
+  async function handleRemoveEdge() {
+    if (!edgeMenu) return;
+    const { edgeKind, relationshipId, source, target, label } = edgeMenu;
+    setEdgeMenu(null);
+
+    let result: { success?: boolean; error?: string } | null = null;
+    if (edgeKind === "spouse" && relationshipId) {
+      result = await deleteRelationship(relationshipId, source);
+    } else if (edgeKind === "parent") {
+      result = await unlinkParent(source, target);
+    }
+
+    if (result?.success) {
+      toast.success(
+        lang === "ar" ? `تمت إزالة العلاقة بين ${label}` : `Removed: ${label}`,
+      );
+      router.refresh();
+    } else if (result) {
+      toast.error(result.error ?? "Couldn't remove");
+    }
+  }
+
   const onPaneContextMenu = (e: React.MouseEvent | MouseEvent) => {
     e.preventDefault();
     setMenu({ kind: "pane", x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY });
@@ -414,6 +475,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
@@ -480,6 +542,41 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             router.refresh();
           }}
         />
+      )}
+
+      {edgeMenu && (
+        <>
+          {/* Backdrop to dismiss on outside click */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setEdgeMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setEdgeMenu(null); }}
+          />
+          <div
+            role="menu"
+            className="glass-2 fixed z-50 flex flex-col gap-1 rounded-xl border border-[var(--border)] p-2 shadow-[var(--shadow-deep)] min-w-[14rem]"
+            style={{ left: edgeMenu.x, top: edgeMenu.y }}
+          >
+            <div className="px-2 pt-1 pb-2 text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+              {edgeMenu.label}
+            </div>
+            <button
+              type="button"
+              onClick={handleRemoveEdge}
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/8"
+            >
+              <span aria-hidden>✕</span>
+              {lang === "ar" ? "إزالة هذه العلاقة" : "Remove this connection"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEdgeMenu(null)}
+              className="rounded-lg px-2 py-1.5 text-left text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
+            >
+              {lang === "ar" ? "إلغاء" : "Cancel"}
+            </button>
+          </div>
+        </>
       )}
 
       {pendingConn && (
