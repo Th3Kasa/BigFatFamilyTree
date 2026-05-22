@@ -9,6 +9,7 @@ import { TopBar } from "@/components/shell/TopBar";
 import { NavRail } from "@/components/shell/NavRail";
 import { MobileNav } from "@/components/shell/MobileNav";
 import { Toaster } from "@/components/ui/sonner";
+import { BuildBadge } from "@/components/shell/BuildBadge";
 
 const fontSans = Inter({
   subsets: ["latin"],
@@ -72,6 +73,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             )}
 
             <Toaster position="bottom-right" />
+            <BuildBadge />
           </CommandProvider>
         </ThemeProvider>
       </body>

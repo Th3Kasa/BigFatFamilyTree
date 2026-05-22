@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { UserPlus2, Loader2 } from "lucide-react";
+import { UserPlus2, Loader2, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,15 +10,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +57,18 @@ function initials(p: PickablePerson, lang: "ar" | "en") {
   return (given.charAt(0) + (family.charAt(0) || "")).toUpperCase();
 }
 
+function searchHaystack(p: PickablePerson) {
+  return [
+    p.given_en,
+    p.given_ar,
+    p.family_name_en,
+    p.family_name_ar,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 export function PersonPicker({
   open,
   onOpenChange,
@@ -80,13 +83,20 @@ export function PersonPicker({
 }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [, startTransition] = useTransition();
 
   const exclude = useMemo(() => new Set(excludeIds), [excludeIds]);
-  const choices = useMemo(
+  const all = useMemo(
     () => people.filter((p) => !exclude.has(p.id)),
     [people, exclude],
   );
+
+  const choices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter((p) => searchHaystack(p).includes(q));
+  }, [all, query]);
 
   async function handlePick(id: string) {
     setBusy(id);
@@ -95,6 +105,7 @@ export function PersonPicker({
     } finally {
       setBusy(null);
       onOpenChange(false);
+      setQuery("");
       startTransition(() => router.refresh());
     }
   }
@@ -102,11 +113,18 @@ export function PersonPicker({
   function handleCreate() {
     if (!createHref) return;
     onOpenChange(false);
+    setQuery("");
     router.push(createHref);
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setQuery("");
+        onOpenChange(o);
+      }}
+    >
       <DialogContent className="glass-2 max-w-md gap-0 overflow-hidden p-0">
         <DialogHeader className="px-5 pt-5 pb-3">
           <DialogTitle
@@ -122,32 +140,49 @@ export function PersonPicker({
           )}
         </DialogHeader>
 
-        <Command className="border-t border-[var(--border)]">
-          <CommandInput
-            placeholder={
-              lang === "ar" ? "ابحث بالاسم…" : "Search by name…"
-            }
-            className="h-11"
+        {/* Search */}
+        <div className="flex items-center gap-2 border-y border-[var(--border)] px-4 py-2.5">
+          <Search className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={lang === "ar" ? "ابحث بالاسم…" : "Search by name…"}
+            className="w-full bg-transparent text-sm placeholder:text-[var(--muted-foreground)] focus:outline-none"
           />
-          <CommandList className="scrollbar-thin max-h-72">
-            <CommandEmpty className="py-6 text-center text-xs text-[var(--muted-foreground)]">
-              {lang === "ar" ? "لا توجد نتائج" : "No matches"}
-            </CommandEmpty>
+          {choices.length > 0 && (
+            <span className="text-[10px] text-[var(--muted-foreground)] tabular-nums">
+              {choices.length}
+            </span>
+          )}
+        </div>
 
-            {choices.length > 0 && (
-              <CommandGroup
-                heading={lang === "ar" ? "موجودون" : "Existing people"}
-              >
-                {choices.map((p) => {
-                  const { given, family } = display(p, lang);
-                  const isBusy = busy === p.id;
-                  return (
-                    <CommandItem
-                      key={p.id}
-                      value={`${given} ${family}`}
-                      onSelect={() => !isBusy && handlePick(p.id)}
+        {/* List */}
+        <div className="scrollbar-thin max-h-72 overflow-y-auto px-2 py-2">
+          {choices.length === 0 ? (
+            <div className="px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">
+              {all.length === 0
+                ? lang === "ar"
+                  ? "لا يوجد أشخاص بعد"
+                  : "No people yet"
+                : lang === "ar"
+                  ? "لا توجد نتائج"
+                  : "No matches"}
+            </div>
+          ) : (
+            <ul className="space-y-0.5">
+              {choices.map((p) => {
+                const { given, family } = display(p, lang);
+                const isBusy = busy === p.id;
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => !isBusy && handlePick(p.id)}
+                      disabled={isBusy}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg px-2 py-2",
+                        "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors",
+                        "hover:bg-[var(--muted)]/55",
                         isBusy && "opacity-60",
                       )}
                     >
@@ -181,41 +216,39 @@ export function PersonPicker({
                       {isBusy && (
                         <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--muted-foreground)]" />
                       )}
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
-            {createHref && (
-              <>
-                <CommandSeparator />
-                <CommandGroup>
-                  <CommandItem
-                    value="__create_new__"
-                    onSelect={handleCreate}
-                    className="gap-3 rounded-lg px-2 py-2.5 text-[var(--primary)] data-[selected=true]:bg-[var(--primary)]/8"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-[var(--primary)]/40 bg-[var(--primary)]/8">
-                      <UserPlus2 className="h-4 w-4" />
-                    </div>
-                    <div className="flex flex-col leading-tight">
-                      <span className="text-sm font-medium">
-                        {createLabel ??
-                          (lang === "ar" ? "إنشاء شخص جديد" : "Create a new person")}
-                      </span>
-                      <span className="text-[10px] text-[var(--muted-foreground)]">
-                        {lang === "ar"
-                          ? "إذا لم يكن في القائمة بعد"
-                          : "if they're not in the list yet"}
-                      </span>
-                    </div>
-                  </CommandItem>
-                </CommandGroup>
-              </>
-            )}
-          </CommandList>
-        </Command>
+        {/* Create-new footer */}
+        {createHref && (
+          <div className="border-t border-[var(--border)] px-2 py-2">
+            <button
+              type="button"
+              onClick={handleCreate}
+              className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--primary)]/8"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-[var(--primary)]/40 bg-[var(--primary)]/8 text-[var(--primary)]">
+                <UserPlus2 className="h-4 w-4" />
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-medium text-[var(--primary)]">
+                  {createLabel ??
+                    (lang === "ar" ? "إنشاء شخص جديد" : "Create a new person")}
+                </span>
+                <span className="text-[10px] text-[var(--muted-foreground)]">
+                  {lang === "ar"
+                    ? "إذا لم يكن في القائمة بعد"
+                    : "if they're not in the list yet"}
+                </span>
+              </div>
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
