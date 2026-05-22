@@ -1,48 +1,53 @@
 ---
-description: Display the full team roster with each agent's name, role, specialty, and current status. Shows the active MCP integrations and skills available to the team.
+description: Display Alfred's full team roster with roles, specialties, assigned skills, and active integrations.
 ---
 
-Display a clean, formatted team roster for Alfred's development team.
+Display the team roster. Read CLAUDE.md for current information.
 
-Read `CLAUDE.md` and `.claude/shared/plugin-registry.md` (if it exists) to get current information.
-
-Output the following:
+Output exactly this:
 
 ---
 
 # Alfred's Team
 
-**CEO:** Alfred — Your primary interface. Orchestrates all agents, approves all new tools.
+**You talk to Alfred. Alfred runs the team.**
 
-## Specialists
+```
+Me  → Alfred
+│
+├── 📋 business-analyst   — requirements & scope
+├── 🏗️  saas-architect     — system design & tie-breaker
+├── 🤖 ai-automation      — LLM pipelines & automations
+├── 🌐 web-builder        — full-stack implementation
+├── 🎨 ui-craft           — design systems & components
+├── ✍️  copywriter         — copy that converts
+├── 📈 seo-growth         — SEO, analytics, CWV
+├── 🔌 integrations       — CRMs, APIs, webhooks
+├── 🔒 security-guard     — OWASP & auth review
+├── ✅ qa-guard           — testing & sign-off
+├── 🚀 devops-deploy      — deployment & infra
+└── 🔧 tech-curator       — tool vetting & maintenance
+```
 
-| Agent | Role | Specialty |
-|-------|------|-----------|
-| **Tef** | AI Automation | Claude API, LLM pipelines, AI agents, business automation, n8n |
-| **Nova** | Frontend | React, Next.js, Tailwind CSS, UI/UX, Vercel deployments |
-| **Sage** | SaaS Architect | Stripe, subscriptions, multi-tenancy, auth, onboarding flows |
-| **Rex** | Backend & DB | Supabase, PostgreSQL, RLS, Edge Functions, REST APIs |
-| **Luna** | QA & Security | Testing, security audits, code review, bug detection |
-| **Aria** | Sys Maintenance | Plugin vetting, tool management, agent config, system health |
+## Skills & Plugins (Auto-assigned — You Never Need to Call These Manually)
 
-## Active Integrations
-- Supabase MCP — database, migrations, RLS, edge functions
-- Vercel MCP — deployments, build logs, domain management
-- GitHub MCP — repository, PRs, issues, code search
-- Google Drive MCP — file storage and document access
+| Skill / Plugin | Agent |
+|----------------|-------|
+| `claude-api` | 🤖 ai-automation |
+| `code-review` | 🔒 security-guard + ✅ qa-guard |
+| `security-review` | 🔒 security-guard |
+| `verify` | ✅ qa-guard |
+| `run` | 🚀 devops-deploy |
+| `review` | 🔒 security-guard + ✅ qa-guard |
+| `init` | 📋 business-analyst |
+| Supabase MCP | 🌐 web-builder + 🚀 devops-deploy |
+| Vercel MCP | 🚀 devops-deploy |
+| GitHub MCP | 🚀 devops-deploy + Alfred |
+| Google Drive MCP | 📋 business-analyst + 🔌 integrations |
 
-## Active Skills
-`claude-api` · `code-review` · `security-review` · `verify` · `run` · `review` · `init`
-
-## How to Work with the Team
-- Just describe what you need to Alfred in plain language
-- Use `/alfred` to have Alfred plan and execute a complex multi-agent task
-- Use `/maintain` to trigger Aria's system health audit
-- Use `/approve-plugin [tool-name]` to start the plugin approval process
+## Commands
+`/alfred` — full orchestration mode · `/team` — this roster · `/maintain` — system audit · `/approve-plugin [name]` — tool vetting
 
 ---
 
-Then check `.claude/shared/lessons.md` and if it exists with content, add:
-
-## Recent Lessons Learned
-[list the most recent 3-5 entries from lessons.md]
+Then check `.claude/shared/lessons.md` — if it has entries, show the 3 most recent under **Recent Lessons**.

@@ -1,21 +1,22 @@
 ---
-description: Trigger Aria's full system maintenance audit. Aria will check dependencies, plugin health, agent configurations, permission settings, and security advisories. All findings are reported to Alfred for review.
+description: Trigger tech-curator's full system health audit. Checks dependencies, plugin health, agent configurations, permissions, and security advisories. All findings reported to Alfred.
 ---
 
-Summon Aria, the System Maintenance Agent, to run a full system health audit.
+Deploy tech-curator for a full system maintenance audit.
 
-Use the Agent tool with `subagent_type: "aria"` and give Aria this brief:
+Use the Agent tool with `subagent_type: "tech-curator"` with this brief:
 
-"Run a full maintenance audit on the BigFatFamilyTree project. Check:
-1. npm audit for security vulnerabilities — run `npm audit` and report high/critical findings
-2. Package currency — check `package.json` for packages significantly behind current versions
-3. Agent configuration — read all files in `.claude/agents/` and verify they are consistent with `CLAUDE.md`
-4. Plugin registry — read `.claude/shared/plugin-registry.md` and flag anything outdated or requiring re-evaluation
-5. Permissions — read `.claude/settings.json` and `.claude/settings.local.json`, flag any permissions that look outdated or overly broad
-6. Lessons — read `.claude/shared/lessons.md` and identify any lessons that should update an agent's prompt
+"Run a full system health audit on this project. In order:
 
-After auditing, produce a structured report and update `.claude/shared/plugin-registry.md` with the current audit date.
+1. **Dependency security**: run `npm audit` — report any high or critical vulnerabilities with CVE IDs and whether a fix is available
+2. **Package currency**: run `npm outdated` — flag packages > 2 major versions behind
+3. **TypeScript integrity**: run `npx tsc --noEmit` — report any errors
+4. **Agent config review**: read all `.claude/agents/*.md` files — verify tools lists are minimal, check for contradictions with CLAUDE.md, identify any lessons from `.claude/shared/lessons.md` not yet incorporated
+5. **Plugin registry review**: read `.claude/shared/plugin-registry.md` — flag tools last audited > 90 days ago, or with stale last commit dates
+6. **Permission audit**: read `.claude/settings.json` and `.claude/settings.local.json` — flag overly broad or stale permissions
 
-Report back to Alfred with: findings by category, severity, recommended actions, and anything requiring Alfred's explicit approval."
+After auditing, update the Last Audited date in the plugin registry.
 
-After Aria reports back, present the findings to the user as Alfred — organized, prioritized, and with clear recommended next steps.
+Report back to Alfred: findings by category, severity (critical/high/medium/low), recommended actions, and anything requiring Alfred's explicit approval before proceeding."
+
+After tech-curator reports, Alfred presents to the user: organized by severity, with clear next steps and any decisions the user needs to make.
