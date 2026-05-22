@@ -137,11 +137,17 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    await ensureBootstrapUser(parsed.data.email);
+    const bootstrapResult = await ensureBootstrapUser(parsed.data.email);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password });
     setLoading(false);
-    if (error) { setErrorMsg(error.message); return; }
+    if (error) {
+      const hint = bootstrapResult && "details" in bootstrapResult && bootstrapResult.details
+        ? ` [bootstrap: ${bootstrapResult.details}]`
+        : "";
+      setErrorMsg(`${error.message}${hint}`);
+      return;
+    }
     window.location.href = "/";
   }
 

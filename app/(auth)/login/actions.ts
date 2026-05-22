@@ -7,8 +7,8 @@ import {
 } from "@/lib/auth/bootstrap";
 
 export type EnsureBootstrapResult =
-  | { ok: true }
-  | { ok: false; reason: "not_bootstrap" | "create_failed" };
+  | { ok: true; details?: string }
+  | { ok: false; reason: "not_bootstrap" | "create_failed"; details?: string };
 
 async function findUserByEmail(
   svc: ReturnType<typeof createServiceClient>,
@@ -49,6 +49,8 @@ export async function ensureBootstrapUser(
 
   let userId: string | null = created?.user?.id ?? null;
 
+  let updateError: string | null = null;
+
   if (createErr) {
     const msg = createErr.message?.toLowerCase() ?? "";
     const status = (createErr as { status?: number }).status;
@@ -59,13 +61,18 @@ export async function ensureBootstrapUser(
       msg.includes("exists");
     if (!alreadyExists) {
       console.error("[ensureBootstrapUser] createUser failed:", createErr);
-      return { ok: false, reason: "create_failed" };
+      return {
+        ok: false,
+        reason: "create_failed",
+        details: `createUser: ${createErr.message ?? "unknown error"}`,
+      };
     }
     // User already exists — look up id so we can update password + profile role
     try {
       userId = await findUserByEmail(svc, email);
     } catch (e) {
       console.error("[ensureBootstrapUser] lookup failed:", e);
+      updateError = `lookup: ${(e as Error)?.message ?? "unknown"}`;
     }
   }
 
@@ -78,16 +85,22 @@ export async function ensureBootstrapUser(
     });
     if (updErr) {
       console.error("[ensureBootstrapUser] password update failed:", updErr);
+      updateError = `updateUser: ${updErr.message ?? "unknown error"}`;
     }
+  } else if (password && !userId) {
+    updateError = "could not resolve user id to set password";
   }
 
   // Promote to admin in profiles (covered by the auth callback too, but
   // upsert here so password-login users don't need to wait for callback).
   if (userId) {
-    await svc
+    const { error: profileErr } = await svc
       .from("profiles")
       .upsert({ id: userId, role: "admin" }, { onConflict: "id" });
+    if (profileErr) {
+      updateError = (updateError ? `${updateError}; ` : "") + `profile: ${profileErr.message}`;
+    }
   }
 
-  return { ok: true };
+  return { ok: true, details: updateError ?? undefined };
 }
