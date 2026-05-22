@@ -296,9 +296,9 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const onEdgeContextMenu: EdgeMouseHandler = (e, edge) => {
     e.preventDefault();
     const data = edge.data as
-      | { edgeKind?: "parent" | "spouse"; relationshipId?: string }
+      | { edgeKind?: "parent" | "spouse" | "family-branch"; relationshipId?: string }
       | undefined;
-    if (!data?.edgeKind) return;
+    if (!data?.edgeKind || data.edgeKind === "family-branch") return;
     const srcName = people.find((p) => p.id === edge.source);
     const tgtName = people.find((p) => p.id === edge.target);
     const fmt = (p?: PersonInput) =>
@@ -476,6 +476,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const onEdgesDelete: OnEdgesDelete = useCallback((deletedEdges) => {
     for (const edge of deletedEdges) {
       const data = edge.data as { edgeKind?: string; relationshipId?: string } | undefined;
+      if (data?.edgeKind === "family-branch") return; // handled via Inspector
       if (data?.edgeKind === "spouse" && data.relationshipId) {
         const rid = data.relationshipId;
         const pid = edge.source as string;

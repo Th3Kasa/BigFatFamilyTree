@@ -34,10 +34,10 @@ Alfred logs successful multi-agent combinations here. Patterns graduate from `ca
 ### Canvas Bug Fix
 **Stage:** candidate
 **Task type:** User reports a visual/interaction bug on the React Flow canvas (handles, edges, nodes)
-**Agent sequence:** Explore → web-builder
-**Handoff notes:** Explore maps all canvas files + reads key files; Alfred synthesizes root cause; web-builder gets exact file paths, line numbers, and specific fixes
-**Uses:** 1 — 2026-05-22
-**Outcome:** SHIP first-pass
+**Agent sequence:** Explore → web-builder (or Alfred direct for single-file fixes)
+**Handoff notes:** Explore maps all canvas files + reads key files; Alfred synthesizes root cause; web-builder gets exact file paths, line numbers, and specific fixes; for single-file surgical fixes Alfred handles directly
+**Uses:** 2 — 2026-05-22, 2026-05-22
+**Outcome:** SHIP first-pass (both uses)
 
 ---
 

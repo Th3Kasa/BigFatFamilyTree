@@ -49,13 +49,19 @@ export type GraphEdge = {
   id: string;
   source: string;
   target: string;
-  type: "smoothstep" | "straight";
+  type: "smoothstep" | "straight" | "step" | "family-branch";
   sourceHandle?: string;
   targetHandle?: string;
+  selectable?: boolean;
+  focusable?: boolean;
+  deletable?: boolean;
   data?: {
-    edgeKind: "parent" | "spouse";
+    edgeKind: "parent" | "spouse" | "family-branch";
     relationshipId?: string;
     status?: SpouseStatus;
+    fatherId?: string | null;
+    motherId?: string | null;
+    childIds?: string[];
   };
   style?: React.CSSProperties;
   animated?: boolean;
@@ -99,13 +105,44 @@ export function buildGraphElements(
 
   const edges: GraphEdge[] = [];
 
+  // Group children by their parent pair (fatherId|motherId)
+  // so we can render one T-junction bracket per family unit.
+  const familyGroups = new Map<
+    string,
+    { fatherId: string | null; motherId: string | null; childIds: string[] }
+  >();
+
   for (const p of people) {
-    if (p.father_id && idSet.has(p.father_id)) {
-      edges.push({ id: `f-${p.id}`, source: p.father_id, target: p.id, type: "smoothstep", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" } });
+    const fid = p.father_id && idSet.has(p.father_id) ? p.father_id : null;
+    const mid = p.mother_id && idSet.has(p.mother_id) ? p.mother_id : null;
+    if (!fid && !mid) continue;
+    const key = `${fid ?? ""}|${mid ?? ""}`;
+    if (!familyGroups.has(key)) {
+      familyGroups.set(key, { fatherId: fid, motherId: mid, childIds: [] });
     }
-    if (p.mother_id && idSet.has(p.mother_id)) {
-      edges.push({ id: `m-${p.id}`, source: p.mother_id, target: p.id, type: "smoothstep", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" } });
-    }
+    familyGroups.get(key)!.childIds.push(p.id);
+  }
+
+  for (const [key, { fatherId, motherId, childIds }] of familyGroups) {
+    const sourceId = fatherId ?? motherId!;
+    const targetId = childIds[0];
+    edges.push({
+      id: `fb-${key}`,
+      source: sourceId,
+      target: targetId,
+      type: "family-branch",
+      sourceHandle: "bottom",
+      targetHandle: "top",
+      selectable: false,
+      focusable: false,
+      deletable: false,
+      data: {
+        edgeKind: "family-branch",
+        fatherId,
+        motherId,
+        childIds,
+      },
+    } as GraphEdge);
   }
 
   // Only nodes WITHOUT stored positions go through dagre
@@ -119,10 +156,18 @@ export function buildGraphElements(
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 90, marginx: 20, marginy: 20 });
     unpositioned.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
-    edges
-      .filter((e) => e.data?.edgeKind === "parent")
-      .filter((e) => unpositioned.some((n) => n.id === e.source) && unpositioned.some((n) => n.id === e.target))
-      .forEach((e) => g.setEdge(e.source, e.target));
+    // Feed Dagre ALL children from every family group, not just the representative child.
+    // This ensures siblings and children of remarriages are placed correctly.
+    const unpositionedIds = new Set(unpositioned.map((n) => n.id));
+    for (const e of edges) {
+      if (e.data?.edgeKind !== "family-branch") continue;
+      const fb = e.data as { fatherId: string | null; motherId: string | null; childIds: string[] };
+      const sourceId = fb.fatherId ?? fb.motherId;
+      if (!sourceId || !unpositionedIds.has(sourceId)) continue;
+      for (const childId of fb.childIds) {
+        if (unpositionedIds.has(childId)) g.setEdge(sourceId, childId);
+      }
+    }
     dagre.layout(g);
     unpositioned.forEach((n) => {
       const pos = g.node(n.id);
@@ -156,7 +201,7 @@ export function buildGraphElements(
           };
         }
         // current
-        return { stroke: "oklch(0.62 0.20 18 / 0.85)", strokeWidth: 2.5 };
+        return { stroke: "oklch(0.62 0.20 18 / 0.70)", strokeWidth: 2 };
       })();
       edges.push({
         id: `s-${r.person_a_id}-${r.person_b_id}`,
