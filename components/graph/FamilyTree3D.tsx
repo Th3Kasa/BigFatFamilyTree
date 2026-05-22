@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import { Canvas, useLoader, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import type {
   PersonInput,
@@ -24,19 +25,11 @@ type Props = {
 };
 
 type Vec3 = [number, number, number];
-
-/**
- * Live-positions store.
- *
- * Shared between every PortraitNode (writers) and every CurvedEdge (readers).
- * Both sides read/write THREE.Vector3 instances inside useFrame so positions
- * stay perfectly in sync at 60fps without ever triggering a React re-render.
- *
- * This is the canonical R3F pattern for ref-based shared mutable state.
- */
 type LivePositions = Map<string, THREE.Vector3>;
 
-const EDGE_SEGMENTS = 48;
+const EDGE_SEGMENTS = 32;
+// Click is treated as "drag" once the pointer moves more than this many px
+const DRAG_THRESHOLD_PX = 6;
 
 function display(p: PersonInput, lang: "ar" | "en") {
   return (
@@ -105,12 +98,13 @@ function computeInitialPositions(people: PersonInput[]): Map<string, Vec3> {
   for (const g of generations) {
     const members = byGen.get(g)!;
     const count = members.length;
-    const radius = Math.max(2.5, count * 1.1);
+    const radius = Math.max(3.5, count * 1.4);
     members.forEach((p, idx) => {
       const angle = (idx / Math.max(count, 1)) * Math.PI * 2;
-      const phase = g * 0.35;
+      const phase = g * 0.45;
       const x = Math.cos(angle + phase) * radius;
-      const z = Math.sin(angle + phase) * radius * 0.7;
+      // 3D depth: stagger Z by a different ratio
+      const z = Math.sin(angle + phase) * radius * 0.85;
       const y = -g * 3.6;
       positions.set(p.id, [x, y, z]);
     });
@@ -118,13 +112,17 @@ function computeInitialPositions(people: PersonInput[]): Map<string, Vec3> {
   return positions;
 }
 
-function PortraitNode({
+/**
+ * Constellation node: a small bright sphere + halo + bloom-friendly emissive.
+ * Photo / initials only appear on hover or selection.
+ */
+function ConstellationNode({
   person,
   livePositionsRef,
   lang,
   selected,
   onSelect,
-  onClick,
+  onActivate,
   pointerRef,
   setOrbitEnabled,
 }: {
@@ -133,35 +131,42 @@ function PortraitNode({
   lang: "ar" | "en";
   selected: boolean;
   onSelect: (id: string) => void;
-  onClick: () => void;
+  /** Treats this as a "real" tap — open profile. Only fires for clean clicks (no drag). */
+  onActivate: () => void;
   pointerRef: React.MutableRefObject<THREE.Vector3 | null>;
   setOrbitEnabled: (b: boolean) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const seed = useRef(Math.random() * Math.PI * 2);
-  // The "rest" position the node returns to when no drag is in progress.
-  // Only changed by drag. Drift + cursor pull animate around this value.
   const basePos = useRef<THREE.Vector3>(
     livePositionsRef.current.get(person.id)?.clone() ?? new THREE.Vector3(),
   );
-  // Currently rendered position. Lerps toward (basePos + ambient drift + cursor).
   const currentPos = useRef<THREE.Vector3>(basePos.current.clone());
   const [hovered, setHovered] = useState(false);
   const isDragging = useRef(false);
+  // Track screen movement during a pointer-down→up so we can suppress click after drag
+  const downAt = useRef<{ x: number; y: number } | null>(null);
+  const didMove = useRef(false);
 
   const { camera, gl, raycaster } = useThree();
   const dragPlane = useMemo(() => new THREE.Plane(), []);
   const dragOffset = useMemo(() => new THREE.Vector3(), []);
   const ndc = useMemo(() => new THREE.Vector2(), []);
 
-  // Publish currentPos to the shared live-positions map every frame so edges
-  // (which also useFrame off this same ref) read the latest value.
+  // Gender-tinted neon emissive
+  const accent =
+    person.gender === "f"
+      ? "#f471b5"     // pink
+      : person.gender === "m"
+        ? "#7ec5ff"   // electric blue
+        : "#c4b5fd";  // lavender for unknown
+
   useFrame((state, delta) => {
     if (!groupRef.current) return;
 
     if (!isDragging.current) {
       const t = state.clock.getElapsedTime() + seed.current;
-      const bobY = Math.sin(t * 0.7) * 0.08;
+      const bobY = Math.sin(t * 0.7) * 0.05;
       const wobbleX = Math.cos(t * 0.5) * 0.04;
 
       let cursorOffsetX = 0;
@@ -171,9 +176,9 @@ function PortraitNode({
         const dx = ptr.x - basePos.current.x;
         const dy = ptr.y - basePos.current.y;
         const dist = Math.hypot(dx, dy);
-        const range = 4;
+        const range = 5;
         if (dist < range) {
-          const influence = (1 - dist / range) * 0.18;
+          const influence = (1 - dist / range) * 0.15;
           cursorOffsetX = dx * influence;
           cursorOffsetY = dy * influence;
         }
@@ -191,11 +196,9 @@ function PortraitNode({
       groupRef.current.position.copy(currentPos.current);
     }
 
-    // Always publish current position to the shared live store, dragging or not
     const live = livePositionsRef.current.get(person.id);
     if (live) live.copy(currentPos.current);
 
-    // Face the camera
     groupRef.current.quaternion.copy(camera.quaternion);
   });
 
@@ -203,7 +206,8 @@ function PortraitNode({
     (e: ThreeEvent<PointerEvent>) => {
       if (e.button !== 0) return;
       e.stopPropagation();
-      onSelect(person.id);
+      downAt.current = { x: e.clientX, y: e.clientY };
+      didMove.current = false;
       const camDir = new THREE.Vector3();
       camera.getWorldDirection(camDir);
       dragPlane.setFromNormalAndCoplanarPoint(camDir, currentPos.current);
@@ -219,13 +223,18 @@ function PortraitNode({
       setOrbitEnabled(false);
       (e.target as Element).setPointerCapture?.(e.pointerId);
     },
-    [camera, dragOffset, dragPlane, gl, ndc, raycaster, onSelect, person.id, setOrbitEnabled],
+    [camera, dragOffset, dragPlane, gl, ndc, raycaster, setOrbitEnabled],
   );
 
   const onPointerMove = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
       if (!isDragging.current) return;
       e.stopPropagation();
+      if (downAt.current) {
+        const dx = e.clientX - downAt.current.x;
+        const dy = e.clientY - downAt.current.y;
+        if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) didMove.current = true;
+      }
       ndc.set(
         (e.clientX / gl.domElement.clientWidth) * 2 - 1,
         -(e.clientY / gl.domElement.clientHeight) * 2 + 1,
@@ -251,25 +260,24 @@ function PortraitNode({
       isDragging.current = false;
       setOrbitEnabled(true);
       (e.target as Element).releasePointerCapture?.(e.pointerId);
+      // Treat as a clean click only if pointer barely moved
+      if (!didMove.current) {
+        onSelect(person.id);
+      }
+      downAt.current = null;
     },
-    [setOrbitEnabled],
+    [onSelect, person.id, setOrbitEnabled],
   );
 
-  const ringColor =
-    person.gender === "f"
-      ? "#fda4af"
-      : person.gender === "m"
-        ? "#e36a36"
-        : "#cbb4a8";
+  // Show photo / label only on hover or when selected
+  const showDetail = hovered || selected;
 
   return (
     <group
       ref={groupRef}
-      onClick={(e) => {
-        if (isDragging.current) return;
+      onDoubleClick={(e) => {
         e.stopPropagation();
-        onSelect(person.id);
-        onClick();
+        onActivate();
       }}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
@@ -277,43 +285,56 @@ function PortraitNode({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
+      {/* Bright core sphere (gets bloomed) */}
       <mesh>
-        <ringGeometry args={[1.0, 1.18, 64]} />
+        <sphereGeometry args={[selected ? 0.32 : hovered ? 0.28 : 0.22, 24, 24]} />
+        <meshBasicMaterial color={accent} toneMapped={false} />
+      </mesh>
+
+      {/* Soft outer halo (additive blending so it glows) */}
+      <mesh>
+        <sphereGeometry args={[selected ? 0.7 : 0.55, 16, 16]} />
         <meshBasicMaterial
-          color={selected ? "#e36a36" : ringColor}
+          color={accent}
           transparent
-          opacity={selected ? 0.9 : hovered ? 0.6 : 0.35}
+          opacity={selected ? 0.35 : hovered ? 0.25 : 0.18}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
         />
       </mesh>
-      <mesh>
-        <circleGeometry args={[0.95, 64]} />
-        <meshBasicMaterial color={ringColor} transparent opacity={0.85} />
-      </mesh>
 
-      <Suspense fallback={null}>
-        {person.photo_url ? (
-          <PhotoPlane url={person.photo_url} />
-        ) : (
-          <InitialsPlane initials={initialsOf(person, lang)} />
-        )}
-      </Suspense>
-
-      <Html
-        position={[0, -1.25, 0]}
-        center
-        distanceFactor={9}
-        style={{ pointerEvents: "none" }}
-      >
-        <div
-          className="whitespace-nowrap rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold shadow-sm backdrop-blur-md"
-          style={{
-            color: "oklch(0.18 0.04 15)",
-            fontFamily: "var(--font-display)",
-          }}
-        >
-          {display(person, lang)}
-        </div>
-      </Html>
+      {/* Hover/selected: surface a small framed photo + name */}
+      {showDetail && (
+        <Suspense fallback={null}>
+          <group position={[0, 1.0, 0]}>
+            {person.photo_url ? (
+              <PhotoPlane url={person.photo_url} />
+            ) : (
+              <InitialsPlane initials={initialsOf(person, lang)} accent={accent} />
+            )}
+          </group>
+          <Html
+            position={[0, -0.6, 0]}
+            center
+            distanceFactor={11}
+            style={{ pointerEvents: "none" }}
+          >
+            <div
+              className="whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md"
+              style={{
+                background: "rgba(8, 14, 36, 0.7)",
+                color: "white",
+                border: `1px solid ${accent}66`,
+                boxShadow: `0 0 14px ${accent}55`,
+                fontFamily: "var(--font-display)",
+              }}
+            >
+              {display(person, lang)}
+            </div>
+          </Html>
+        </Suspense>
+      )}
     </group>
   );
 }
@@ -322,23 +343,23 @@ function PhotoPlane({ url }: { url: string }) {
   const tex = useLoader(THREE.TextureLoader, url);
   return (
     <mesh>
-      <circleGeometry args={[0.8, 64]} />
-      <meshBasicMaterial map={tex} transparent />
+      <circleGeometry args={[0.55, 48]} />
+      <meshBasicMaterial map={tex} transparent toneMapped={false} />
     </mesh>
   );
 }
 
-function InitialsPlane({ initials }: { initials: string }) {
+function InitialsPlane({ initials, accent }: { initials: string; accent: string }) {
   return (
     <>
       <mesh>
-        <circleGeometry args={[0.8, 64]} />
-        <meshBasicMaterial color="white" />
+        <circleGeometry args={[0.55, 48]} />
+        <meshBasicMaterial color="#0a0f2e" />
       </mesh>
-      <Html center style={{ pointerEvents: "none" }} distanceFactor={8}>
+      <Html center style={{ pointerEvents: "none" }} distanceFactor={9}>
         <span
-          className="text-base font-semibold"
-          style={{ color: "oklch(0.34 0.13 18)", fontFamily: "var(--font-display)" }}
+          className="text-sm font-semibold"
+          style={{ color: accent, fontFamily: "var(--font-display)" }}
         >
           {initials}
         </span>
@@ -348,17 +369,16 @@ function InitialsPlane({ initials }: { initials: string }) {
 }
 
 /**
- * Curved edge that re-samples a quadratic Bezier between two LIVE node positions
- * every frame, mutating its BufferGeometry position attribute in place.
- * No React re-renders during drag.
+ * Constellation edge: thin glowing line, additive blending, dashes for divorced.
+ * Recomputes its Bezier path every frame from the shared live positions.
  */
-function CurvedEdge({
+function ConstellationEdge({
   fromId,
   toId,
   livePositionsRef,
   color,
   dashed,
-  opacity = 0.7,
+  opacity = 0.55,
   lift = 0.4,
 }: {
   fromId: string;
@@ -369,7 +389,6 @@ function CurvedEdge({
   opacity?: number;
   lift?: number;
 }) {
-  // Allocate geometry + material + line once. R3F handles ref reconciliation.
   const { geometry, material, line } = useMemo(() => {
     const arr = new Float32Array(EDGE_SEGMENTS * 3);
     const geo = new THREE.BufferGeometry();
@@ -378,17 +397,26 @@ function CurvedEdge({
       ? new THREE.LineDashedMaterial({
           color,
           dashSize: 0.22,
-          gapSize: 0.16,
+          gapSize: 0.18,
           transparent: true,
           opacity,
-        })
-      : new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        } as THREE.LineDashedMaterialParameters)
+      : new THREE.LineBasicMaterial({
+          color,
+          transparent: true,
+          opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        });
     const l = new THREE.Line(geo, mat);
     l.frustumCulled = false;
     return { geometry: geo, material: mat, line: l };
   }, [color, dashed, opacity]);
 
-  // Pre-allocated temp vectors (avoid GC churn in the per-frame loop)
   const tmps = useMemo(
     () => ({
       start: new THREE.Vector3(),
@@ -422,7 +450,6 @@ function CurvedEdge({
     for (let i = 0; i < EDGE_SEGMENTS; i++) {
       const t = i / (EDGE_SEGMENTS - 1);
       const u = 1 - t;
-      // Quadratic Bezier: B(t) = u²·P0 + 2u·t·P1 + t²·P2
       arr[i * 3]     = u * u * tmps.start.x + 2 * u * t * tmps.mid.x + t * t * tmps.end.x;
       arr[i * 3 + 1] = u * u * tmps.start.y + 2 * u * t * tmps.mid.y + t * t * tmps.end.y;
       arr[i * 3 + 2] = u * u * tmps.start.z + 2 * u * t * tmps.mid.z + t * t * tmps.end.z;
@@ -440,6 +467,54 @@ function CurvedEdge({
   }, [geometry, material]);
 
   return <primitive object={line} />;
+}
+
+/** Slow drifting starfield to add depth and atmosphere */
+function Starfield({ count = 1200 }: { count?: number }) {
+  const ref = useRef<THREE.Points>(null);
+  const geometry = useMemo(() => {
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const r = 60 + Math.random() * 50;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) - 8;
+      positions[i * 3 + 2] = r * Math.cos(phi);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    return geo;
+  }, [count]);
+
+  const material = useMemo(
+    () =>
+      new THREE.PointsMaterial({
+        color: "#a6d2ff",
+        size: 0.06,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    [],
+  );
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    ref.current.rotation.y = state.clock.getElapsedTime() * 0.005;
+  });
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
+
+  return <points ref={ref} geometry={geometry} material={material} />;
 }
 
 function CursorTracker({
@@ -468,8 +543,8 @@ function SceneContent({
   people,
   relationships,
   lang,
-  onPersonClick,
-}: Props & { onPersonClick: (p: PersonInput) => void }) {
+  onPersonActivate,
+}: Props & { onPersonActivate: (p: PersonInput) => void }) {
   const initialPositions = useMemo(
     () => computeInitialPositions(people),
     [people],
@@ -479,14 +554,9 @@ function SceneContent({
     [people],
   );
 
-  // Single shared live-positions store. Keys are person ids; values are
-  // THREE.Vector3 instances that BOTH the node (writer) and edge (reader)
-  // mutate / read in useFrame. Cheap, GC-free, and React stays out of it.
   const livePositionsRef = useRef<LivePositions>(new Map());
   useMemo(() => {
     const map = livePositionsRef.current;
-    // Sync map to current people list, preserving existing Vector3 instances
-    // so they remain shared across re-renders.
     for (const [id, [x, y, z]] of initialPositions.entries()) {
       const existing = map.get(id);
       if (existing) existing.set(x, y, z);
@@ -545,47 +615,49 @@ function SceneContent({
         zoomSpeed={0.7}
         panSpeed={0.6}
         rotateSpeed={0.6}
-        minDistance={5}
-        maxDistance={70}
+        minDistance={4}
+        maxDistance={80}
         enableDamping
         dampingFactor={0.08}
         makeDefault
       />
 
+      <Starfield />
+
       {parentEdges.map((e) => (
-        <CurvedEdge
+        <ConstellationEdge
           key={e.key}
           fromId={e.fromId}
           toId={e.toId}
           livePositionsRef={livePositionsRef}
-          color="#7a1f3d"
-          opacity={0.7}
+          color="#7ec5ff"
+          opacity={0.45}
           lift={0.6}
         />
       ))}
 
       {spouseEdges.map((e) => (
-        <CurvedEdge
+        <ConstellationEdge
           key={e.key}
           fromId={e.fromId}
           toId={e.toId}
           livePositionsRef={livePositionsRef}
-          color={e.status === "current" ? "#c93d5a" : "#a8a098"}
+          color={e.status === "current" ? "#f471b5" : "#8aa0d0"}
           dashed={e.status !== "current"}
-          opacity={0.7}
+          opacity={0.55}
           lift={0.2}
         />
       ))}
 
       {visiblePeople.map((p) => (
-        <PortraitNode
+        <ConstellationNode
           key={p.id}
           person={p}
           livePositionsRef={livePositionsRef}
           lang={lang}
           selected={selectedId === p.id}
           onSelect={setSelectedId}
-          onClick={() => onPersonClick(p)}
+          onActivate={() => onPersonActivate(p)}
           pointerRef={pointerRef}
           setOrbitEnabled={setOrbitEnabled}
         />
@@ -603,62 +675,71 @@ export function FamilyTree3D({ people, relationships, lang }: Props) {
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full" style={{ background: "#050818" }}>
       <Canvas
-        camera={{ position: [0, 2, 22], fov: 50 }}
+        camera={{ position: [0, 1, 26], fov: 55 }}
         gl={{ antialias: true, alpha: false }}
         dpr={[1, 2]}
         style={{ width: "100%", height: "100%" }}
       >
-        <color attach="background" args={["#fbf6ee"]} />
-        <fog attach="fog" args={["#fbf6ee", 28, 70]} />
+        <color attach="background" args={["#050818"]} />
+        <fog attach="fog" args={["#050818", 28, 95]} />
 
-        <ambientLight intensity={0.75} />
-        <directionalLight position={[6, 12, 6]} intensity={0.55} color="#fff5e6" />
-        <pointLight position={[-12, -10, -8]} intensity={0.35} color="#e36a36" />
-        <pointLight position={[10, -8, 6]} intensity={0.25} color="#c93d5a" />
+        {/* Sparse cool lighting; the glow comes from bloom on emissive nodes */}
+        <ambientLight intensity={0.25} color="#9fb8ff" />
+        <pointLight position={[0, 5, 10]} intensity={0.4} color="#7ec5ff" />
+        <pointLight position={[-12, -8, -5]} intensity={0.3} color="#f471b5" />
 
         <Suspense fallback={null}>
           <SceneContent
             people={people}
             relationships={relationships}
             lang={lang}
-            onPersonClick={gotoPerson}
+            onPersonActivate={gotoPerson}
           />
         </Suspense>
+
+        <EffectComposer multisampling={0}>
+          <Bloom
+            intensity={1.4}
+            luminanceThreshold={0.2}
+            luminanceSmoothing={0.7}
+            mipmapBlur
+          />
+        </EffectComposer>
       </Canvas>
 
       {hint && (
         <button
           type="button"
           onClick={() => setHint(false)}
-          className="glass-2 absolute bottom-6 right-6 z-10 max-w-[16rem] rounded-2xl border border-[var(--border)] px-4 py-3 text-left text-[11px] leading-snug text-[var(--muted-foreground)] shadow-[var(--shadow-floating)] transition-colors hover:bg-[var(--card)]"
+          className="absolute bottom-6 right-6 z-10 max-w-[18rem] rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-left text-[11px] leading-snug text-white/75 shadow-[0_18px_44px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md transition-colors hover:bg-black/55"
         >
-          <div className="font-semibold text-[var(--foreground)] mb-1">
-            {lang === "ar" ? "أوامر العرض ثلاثي الأبعاد" : "3D controls"}
+          <div className="font-semibold text-white mb-1">
+            {lang === "ar" ? "أوامر العرض ثلاثي الأبعاد" : "Constellation controls"}
           </div>
           {lang === "ar" ? (
             <>
               • اسحب: لتدوير المنظر
               <br />
-              • انقر + اسحب على وجه: لتحريكه (الروابط تتبع)
+              • انقر + اسحب على نقطة: لتحريكها (الروابط تتبع)
               <br />
-              • التمرير: للتكبير
+              • انقر مرة: لإبرازها
               <br />
-              • انقر مرتين: للذهاب إلى الملف
+              • انقر مرتين: لفتح الملف
             </>
           ) : (
             <>
               • Drag empty space: rotate
               <br />
-              • Click + drag a portrait: move it (edges follow live)
+              • Click + drag a node: move it (edges follow live)
               <br />
-              • Scroll: zoom
+              • Single click: highlight + reveal face
               <br />
-              • Click a portrait twice: open profile
+              • Double-click: open profile
             </>
           )}
-          <span className="mt-2 block text-[9px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]/70">
+          <span className="mt-2 block text-[9px] uppercase tracking-[0.16em] text-white/40">
             {lang === "ar" ? "اضغط للإخفاء" : "tap to dismiss"}
           </span>
         </button>
