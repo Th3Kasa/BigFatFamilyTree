@@ -1,9 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { LangToggle } from "@/components/LangToggle";
 import { Breadcrumb } from "@/components/shell/Breadcrumb";
 import { UserMenu } from "@/components/shell/UserMenu";
-import { ThemeSwitcher } from "@/components/shell/ThemeSwitcher";
 import { CommandTriggerClient } from "@/components/shell/CommandTriggerClient";
 import type { Lang } from "@/lib/lang/server";
 import type { User } from "@supabase/supabase-js";
@@ -47,8 +45,6 @@ export function TopBar({ user, lang, role }: TopBarProps) {
       <div className="flex-1" />
 
       <CommandTriggerClient />
-      <LangToggle current={lang} />
-      <ThemeSwitcher />
 
       {user && <UserMenu user={user} role={role} />}
     </header>

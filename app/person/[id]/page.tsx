@@ -14,18 +14,11 @@ import {
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   Calendar,
   Edit2,
-  MapPin,
-  Music,
   Plus,
   User,
   Users,
@@ -143,15 +136,6 @@ export default async function PersonPage({ params }: Props) {
       : person.gender === "f"
         ? lang === "ar" ? "أنثى" : "Female"
         : null;
-
-  // Linked transcript IDs via events
-  const transcriptIds = Array.from(
-    new Set((events ?? []).map((e) => e.source_transcript_id).filter(Boolean))
-  ) as string[];
-  const { data: linkedTranscriptsData } = transcriptIds.length
-    ? await supabase.from("transcripts").select("id, recorded_at").in("id", transcriptIds)
-    : { data: [] };
-  const uniqueTranscripts = linkedTranscriptsData ?? [];
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
@@ -301,13 +285,6 @@ export default async function PersonPage({ params }: Props) {
               >
                 <Users className="h-3.5 w-3.5 mr-1.5" />
                 {lang === "ar" ? "العلاقات" : "Relations"}
-              </TabsTrigger>
-              <TabsTrigger
-                value="sources"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-sm"
-              >
-                <Music className="h-3.5 w-3.5 mr-1.5" />
-                {lang === "ar" ? "المصادر" : "Sources"}
               </TabsTrigger>
             </TabsList>
 
@@ -532,38 +509,6 @@ export default async function PersonPage({ params }: Props) {
               </div>
             </TabsContent>
 
-            {/* ─── Sources Tab ─── */}
-            <TabsContent value="sources" className="p-6 space-y-3">
-              {uniqueTranscripts.length > 0 ? (
-                uniqueTranscripts.map((t) => (
-                  <Link key={t.id} href={`/transcripts/${t.id}`}>
-                    <Card className="hover:border-[var(--primary)]/40 transition-colors cursor-pointer">
-                      <CardContent className="flex items-center gap-3 p-4">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                          <Music className="h-4 w-4 text-[var(--primary)]" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                            {(t as { id: string; recorded_at: string | null }).recorded_at
-                              ? new Date((t as { id: string; recorded_at: string | null }).recorded_at!).toLocaleDateString()
-                              : lang === "ar" ? "تسجيل صوتي" : "Audio transcript"}
-                          </p>
-                          <p className="text-xs text-[var(--muted-foreground)]">
-                            {lang === "ar" ? "انقر للاستماع" : "Click to listen"}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))
-              ) : (
-                <p className="text-sm text-[var(--muted-foreground)] py-4">
-                  {lang === "ar"
-                    ? "لا توجد مصادر صوتية مرتبطة."
-                    : "No audio sources linked yet."}
-                </p>
-              )}
-            </TabsContent>
           </Tabs>
         </Card>
       </div>
