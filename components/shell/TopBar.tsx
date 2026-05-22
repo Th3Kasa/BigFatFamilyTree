@@ -14,7 +14,7 @@ interface TopBarProps {
 
 export function TopBar({ user, lang, role }: TopBarProps) {
   return (
-    <header className="glass-1 sticky top-0 z-40 col-span-2 flex h-14 items-center gap-3 border-b border-[var(--border)] px-4">
+    <header className="glass-1 sticky top-0 z-40 col-span-1 md:col-span-2 flex h-14 items-center gap-3 border-b border-[var(--border)] px-4">
       <Link
         href="/"
         className="group flex items-center gap-2.5 text-sm font-semibold text-[var(--foreground)] transition-opacity hover:opacity-90"
@@ -30,10 +30,10 @@ export function TopBar({ user, lang, role }: TopBarProps) {
           />
         </span>
         <span
-          className="hidden tracking-tight sm:block"
+          className="tracking-tight"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          {lang === "ar" ? "شجرة العائلة الكبيرة" : "Big Fat Family"}
+          Big Fat Family
         </span>
       </Link>
 

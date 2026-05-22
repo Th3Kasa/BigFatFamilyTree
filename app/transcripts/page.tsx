@@ -1,13 +1,11 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getLang } from "@/lib/lang/server";
 import { TranscriptsSplitView } from "@/components/transcripts/TranscriptsSplitView";
 
 type Props = { searchParams: Promise<{ t?: string }> };
 
 export default async function TranscriptsPage({ searchParams }: Props) {
   const { t: selectedId } = await searchParams;
-  const [supabase, lang] = await Promise.all([createClient(), getLang()]);
+  const supabase = await createClient();
 
   const { data: transcripts } = await supabase
     .from("transcripts")
@@ -46,9 +44,7 @@ export default async function TranscriptsPage({ searchParams }: Props) {
   const enriched = (transcripts ?? []).map((t) => {
     const person = t.recorded_with ? peopleMap.get(t.recorded_with) : null;
     const personName = person
-      ? lang === "ar"
-        ? (person.given_ar ?? person.given_en)
-        : (person.given_en ?? person.given_ar)
+      ? (person.given_en ?? person.given_ar)
       : null;
     return {
       ...t,
@@ -58,10 +54,9 @@ export default async function TranscriptsPage({ searchParams }: Props) {
   });
 
   return (
-    <main className="h-[calc(100vh-4rem)] overflow-hidden">
+    <main className="h-[calc(100vh-3.5rem-4rem)] md:h-[calc(100vh-3.5rem)] overflow-hidden">
       <TranscriptsSplitView
         transcripts={enriched}
-        lang={lang}
         selectedId={selectedId ?? null}
       />
     </main>

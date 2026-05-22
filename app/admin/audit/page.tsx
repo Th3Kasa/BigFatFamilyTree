@@ -22,7 +22,7 @@ export default async function AuditLogPage({ searchParams }: Props) {
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="px-4 py-4 sm:px-6 sm:py-6 max-w-6xl mx-auto pb-20 md:pb-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl font-bold">Audit Log</CardTitle>

@@ -29,24 +29,21 @@ export default async function EditPersonPage({ params }: Props) {
   if (!person) notFound();
 
   const updateThisPerson = updatePerson.bind(null, person.id);
-  const given =
-    lang === "ar"
-      ? (person.given_ar ?? person.given_en)
-      : (person.given_en ?? person.given_ar);
+  const given = person.given_en ?? person.given_ar;
 
   return (
-    <main className="min-h-screen bg-[var(--background)] px-4 py-8">
-      <div className="max-w-2xl mx-auto">
+    <main className="min-h-screen bg-[var(--background)] px-4 py-8 pb-24 md:pb-8">
+      <div className="max-w-2xl mx-auto w-full">
         <div className="mb-6">
           <BackButton
-            label={lang === "ar" ? "← العودة إلى الملف" : "← Back to profile"}
+            label="← Back to profile"
           />
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl font-bold font-[Fraunces,serif]">
-              {lang === "ar" ? `تعديل: ${given ?? ""}` : `Edit: ${given ?? ""}`}
+            <CardTitle className="text-lg sm:text-xl font-bold font-[Fraunces,serif]">
+              {`Edit: ${given ?? ""}`}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -55,7 +52,7 @@ export default async function EditPersonPage({ params }: Props) {
               initialData={person}
               people={people ?? []}
               lang={lang}
-              submitLabel={lang === "ar" ? "حفظ التغييرات" : "Save changes"}
+              submitLabel="Save changes"
             />
           </CardContent>
         </Card>

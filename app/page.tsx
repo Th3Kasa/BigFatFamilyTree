@@ -28,21 +28,17 @@ export default async function HomePage() {
 
   if (isEmpty) {
     return (
-      <div className="max-w-2xl mx-auto px-4 pt-16">
+      <div className="max-w-2xl mx-auto w-full px-4 pt-16 pb-24 md:pb-8">
         <EmptyState
           icon="🌱"
-          title={lang === "ar" ? "ابدأ شجرة عائلتك" : "Start your family tree"}
-          description={
-            lang === "ar"
-              ? "لم يُضَف أي شخص بعد. ابدأ بإضافة أول فرد في العائلة."
-              : "No family members added yet. Add the first person to get started."
-          }
+          title="Start your family tree"
+          description="No family members added yet. Add the first person to get started."
           action={
             <a
               href="/person/new"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-[var(--primary-foreground)] font-semibold text-sm transition-colors"
             >
-              {lang === "ar" ? "＋ إضافة شخص" : "＋ Add person"}
+              ＋ Add person
             </a>
           }
         />
@@ -57,7 +53,7 @@ export default async function HomePage() {
     <>
       {/* Canvas — always primary, full viewport */}
       <div
-        className="canvas-stage relative h-[calc(100vh-57px)] overflow-hidden"
+        className="canvas-stage relative h-[calc(100vh-57px-64px)] md:h-[calc(100vh-57px)] overflow-hidden"
         data-grain="on"
       >
         <CanvasView

@@ -7,23 +7,22 @@ import type { Lang } from "@/lib/lang/server";
 interface NavItem {
   href: string;
   label: string;
-  labelAr: string;
   icon: React.ReactNode;
   adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
-  { href: "/", label: "Canvas", labelAr: "اللوحة", icon: <Home className="h-5 w-5" /> },
-  { href: "/transcripts", label: "Transcripts", labelAr: "التسجيلات", icon: <Mic className="h-5 w-5" /> },
-  { href: "/admin", label: "Admin", labelAr: "الإدارة", icon: <Shield className="h-5 w-5" />, adminOnly: true },
+  { href: "/", label: "Canvas", icon: <Home className="h-5 w-5" /> },
+  { href: "/transcripts", label: "Transcripts", icon: <Mic className="h-5 w-5" /> },
+  { href: "/admin", label: "Admin", icon: <Shield className="h-5 w-5" />, adminOnly: true },
 ];
 
 interface NavRailProps {
-  lang: Lang;
+  lang?: Lang;
   role?: string;
 }
 
-export function NavRail({ lang, role }: NavRailProps) {
+export function NavRail({ role }: NavRailProps) {
   const isAdmin = role === "admin" || role === "owner";
 
   return (
@@ -34,12 +33,12 @@ export function NavRail({ lang, role }: NavRailProps) {
           .map((item) => (
             <Tooltip key={item.href}>
               <TooltipTrigger asChild>
-                <NavRailActiveItem href={item.href} label={lang === "ar" ? item.labelAr : item.label}>
+                <NavRailActiveItem href={item.href} label={item.label}>
                   {item.icon}
                 </NavRailActiveItem>
               </TooltipTrigger>
               <TooltipContent side="right">
-                {lang === "ar" ? item.labelAr : item.label}
+                {item.label}
               </TooltipContent>
             </Tooltip>
           ))}

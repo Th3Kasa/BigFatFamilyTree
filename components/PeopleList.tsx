@@ -28,7 +28,7 @@ export function PeopleList({ people, lang }: Props) {
   return (
     <main className="p-4 pb-20">
       <h1 className="text-xl font-bold mb-4">
-        {lang === "ar" ? "شجرة العائلة الكبيرة" : "Big Fat Family Tree"}
+        Big Fat Family Tree
       </h1>
       {[...groups.entries()].map(([group, members]) => (
         <section key={group} className="mb-6">

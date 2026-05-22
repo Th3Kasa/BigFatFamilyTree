@@ -16,9 +16,27 @@ export function MobileNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex h-16 items-center justify-around border-t border-[var(--border)] bg-[var(--surface-2)] backdrop-blur-sm safe-area-bottom">
+    <nav
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-center justify-around border-t border-[var(--border)] bg-[var(--surface-2)] backdrop-blur-sm"
+      style={{ height: "calc(4rem + env(safe-area-inset-bottom, 0px))", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
       {navItems.map(({ href, label, icon: Icon }) => {
         const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        if (href.startsWith("#")) {
+          return (
+            <button
+              key={href}
+              type="button"
+              className={cn(
+                "flex flex-col items-center gap-1 px-3 py-2 text-xs transition-colors",
+                "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              )}
+            >
+              <Icon className="h-5 w-5" />
+              <span>{label}</span>
+            </button>
+          );
+        }
         return (
           <Link
             key={href}
