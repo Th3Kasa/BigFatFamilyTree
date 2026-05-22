@@ -4,7 +4,13 @@ import { checkLimit } from "@/lib/ratelimit";
 
 const PUBLIC_PREFIXES = ["/login", "/auth/callback", "/_next", "/favicon.ico"];
 
+// File extensions that should bypass auth (static assets under /public).
+// Includes images, fonts, icons, and OG/manifest files.
+const PUBLIC_FILE_EXT =
+  /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|css|js|map|webmanifest|txt|xml)$/i;
+
 export function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_FILE_EXT.test(pathname)) return true;
   return PUBLIC_PREFIXES.some(
     (p) =>
       pathname === p ||

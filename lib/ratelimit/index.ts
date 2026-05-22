@@ -18,7 +18,7 @@ function getLimiters() {
     token: e.UPSTASH_REDIS_REST_TOKEN,
   });
   _limiters = {
-    auth: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(5, "1 m"), prefix: "rl:auth" }),
+    auth: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(30, "1 m"), prefix: "rl:auth" }),
     extraction: new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(10, "1 h"),
