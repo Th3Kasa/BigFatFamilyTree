@@ -1,0 +1,38 @@
+name: Install Alfred
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'yes' to install Alfred into this repo"
+        required: true
+        default: "yes"
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download alfred-setup.sh
+        run: |
+          curl -fsSL \
+            "https://raw.githubusercontent.com/Th3Kasa/BigFatFamilyTree/claude/multi-agent-ceo-system-QFWNZ/alfred-setup.sh" \
+            -o alfred-setup.sh
+          chmod +x alfred-setup.sh
+
+      - name: Run Alfred setup
+        run: bash alfred-setup.sh
+
+      - name: Push changes
+        run: |
+          git config user.name  "Alfred"
+          git config user.email "alfred-bot@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          git push
