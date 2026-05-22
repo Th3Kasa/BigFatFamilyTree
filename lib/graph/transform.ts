@@ -156,10 +156,18 @@ export function buildGraphElements(
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 90, marginx: 20, marginy: 20 });
     unpositioned.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
-    edges
-      .filter((e) => e.data?.edgeKind === "parent" || e.data?.edgeKind === "family-branch")
-      .filter((e) => unpositioned.some((n) => n.id === e.source) && unpositioned.some((n) => n.id === e.target))
-      .forEach((e) => g.setEdge(e.source, e.target));
+    // Feed Dagre ALL children from every family group, not just the representative child.
+    // This ensures siblings and children of remarriages are placed correctly.
+    const unpositionedIds = new Set(unpositioned.map((n) => n.id));
+    for (const e of edges) {
+      if (e.data?.edgeKind !== "family-branch") continue;
+      const fb = e.data as { fatherId: string | null; motherId: string | null; childIds: string[] };
+      const sourceId = fb.fatherId ?? fb.motherId;
+      if (!sourceId || !unpositionedIds.has(sourceId)) continue;
+      for (const childId of fb.childIds) {
+        if (unpositionedIds.has(childId)) g.setEdge(sourceId, childId);
+      }
+    }
     dagre.layout(g);
     unpositioned.forEach((n) => {
       const pos = g.node(n.id);
