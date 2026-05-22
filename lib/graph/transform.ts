@@ -43,6 +43,8 @@ export type GraphNode = {
   position: { x: number; y: number };
 };
 
+export type SpouseStatus = "current" | "divorced" | "widowed";
+
 export type GraphEdge = {
   id: string;
   source: string;
@@ -50,7 +52,11 @@ export type GraphEdge = {
   type: "smoothstep" | "straight";
   sourceHandle?: string;
   targetHandle?: string;
-  data?: { edgeKind: "parent" | "spouse"; relationshipId?: string };
+  data?: {
+    edgeKind: "parent" | "spouse";
+    relationshipId?: string;
+    status?: SpouseStatus;
+  };
   style?: React.CSSProperties;
   animated?: boolean;
 };
@@ -62,12 +68,25 @@ export function buildGraphElements(
 ): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const idSet = new Set(people.map((p) => p.id));
 
-  // Build spouse map for "add child" links (first spouse wins for the node data hint)
+  // Build spouse map for "add child" links. Prefer a current spouse;
+  // fall back to first relationship if only ex-spouses exist.
   const spouseMap = new Map<string, string>();
+  const spouseStatuses = new Map<string, string>();
   for (const r of relationships) {
-    if (r.type === "spouse") {
-      if (!spouseMap.has(r.person_a_id)) spouseMap.set(r.person_a_id, r.person_b_id);
-      if (!spouseMap.has(r.person_b_id)) spouseMap.set(r.person_b_id, r.person_a_id);
+    if (r.type !== "spouse") continue;
+    for (const [self, other] of [
+      [r.person_a_id, r.person_b_id],
+      [r.person_b_id, r.person_a_id],
+    ] as const) {
+      const currentBest = spouseStatuses.get(self);
+      const incoming = r.status;
+      if (
+        !currentBest ||
+        (currentBest !== "current" && incoming === "current")
+      ) {
+        spouseMap.set(self, other);
+        spouseStatuses.set(self, incoming);
+      }
     }
   }
 
@@ -120,6 +139,25 @@ export function buildGraphElements(
       const posA = posMap.get(r.person_a_id);
       const posB = posMap.get(r.person_b_id);
       const aIsLeft = !posA || !posB || posA.x <= posB.x;
+      const status = (r.status ?? "current") as SpouseStatus;
+      const style: React.CSSProperties = (() => {
+        if (status === "divorced") {
+          return {
+            stroke: "oklch(0.62 0.20 18 / 0.55)",
+            strokeWidth: 2,
+            strokeDasharray: "6 5",
+          };
+        }
+        if (status === "widowed") {
+          return {
+            stroke: "oklch(0.48 0.03 25 / 0.6)",
+            strokeWidth: 2,
+            strokeDasharray: "2 4",
+          };
+        }
+        // current
+        return { stroke: "oklch(0.62 0.20 18 / 0.85)", strokeWidth: 2.5 };
+      })();
       edges.push({
         id: `s-${r.person_a_id}-${r.person_b_id}`,
         source: aIsLeft ? r.person_a_id : r.person_b_id,
@@ -127,8 +165,8 @@ export function buildGraphElements(
         sourceHandle: "right",
         targetHandle: "left-target",
         type: "straight",
-        data: { edgeKind: "spouse", relationshipId: r.id },
-        style: { stroke: "#fda4af", strokeWidth: 2 },
+        data: { edgeKind: "spouse", relationshipId: r.id, status },
+        style,
       });
     }
   }

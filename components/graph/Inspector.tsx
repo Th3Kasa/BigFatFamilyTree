@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users } from "lucide-react";
+import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users, Baby } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
@@ -22,6 +24,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   deletePerson,
   unlinkParent,
   convertParentToSpouse,
@@ -30,14 +38,228 @@ import {
   linkParentChild,
   addSibling,
 } from "@/lib/actions/people";
+import {
+  deleteRelationship,
+  updateRelationshipStatus,
+} from "@/lib/actions/relationships";
 import { PersonPicker, type PickablePerson } from "./PersonPicker";
-import type { PersonInput } from "@/lib/graph/transform";
+import type {
+  GraphEdge,
+  PersonInput,
+  SpouseStatus,
+} from "@/lib/graph/transform";
 
 const fadeUp = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
 };
 const sectionTransition = { duration: 0.32, ease: [0.32, 0.72, 0.32, 1] as const };
+
+function personLabel(p: PickablePerson | undefined, lang: "ar" | "en") {
+  if (!p) return lang === "ar" ? "غير معروف" : "Unknown";
+  const given =
+    lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar;
+  const family =
+    lang === "ar"
+      ? p.family_name_ar ?? p.family_name_en
+      : p.family_name_en ?? p.family_name_ar;
+  return given || family || (lang === "ar" ? "بدون اسم" : "Unnamed");
+}
+
+function personInitials(p: PickablePerson | undefined, lang: "ar" | "en") {
+  if (!p) return "?";
+  const given =
+    lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar;
+  const family =
+    lang === "ar"
+      ? p.family_name_ar ?? p.family_name_en
+      : p.family_name_en ?? p.family_name_ar;
+  return (
+    ((given ?? "?")[0] ?? "?").toUpperCase() +
+    ((family ?? "")[0] ?? "").toUpperCase()
+  );
+}
+
+function SpouseRow({
+  selfId,
+  spouse,
+  relationshipId,
+  status,
+  lang,
+  onChange,
+}: {
+  selfId: string;
+  spouse: PickablePerson | undefined;
+  relationshipId: string;
+  status: SpouseStatus;
+  lang: "ar" | "en";
+  onChange: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const name = personLabel(spouse, lang);
+
+  const statusLabels: Record<SpouseStatus, { en: string; ar: string }> = {
+    current: { en: "Married", ar: "متزوج/ة" },
+    divorced: { en: "Divorced", ar: "مطلق/ة" },
+    widowed: { en: "Widowed", ar: "أرمل/ة" },
+  };
+
+  const statusStyles: Record<SpouseStatus, string> = {
+    current: "bg-[var(--highlight)]/10 text-[var(--highlight)] border-[var(--highlight)]/30",
+    divorced:
+      "bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)]",
+    widowed: "bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)]",
+  };
+
+  async function setStatus(next: SpouseStatus) {
+    if (next === status) return;
+    setBusy(true);
+    const r = await updateRelationshipStatus(relationshipId, next);
+    setBusy(false);
+    if (r.success) {
+      toast.success(
+        lang === "ar"
+          ? `تم تحديث الحالة: ${statusLabels[next].ar}`
+          : `Status updated: ${statusLabels[next].en}`,
+      );
+    } else {
+      toast.error(r.error ?? "Update failed");
+    }
+    onChange();
+  }
+
+  async function handleRemove() {
+    const ok = window.confirm(
+      lang === "ar"
+        ? `إزالة العلاقة مع ${name}؟`
+        : `Remove the relationship with ${name}?`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    const r = await deleteRelationship(relationshipId, selfId);
+    setBusy(false);
+    if (r?.success) {
+      toast.success(
+        lang === "ar" ? "تمت إزالة الزواج" : "Marriage removed",
+      );
+    } else {
+      toast.error((r as { error?: string } | null)?.error ?? "Remove failed");
+    }
+    onChange();
+  }
+
+  return (
+    <div className="group flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-sm">
+      <Avatar className="h-9 w-9 ring-2 ring-rose-200/80">
+        {spouse?.photo_url && (
+          <AvatarImage src={spouse.photo_url} alt={name} className="object-cover" />
+        )}
+        <AvatarFallback className="text-[10px] font-semibold bg-rose-50 text-rose-500">
+          {personInitials(spouse, lang)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className="truncate text-sm font-medium text-[var(--foreground)]">
+          {name}
+        </span>
+        <Badge
+          variant="outline"
+          className={cn(
+            "mt-0.5 w-fit rounded-full px-2 py-0 text-[10px] uppercase tracking-[0.14em]",
+            statusStyles[status],
+          )}
+        >
+          {statusLabels[status][lang]}
+        </Badge>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            disabled={busy}
+            aria-label={lang === "ar" ? "تغيير الحالة" : "Change status"}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
+              "transition-[transform,background-color,color] duration-200",
+              "hover:-translate-y-px hover:bg-[var(--highlight)] hover:text-[var(--highlight-foreground)]",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+            )}
+          >
+            <Heart className="h-3.5 w-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          {(["current", "divorced", "widowed"] as SpouseStatus[]).map((s) => (
+            <DropdownMenuItem
+              key={s}
+              onClick={() => setStatus(s)}
+              className={cn(
+                "text-xs",
+                status === s && "font-semibold",
+              )}
+            >
+              {statusLabels[s][lang]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <button
+        type="button"
+        onClick={handleRemove}
+        disabled={busy}
+        aria-label={lang === "ar" ? "إزالة" : "Remove"}
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
+          "transition-[transform,background-color,color] duration-200",
+          "hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+        )}
+      >
+        <Link2Off className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function KinRow({
+  person,
+  lang,
+  accent = "neutral",
+}: {
+  person: PickablePerson;
+  lang: "ar" | "en";
+  accent?: "rose" | "coral" | "neutral";
+}) {
+  const ringClass =
+    accent === "rose"
+      ? "ring-rose-200/80"
+      : accent === "coral"
+        ? "ring-[oklch(0.86_0.07_38)]/70"
+        : "ring-[var(--border)]";
+
+  return (
+    <Link
+      href={`/person/${person.slug ?? person.id}`}
+      className="group flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-sm transition-[transform,background-color] duration-200 hover:-translate-y-px hover:bg-[var(--muted)]/40"
+    >
+      <Avatar className={cn("h-8 w-8 ring-2", ringClass)}>
+        {person.photo_url && (
+          <AvatarImage
+            src={person.photo_url}
+            alt={personLabel(person, lang)}
+            className="object-cover"
+          />
+        )}
+        <AvatarFallback className="text-[10px] font-semibold">
+          {personInitials(person, lang)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="truncate text-sm font-medium text-[var(--foreground)]">
+        {personLabel(person, lang)}
+      </span>
+    </Link>
+  );
+}
 
 function ParentRow({
   label,
@@ -145,14 +367,75 @@ type Props = {
   fatherName?: string | null;
   motherName?: string | null;
   people?: PickablePerson[];
+  edges?: GraphEdge[];
 };
 
 type PickerKind = "spouse" | "child" | "parent" | "sibling" | null;
 
-export function Inspector({ person, lang, onClose, fatherName, motherName, people = [] }: Props) {
+export function Inspector({
+  person,
+  lang,
+  onClose,
+  fatherName,
+  motherName,
+  people = [],
+  edges = [],
+}: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [picker, setPicker] = useState<PickerKind>(null);
+
+  const peopleById = useMemo(() => {
+    const m = new Map<string, PickablePerson>();
+    for (const p of people) m.set(p.id, p);
+    return m;
+  }, [people]);
+
+  // Spouses derived from edges (spouse-kind only)
+  const spouses = useMemo(() => {
+    if (!person) return [] as { otherId: string; relationshipId: string; status: SpouseStatus }[];
+    const out: { otherId: string; relationshipId: string; status: SpouseStatus }[] = [];
+    for (const e of edges) {
+      if (e.data?.edgeKind !== "spouse") continue;
+      if (e.source !== person.id && e.target !== person.id) continue;
+      const otherId = e.source === person.id ? e.target : e.source;
+      out.push({
+        otherId,
+        relationshipId: e.data.relationshipId ?? "",
+        status: (e.data.status ?? "current") as SpouseStatus,
+      });
+    }
+    return out;
+  }, [edges, person]);
+
+  // Children inferred from people (father_id or mother_id matches)
+  const children = useMemo(() => {
+    if (!person) return [] as PickablePerson[];
+    return people.filter(
+      (p) =>
+        p.id !== person.id &&
+        ((p as PersonInput).father_id === person.id ||
+          (p as PersonInput).mother_id === person.id),
+    );
+  }, [people, person]);
+
+  // Siblings inferred via shared parent
+  const siblings = useMemo(() => {
+    if (!person) return [] as PickablePerson[];
+    if (!person.father_id && !person.mother_id) return [];
+    const seen = new Set<string>();
+    return people.filter((p) => {
+      if (p.id === person.id || seen.has(p.id)) return false;
+      const pp = p as PersonInput;
+      const sharedFather = person.father_id && pp.father_id === person.father_id;
+      const sharedMother = person.mother_id && pp.mother_id === person.mother_id;
+      if (sharedFather || sharedMother) {
+        seen.add(p.id);
+        return true;
+      }
+      return false;
+    });
+  }, [people, person]);
 
   function handleDelete() {
     if (!person) return;
@@ -271,6 +554,30 @@ export function Inspector({ person, lang, onClose, fatherName, motherName, peopl
             </motion.div>
           )}
 
+          {/* Spouses — current + ex with status badges and actions */}
+          {person && spouses.length > 0 && (
+            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                {lang === "ar" ? "الزواج" : "Marriages"}
+              </p>
+              <div className="space-y-2">
+                {spouses.map((s) => (
+                  <SpouseRow
+                    key={s.relationshipId || `${s.otherId}-${s.status}`}
+                    selfId={person.id}
+                    spouse={peopleById.get(s.otherId)}
+                    relationshipId={s.relationshipId}
+                    status={s.status}
+                    lang={lang}
+                    onChange={() => {
+                      router.refresh();
+                    }}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           {/* Parents — with quick-fix actions */}
           {person && (person.father_id || person.mother_id) && (
             <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
@@ -304,6 +611,44 @@ export function Inspector({ person, lang, onClose, fatherName, motherName, peopl
                     }}
                   />
                 )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Children */}
+          {person && children.length > 0 && (
+            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                {lang === "ar" ? `الأبناء (${children.length})` : `Children (${children.length})`}
+              </p>
+              <div className="space-y-2">
+                {children.map((c) => (
+                  <KinRow
+                    key={c.id}
+                    person={c}
+                    lang={lang}
+                    accent={c.gender === "f" ? "rose" : c.gender === "m" ? "coral" : "neutral"}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Siblings */}
+          {person && siblings.length > 0 && (
+            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                {lang === "ar" ? `الإخوة (${siblings.length})` : `Siblings (${siblings.length})`}
+              </p>
+              <div className="space-y-2">
+                {siblings.map((s) => (
+                  <KinRow
+                    key={s.id}
+                    person={s}
+                    lang={lang}
+                    accent={s.gender === "f" ? "rose" : s.gender === "m" ? "coral" : "neutral"}
+                  />
+                ))}
               </div>
             </motion.div>
           )}
@@ -401,14 +746,39 @@ export function Inspector({ person, lang, onClose, fatherName, motherName, peopl
           : "Pick an existing person or create a new one";
         const excludeIds = [person.id];
         const handlePick = async (otherId: string) => {
+          const other = peopleById.get(otherId);
+          const otherLabel = personLabel(other, lang);
+          const selfLabel = personLabel(
+            { id: person.id, given_en: person.given_en, given_ar: person.given_ar, family_name_en: person.family_name_en, family_name_ar: person.family_name_ar } as PickablePerson,
+            lang,
+          );
+          let result: { success: boolean; error?: string } | null = null;
+          let successMsg = "";
           if (picker === "spouse") {
-            await linkSpouse(person.id, otherId);
+            result = await linkSpouse(person.id, otherId);
+            successMsg = lang === "ar"
+              ? `تم ربط ${otherLabel} كزوج/ة لـ ${selfLabel}`
+              : `${otherLabel} linked as ${selfLabel}'s spouse`;
           } else if (picker === "child") {
-            await linkChild(person.id, otherId);
+            result = await linkChild(person.id, otherId);
+            successMsg = lang === "ar"
+              ? `تم ربط ${otherLabel} كطفل لـ ${selfLabel}`
+              : `${otherLabel} linked as ${selfLabel}'s child`;
           } else if (picker === "parent") {
-            await linkParentChild(otherId, person.id);
+            result = await linkParentChild(otherId, person.id);
+            successMsg = lang === "ar"
+              ? `تم ربط ${otherLabel} كأب/أم لـ ${selfLabel}`
+              : `${otherLabel} linked as ${selfLabel}'s parent`;
           } else if (picker === "sibling") {
-            await addSibling(person.id, otherId);
+            result = await addSibling(person.id, otherId);
+            successMsg = lang === "ar"
+              ? `تم ربط ${otherLabel} كشقيق/ة لـ ${selfLabel}`
+              : `${otherLabel} linked as ${selfLabel}'s sibling`;
+          }
+          if (result?.success) {
+            toast.success(successMsg);
+          } else if (result) {
+            toast.error(result.error ?? "Couldn't create the link");
           }
         };
         return (

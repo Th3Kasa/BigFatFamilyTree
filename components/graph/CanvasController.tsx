@@ -398,6 +398,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         lang={lang}
         onClose={() => setSelectedPerson(null)}
         people={people}
+        edges={edges as unknown as import("@/lib/graph/transform").GraphEdge[]}
         fatherName={
           selectedPerson?.father_id
             ? (() => {

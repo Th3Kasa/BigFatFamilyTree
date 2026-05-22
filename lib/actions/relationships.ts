@@ -66,3 +66,23 @@ export async function deleteRelationship(
   revalidatePath(`/person/${personId}`);
   return { success: true };
 }
+
+export async function updateRelationshipStatus(
+  relationshipId: string,
+  status: RelStatus,
+): Promise<{ success: boolean; error?: string }> {
+  if (!VALID_STATUSES.includes(status)) {
+    return { success: false, error: "Invalid status." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("relationships")
+    .update({ status })
+    .eq("id", relationshipId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/");
+  return { success: true };
+}
