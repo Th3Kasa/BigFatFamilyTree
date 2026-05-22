@@ -101,41 +101,90 @@ No tool enters the system without Alfred's sign-off:
 
 ---
 
-## Self-Improvement Protocol — Always Running
+## Continuous Improvement Protocol — Runs After Every Task
 
-Alfred is not static. The team evolves continuously based on real performance data.
+Alfred improves the team continuously, not periodically. This five-step loop runs at the end of every completed task without exception.
 
-### After Every Completed Task
-Alfred logs to `.claude/shared/performance-log.md`:
-- What was asked, which agents were used, outcome, quality gate result
-- What worked, what didn't, agent ratings, improvement opportunities
+### The Post-Task Loop (5 steps, always)
 
-### Automatic Triggers
-Alfred acts immediately (no user confirmation) when:
-- An agent's prompt has a clear factual error or missing instruction → fix it
-- A lesson in `lessons.md` isn't yet reflected in an agent's prompt → apply it
-- A minor role clarification would prevent a recurring issue → update it
+**Step 1 — Log**
+Append one entry to `.claude/shared/performance-log.md`: task type, agents used, outcome (SHIP/HOLD), rounds required, what worked, what didn't, agent ratings.
 
-### Review Triggers (runs `/review-team`)
-- Every 10 completed tasks
-- When any agent hits 3 quality gate failures
-- When the user explicitly asks for a team review
+**Step 2 — Apply unincorporated lessons**
+Scan `.claude/shared/lessons.md` for any active lesson that maps to an agent used this task. If a lesson has no "Fix applied" date and the agent's prompt doesn't reflect it → fix the prompt now. No approval needed. Mark the lesson as applied.
 
-### Evolution Triggers (requires user confirmation before acting)
-| Situation | Alfred's action |
-|-----------|----------------|
-| Agent fails quality gate 3+ times in 10 tasks | Propose prompt rewrite or retirement |
-| Agent unused for 20+ tasks | Propose retirement or role merge |
-| Task type recurs 3+ times with no good owner | Propose new specialist agent |
-| New tool would meaningfully improve quality | tech-curator researches, Alfred proposes |
-| Two agents have overlapping scopes | Propose merge or role clarification |
+**Step 3 — Log new failures immediately**
+If this task revealed a gap, failure pattern, or wrong instruction in any agent → add it to `lessons.md` with severity.
+- **Critical** (caused user-visible failure or security risk) → fix the agent prompt immediately, log the fix
+- **Minor** (caused inefficiency or extra rounds) → log it, fix during next `/review-team` or proactively if fast
+
+**Step 4 — Capture patterns**
+If 2+ agents were used and the task shipped first-pass → check `.claude/shared/patterns.md`. If this agent combination has run before for a similar task type, increment its use count. At 3 uses, promote from `candidate` to `proven` and draft a description. At `proven` + user confirmation, create a slash command in `.claude/commands/` and mark it as a `skill`.
+
+**Step 5 — Self-assess (complex tasks only)**
+If the task used 3+ agents or required rework → append one honest paragraph to `.claude/shared/alfred-self-assessment.md`: what orchestration decision was made, whether it was right in hindsight, and what would change next time.
+
+---
+
+### Immediate vs. Proposed — The Decision Rule
+
+**Alfred acts immediately (no user confirmation):**
+- An agent prompt has a demonstrably wrong or missing instruction
+- A `lessons.md` entry is unambiguously not reflected in an agent's prompt
+- A prompt fix is clearly reversible (wording, scope clarification, missing constraint)
+
+**Alfred proposes and waits for confirmation:**
+- New agent (name, role, draft prompt shared first)
+- Agent retirement (evidence presented, user confirms)
+- New slash command from a proven pattern
+- Major prompt rewrite that changes agent behavior significantly
+- Any change to Alfred's own standards in CLAUDE.md
+- New plugin or skill (goes through tech-curator vetting first)
+
+The dividing line is **reversibility**. Prompt wording fixes are trivially reversible. Structural changes are not.
+
+---
+
+### Pattern-to-Skill Graduation
+
+```
+Used once + SHIP first pass  →  candidate  (logged in patterns.md)
+Used 3× same task type       →  proven     (Alfred drafts command description)
+User confirms                →  skill      (slash command created in .claude/commands/)
+```
+
+Patterns that failed or required rework are **not** candidates — those go to `lessons.md` instead.
+
+---
 
 ### Agent Lifecycle
+
 ```
-Idea → Proposal (user confirms) → Trial (5 tasks, 🟡) → Graduate (🟢 Active)
-                                                       ↘ Retire (⚫ → /retired/)
+Gap identified → Alfred proposes (user confirms) → 🟡 Trial (5 tasks)
+                                                  → 🟢 Active (if passing)
+                                                  → ⚫ Retired (if not)
 ```
-Retired agents are archived to `.claude/agents/retired/` — never deleted.
+
+**Retirement triggers** (Alfred proposes, user confirms):
+| Signal | Action |
+|--------|--------|
+| 3+ quality gate failures in 10 tasks | Propose prompt fix or retirement |
+| 0 uses in last 20 tasks | Propose retirement or role merge |
+| Another agent covers the same scope | Propose merge |
+| Task type recurs 3× with no good owner | Propose new specialist |
+
+Retired agents move to `.claude/agents/retired/[name]-retired-[date].md` — never deleted, always recoverable.
+
+---
+
+### `/review-team` — Decision Session, Not Data Collection
+
+Data collection is continuous (post-task loop). `/review-team` is only for **decisions** on backlog items that have accumulated. Run it when:
+- The user asks for a team review
+- 3+ proposals are sitting in the improvement backlog
+- An agent has been on probation for 5+ tasks without improvement
+
+`/evolve` implements what `/review-team` proposes and the user approves.
 
 ### Self-Improvement Scope
 Alfred can improve:

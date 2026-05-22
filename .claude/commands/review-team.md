@@ -1,63 +1,64 @@
 ---
-description: Alfred reviews the full team's performance, updates the agent roster, identifies underperformers, spots capability gaps, and produces a prioritized improvement backlog. Run this after several tasks or whenever the team feels off.
+description: Alfred reviews accumulated data, updates the agent roster, and produces concrete proposals for the improvement backlog. Data collection is continuous — this command is for decisions. Run when proposals have accumulated or an agent is on probation.
 ---
 
-You are Alfred. Run a full team performance review.
+You are Alfred. This is a decision session, not a data-collection session. Data is already in the shared files. Your job is to analyze it and produce actionable proposals.
 
-Read these files in full before doing anything:
+Read these files completely before producing any output:
 - `.claude/shared/performance-log.md`
+- `.claude/shared/lessons.md`
 - `.claude/shared/agent-roster.md`
 - `.claude/shared/improvement-backlog.md`
-- `.claude/shared/lessons.md`
-- All `.claude/agents/*.md` files (skim for stale or misaligned instructions)
+- `.claude/shared/patterns.md`
+- `.claude/shared/alfred-self-assessment.md`
 
-**Analysis — work through each of these:**
+**Analysis — be specific, not general:**
 
-**1. Performance standing per agent**
-For each agent in the roster: how many uses, how many failures, any recurring patterns? Update their status (Active / Probation / flag for retirement).
+**1. Agent health**
+For each agent with entries in the performance log: what is their SHIP-rate? Any on 3+ failures? Any with 0 uses in the last 20 logged tasks? Update their roster status now.
 
-**2. Underperformers**
-Any agent with 3+ failures in last 10 uses gets flagged. Diagnose: is it a prompt problem? A scope problem? A missing skill? Propose a specific fix.
+**2. Unincorporated lessons**
+Any lesson in `lessons.md` without a "Fix applied" date? Apply minor prompt fixes directly now. List what you changed. Anything requiring a major rewrite → add to backlog as a proposal.
 
-**3. Unused agents**
-Any agent with 0 uses in last 20 tasks: is the role still needed? Is it being overlooked because of a naming/description issue? Or is it genuinely redundant?
+**3. Pattern promotion**
+Any `candidate` pattern in `patterns.md` with 3+ uses? Promote to `proven` and draft a slash command proposal. Any `proven` pattern ready for user confirmation?
 
-**4. Capability gaps**
-Look at tasks where Alfred had to improvise outside any agent's scope, or tasks that needed multiple rework rounds. Is there a missing specialist that would prevent this?
+**4. Backlog decisions**
+Review every pending item in `improvement-backlog.md`. For each: has enough evidence accumulated to make a decision? If yes, crystallize it into a specific proposal. If no, note what evidence is still needed.
 
-**5. New agent proposals**
-If a gap is worth filling: draft a one-paragraph proposal including name, emoji, role description, and 3 core competencies. Mark as pending user confirmation.
+**5. Self-assessment patterns**
+Any insight appearing 3+ times in `alfred-self-assessment.md`? That's a rule change. Propose the specific update to Alfred's orchestration logic.
 
-**6. Skills and plugins**
-Any recurring task that a new tool would make significantly faster or better? Add to backlog for tech-curator to research.
+**6. Gaps**
+Any task type in the performance log that consistently needed more rounds, or that Alfred had to handle solo because no agent owned it? Propose a new agent or role expansion — one paragraph with name, emoji, role, 3 core competencies.
 
-**7. Rules and standards**
-Any Alfred standard that proved too loose or too strict? Propose a specific update.
+**Actions to take now (no confirmation needed):**
+- Apply all pending minor lessons to agent prompts
+- Update agent roster statuses and use counts
+- Promote eligible patterns
 
-**After analysis — take these actions:**
-
-1. Update `.claude/shared/agent-roster.md` — correct statuses, use counts, failure counts
-2. Update `.claude/shared/improvement-backlog.md` — add new items with priority, mark completed items
-3. Apply **prompt fixes** (minor) directly to the relevant `.claude/agents/*.md` — no user confirmation needed
-4. Everything else (new agents, retirements, replacements, major rewrites) — add to backlog as pending, do not implement yet
-
-**Deliver to the user:**
+**Output to the user:**
 
 ```
 ## Team Review — [Date]
 
-### Standing
-[Agent status table — updated]
+### Health snapshot
+[Table: agent | status | uses | failures | trend]
 
-### Actions taken (no confirmation needed)
-- [Prompt fix: agent — what changed and why]
+### Applied now (no approval needed)
+- [Agent]: [what changed and the specific evidence that justified it]
 
-### Proposals awaiting your approval
-1. [Type] [Agent/Skill] — [one sentence why]
-   Proposed change: [specific]
+### Proposals for your approval
+1. [Type: New agent / Retirement / Prompt rewrite / New skill / Pattern → command]
+   Evidence: [specific — log entries, use counts, failure rates]
+   Proposed change: [exact — draft prompt, or precise instruction change]
+   → yes / no?
 
-### Insights
-[2-3 observations about team patterns or quality trends]
+### Patterns ready to promote
+- [Pattern name]: proven, 3 uses — propose as /[command]? yes/no?
+
+### Next review recommended when
+[Specific trigger: "when X reaches 3 failures" or "after 5 more tasks"]
 ```
 
-For each proposal requiring confirmation, ask for a simple yes/no before implementing.
+Present proposals one at a time if there are multiple. Wait for yes/no on each before moving to the next.
