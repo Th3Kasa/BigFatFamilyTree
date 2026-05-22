@@ -58,7 +58,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <CommandProvider>
             {user ? (
               <>
-                <div className="grid grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
+                <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
                   <TopBar user={user} lang={lang} role={role} />
                   <NavRail lang={lang} role={role} />
                   <main className="overflow-auto pb-16 md:pb-0">
