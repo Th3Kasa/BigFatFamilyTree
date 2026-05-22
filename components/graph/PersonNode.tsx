@@ -97,6 +97,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         <Handle
           type="target"
           position={Position.Top}
+          id="top"
           style={PARENT_STYLE}
           title={tip.parentIn}
         />
@@ -149,6 +150,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         <Handle
           type="source"
           position={Position.Bottom}
+          id="bottom"
           style={PARENT_STYLE}
           title={tip.parent}
         />
@@ -191,6 +193,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
       <Handle
         type="target"
         position={Position.Top}
+        id="top"
         style={PARENT_STYLE}
         title={tip.parentIn}
       />
@@ -398,6 +401,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
       <Handle
         type="source"
         position={Position.Bottom}
+        id="bottom"
         style={PARENT_STYLE}
         title={tip.parent}
       />

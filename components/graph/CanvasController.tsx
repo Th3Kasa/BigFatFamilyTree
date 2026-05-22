@@ -212,8 +212,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
 
   function preselectFromHandle(handle: string | null | undefined): RelationshipChoice | undefined {
     if (handle === "left" || handle === "right") return "spouse";
-    // Top/bottom handles are unlabeled; bottom→top => source is the parent.
-    return "parent";
+    if (handle === "bottom" || handle == null) return "parent";
+    return undefined; // top is a target handle, can't be dragged from
   }
 
   const personPersonName = (id: string) => {
