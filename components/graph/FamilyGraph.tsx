@@ -5,6 +5,7 @@ import {
   Background,
   BackgroundVariant,
   type NodeTypes,
+  type EdgeTypes,
   type Node,
   type Edge,
   type Connection,
@@ -17,9 +18,11 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { PersonNode } from "./PersonNode";
+import { FamilyBranchEdge } from "./FamilyBranchEdge";
 import type { GraphNode, GraphEdge } from "@/lib/graph/transform";
 
 const nodeTypes: NodeTypes = { person: PersonNode };
+const edgeTypes: EdgeTypes = { "family-branch": FamilyBranchEdge };
 
 type Props = {
   nodes: GraphNode[];
@@ -64,6 +67,7 @@ export function FamilyGraph({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
 
         minZoom={0.1}
         maxZoom={2.5}

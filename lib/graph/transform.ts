@@ -49,13 +49,19 @@ export type GraphEdge = {
   id: string;
   source: string;
   target: string;
-  type: "smoothstep" | "straight" | "step";
+  type: "smoothstep" | "straight" | "step" | "family-branch";
   sourceHandle?: string;
   targetHandle?: string;
+  selectable?: boolean;
+  focusable?: boolean;
+  deletable?: boolean;
   data?: {
-    edgeKind: "parent" | "spouse";
+    edgeKind: "parent" | "spouse" | "family-branch";
     relationshipId?: string;
     status?: SpouseStatus;
+    fatherId?: string | null;
+    motherId?: string | null;
+    childIds?: string[];
   };
   style?: React.CSSProperties;
   animated?: boolean;
@@ -99,13 +105,44 @@ export function buildGraphElements(
 
   const edges: GraphEdge[] = [];
 
+  // Group children by their parent pair (fatherId|motherId)
+  // so we can render one T-junction bracket per family unit.
+  const familyGroups = new Map<
+    string,
+    { fatherId: string | null; motherId: string | null; childIds: string[] }
+  >();
+
   for (const p of people) {
-    if (p.father_id && idSet.has(p.father_id)) {
-      edges.push({ id: `f-${p.id}`, source: p.father_id, target: p.id, type: "step", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" }, style: { stroke: "oklch(0.38 0.06 18 / 0.55)", strokeWidth: 1.5 } });
+    const fid = p.father_id && idSet.has(p.father_id) ? p.father_id : null;
+    const mid = p.mother_id && idSet.has(p.mother_id) ? p.mother_id : null;
+    if (!fid && !mid) continue;
+    const key = `${fid ?? ""}|${mid ?? ""}`;
+    if (!familyGroups.has(key)) {
+      familyGroups.set(key, { fatherId: fid, motherId: mid, childIds: [] });
     }
-    if (p.mother_id && idSet.has(p.mother_id)) {
-      edges.push({ id: `m-${p.id}`, source: p.mother_id, target: p.id, type: "step", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" }, style: { stroke: "oklch(0.38 0.06 18 / 0.55)", strokeWidth: 1.5 } });
-    }
+    familyGroups.get(key)!.childIds.push(p.id);
+  }
+
+  for (const [key, { fatherId, motherId, childIds }] of familyGroups) {
+    const sourceId = fatherId ?? motherId!;
+    const targetId = childIds[0];
+    edges.push({
+      id: `fb-${key}`,
+      source: sourceId,
+      target: targetId,
+      type: "family-branch",
+      sourceHandle: "bottom",
+      targetHandle: "top",
+      selectable: false,
+      focusable: false,
+      deletable: false,
+      data: {
+        edgeKind: "family-branch",
+        fatherId,
+        motherId,
+        childIds,
+      },
+    } as GraphEdge);
   }
 
   // Only nodes WITHOUT stored positions go through dagre
@@ -120,7 +157,7 @@ export function buildGraphElements(
     g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 90, marginx: 20, marginy: 20 });
     unpositioned.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
     edges
-      .filter((e) => e.data?.edgeKind === "parent")
+      .filter((e) => e.data?.edgeKind === "parent" || e.data?.edgeKind === "family-branch")
       .filter((e) => unpositioned.some((n) => n.id === e.source) && unpositioned.some((n) => n.id === e.target))
       .forEach((e) => g.setEdge(e.source, e.target));
     dagre.layout(g);
