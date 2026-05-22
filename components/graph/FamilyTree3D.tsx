@@ -85,6 +85,16 @@ function computeGenerations(people: PersonInput[]) {
   return generation;
 }
 
+/**
+ * Top-down family-tree layout in 3D.
+ *
+ * - Generations stack on the Y axis (grandparents top → grandchildren below).
+ * - Within a generation, members are sorted so siblings stay adjacent,
+ *   spouses cluster next to each other, and children sit roughly below the
+ *   midpoint of their parents.
+ * - Slight Z zig-zag per generation breaks the flat look without
+ *   sacrificing readability.
+ */
 function computeInitialPositions(people: PersonInput[]): Map<string, Vec3> {
   const generation = computeGenerations(people);
   const byGen = new Map<number, PersonInput[]>();
@@ -93,23 +103,57 @@ function computeInitialPositions(people: PersonInput[]): Map<string, Vec3> {
     if (!byGen.has(g)) byGen.set(g, []);
     byGen.get(g)!.push(p);
   }
+
   const positions = new Map<string, Vec3>();
   const generations = [...byGen.keys()].sort((a, b) => a - b);
+  const SPACING_X = 3.2;
+  const SPACING_Y = 4.4;
+
+  // First pass: place root generation in declaration order
   for (const g of generations) {
     const members = byGen.get(g)!;
+    // Sort so children fall under their parent midpoints when their parents
+    // are already positioned. For the root generation this is just declaration order.
+    members.sort((a, b) => {
+      const ax = avgParentX(a, positions);
+      const bx = avgParentX(b, positions);
+      if (ax !== null && bx !== null) return ax - bx;
+      if (ax !== null) return -1;
+      if (bx !== null) return 1;
+      // Stable fallback by name so layout is deterministic
+      const aName = (a.given_en ?? a.given_ar ?? a.id).toLowerCase();
+      const bName = (b.given_en ?? b.given_ar ?? b.id).toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
     const count = members.length;
-    const radius = Math.max(3.5, count * 1.4);
+    const startX = -((count - 1) * SPACING_X) / 2;
     members.forEach((p, idx) => {
-      const angle = (idx / Math.max(count, 1)) * Math.PI * 2;
-      const phase = g * 0.45;
-      const x = Math.cos(angle + phase) * radius;
-      // 3D depth: stagger Z by a different ratio
-      const z = Math.sin(angle + phase) * radius * 0.85;
-      const y = -g * 3.6;
+      const x = startX + idx * SPACING_X;
+      const y = -g * SPACING_Y;
+      // Small Z zig-zag for depth — even generations forward, odd back
+      const z = g % 2 === 0 ? 0.4 : -0.4;
       positions.set(p.id, [x, y, z]);
     });
   }
   return positions;
+}
+
+function avgParentX(
+  p: PersonInput,
+  positions: Map<string, Vec3>,
+): number | null {
+  const xs: number[] = [];
+  if (p.father_id) {
+    const v = positions.get(p.father_id);
+    if (v) xs.push(v[0]);
+  }
+  if (p.mother_id) {
+    const v = positions.get(p.mother_id);
+    if (v) xs.push(v[0]);
+  }
+  if (xs.length === 0) return null;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
 /**
@@ -327,21 +371,22 @@ function ConstellationNode({
         )}
       </Suspense>
 
-      {/* Name label — always visible, scales with camera distance */}
+      {/* Name label — fixed screen size (no distanceFactor) so it stays readable */}
       <Html
-        position={[0, -1.05, 0]}
+        position={[0, -1.0, 0]}
         center
-        distanceFactor={6}
         style={{ pointerEvents: "none" }}
       >
         <div
-          className="whitespace-nowrap rounded-full px-3 py-1 text-sm font-semibold tracking-wide backdrop-blur-md"
+          className="whitespace-nowrap rounded-full px-3 py-1 text-base font-semibold tracking-wide backdrop-blur-md"
           style={{
-            background: showLabel ? "rgba(22, 14, 18, 0.9)" : "rgba(22, 14, 18, 0.7)",
+            background: showLabel ? "rgba(22, 14, 18, 0.92)" : "rgba(22, 14, 18, 0.78)",
             color: "#fbf6ee",
-            border: `1px solid ${accent}${showLabel ? "aa" : "77"}`,
-            boxShadow: `0 0 ${showLabel ? "22px" : "14px"} ${accent}${showLabel ? "99" : "55"}`,
+            border: `1px solid ${accent}${showLabel ? "cc" : "88"}`,
+            boxShadow: `0 0 ${showLabel ? "24px" : "14px"} ${accent}${showLabel ? "aa" : "66"}`,
             fontFamily: "var(--font-display)",
+            fontSize: 16,
+            letterSpacing: "0.01em",
             transition: "all 200ms ease-out",
           }}
         >
