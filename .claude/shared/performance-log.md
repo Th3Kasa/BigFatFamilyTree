@@ -22,6 +22,18 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-05-22 — Task #2
+**Task:** Fix T-junction vertical bracket — drop should originate from the marriage line (mid-height of person cards) not from the bottom handle
+**Agents used:** Alfred (direct — single targeted fix, 3 lines changed)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, no rework
+**What worked:** Root cause was precise: left/right handles sit at NODE_HEIGHT/2; changing startY from NODE_HEIGHT to NODE_HEIGHT/2 fixed all three parent-combination cases in one edit
+**What didn't:** Nothing failed
+**Agent ratings this task:** Alfred solo ⭐⭐⭐⭐⭐ — direct fix, no delegation needed
+**Improvement opportunity:** None — single-file surgical fix, correct pattern
+
+---
+
 ### 2026-05-22 — Task #1
 **Task:** Fix canvas connection dots — each person card should have visible handle dots at Left/Right/Top/Bottom; connections should route from the exact dot the user dragged, not a default position
 **Agents used:** Explore (codebase survey), web-builder (implementation)
