@@ -1,6 +1,6 @@
 "use client";
 
-import { useNodes, type EdgeProps } from "@xyflow/react";
+import { useNodes, useEdges, type EdgeProps } from "@xyflow/react";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 240;
@@ -14,16 +14,37 @@ type FamilyBranchData = {
 
 export function FamilyBranchEdge({ data }: EdgeProps) {
   const nodes = useNodes();
+  const edges = useEdges();
   const { fatherId, motherId, childIds } = (data ?? {}) as FamilyBranchData;
 
   const fatherNode = fatherId ? nodes.find((n) => n.id === fatherId) : null;
   const motherNode = motherId ? nodes.find((n) => n.id === motherId) : null;
+
+  // When only one parent is known in the family group, look for that parent's
+  // spouse edge on the canvas and use the marriage midpoint as the drop origin.
+  // Prefers current-status spouse; falls back to any spouse.
+  function findSpouseNode(parentId: string) {
+    const spouseEdges = edges.filter(
+      (e) =>
+        (e.data as { edgeKind?: string } | undefined)?.edgeKind === "spouse" &&
+        (e.source === parentId || e.target === parentId),
+    );
+    const preferred =
+      spouseEdges.find(
+        (e) => (e.data as { status?: string } | undefined)?.status === "current",
+      ) ?? spouseEdges[0];
+    if (!preferred) return null;
+    const spouseId =
+      preferred.source === parentId ? preferred.target : preferred.source;
+    return nodes.find((n) => n.id === spouseId) ?? null;
+  }
 
   // ── parent drop-start point ───────────────────────────────────
   let startX: number;
   let startY: number;
 
   if (fatherNode && motherNode) {
+    // Both parents explicit — midpoint of their centers
     const fx = fatherNode.position.x + NODE_WIDTH / 2;
     const mx = motherNode.position.x + NODE_WIDTH / 2;
     startX = (fx + mx) / 2;
@@ -32,11 +53,25 @@ export function FamilyBranchEdge({ data }: EdgeProps) {
       motherNode.position.y + NODE_HEIGHT,
     );
   } else if (fatherNode) {
-    startX = fatherNode.position.x + NODE_WIDTH / 2;
-    startY = fatherNode.position.y + NODE_HEIGHT;
+    // Only father recorded — check for a spouse on canvas and use marriage midpoint
+    const spouse = findSpouseNode(fatherId!);
+    if (spouse) {
+      startX = (fatherNode.position.x + NODE_WIDTH / 2 + spouse.position.x + NODE_WIDTH / 2) / 2;
+      startY = Math.max(fatherNode.position.y + NODE_HEIGHT, spouse.position.y + NODE_HEIGHT);
+    } else {
+      startX = fatherNode.position.x + NODE_WIDTH / 2;
+      startY = fatherNode.position.y + NODE_HEIGHT;
+    }
   } else if (motherNode) {
-    startX = motherNode.position.x + NODE_WIDTH / 2;
-    startY = motherNode.position.y + NODE_HEIGHT;
+    // Only mother recorded — check for a spouse on canvas and use marriage midpoint
+    const spouse = findSpouseNode(motherId!);
+    if (spouse) {
+      startX = (motherNode.position.x + NODE_WIDTH / 2 + spouse.position.x + NODE_WIDTH / 2) / 2;
+      startY = Math.max(motherNode.position.y + NODE_HEIGHT, spouse.position.y + NODE_HEIGHT);
+    } else {
+      startX = motherNode.position.x + NODE_WIDTH / 2;
+      startY = motherNode.position.y + NODE_HEIGHT;
+    }
   } else {
     return null;
   }
