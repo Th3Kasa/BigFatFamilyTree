@@ -30,10 +30,10 @@ export function TopBar({ user, lang, role }: TopBarProps) {
           />
         </span>
         <span
-          className="hidden tracking-tight sm:block"
+          className="tracking-tight"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          {lang === "ar" ? "شجرة العائلة الكبيرة" : "Big Fat Family"}
+          Big Fat Family
         </span>
       </Link>
 

@@ -150,18 +150,18 @@ export default async function PersonPage({ params }: Props) {
       />
 
       {/* Back nav */}
-      <div className="relative max-w-2xl mx-auto px-4 pt-6">
+      <div className="relative max-w-2xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6">
         <Link
           href="/"
-          className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-sm transition-colors hover:text-[var(--foreground)]"
+          className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-sm transition-colors hover:text-[var(--foreground)]"
         >
-          <span aria-hidden>{lang === "ar" ? "→" : "←"}</span>
-          {lang === "ar" ? "العودة" : "Back"}
+          <span aria-hidden>←</span>
+          Back
         </Link>
       </div>
 
       {/* Hero */}
-      <div className="relative max-w-2xl mx-auto px-4 pb-6">
+      <div className="relative max-w-2xl mx-auto px-3 sm:px-4 pb-20 sm:pb-6">
         <Card className="chrome-card relative overflow-hidden rounded-3xl">
           {/* Top sheen */}
           <div
@@ -170,18 +170,18 @@ export default async function PersonPage({ params }: Props) {
           />
 
           {/* Top bar with edit button */}
-          <div className="relative flex justify-end px-6 pt-5 gap-2">
+          <div className="relative flex justify-end px-4 sm:px-6 pt-4 sm:pt-5 gap-2">
             <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/edit`}>
               <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
                 <Edit2 className="h-3.5 w-3.5" />
-                {lang === "ar" ? "تعديل" : "Edit"}
+                Edit
               </Button>
             </Link>
             <DeletePersonButton action={handleDelete} lang={lang} />
           </div>
 
           {/* Avatar + name */}
-          <div className="relative flex flex-col items-center gap-4 px-6 pb-7 pt-3 text-center">
+          <div className="relative flex flex-col items-center gap-3 sm:gap-4 px-4 sm:px-6 pb-6 sm:pb-7 pt-3 text-center">
             <div className="relative">
               {/* Soft accent halo behind avatar */}
               <div
@@ -267,29 +267,29 @@ export default async function PersonPage({ params }: Props) {
             <TabsList className="w-full rounded-none border-b border-[var(--border)] bg-transparent h-auto p-0">
               <TabsTrigger
                 value="profile"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-sm"
+                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-xs sm:text-sm"
               >
-                <User className="h-3.5 w-3.5 mr-1.5" />
-                {lang === "ar" ? "الملف" : "Profile"}
+                <User className="h-3.5 w-3.5 mr-1" />
+                Profile
               </TabsTrigger>
               <TabsTrigger
                 value="events"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-sm"
+                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-xs sm:text-sm"
               >
-                <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                {lang === "ar" ? "الأحداث" : "Events"}
+                <Calendar className="h-3.5 w-3.5 mr-1" />
+                Events
               </TabsTrigger>
               <TabsTrigger
                 value="relations"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-sm"
+                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-xs sm:text-sm"
               >
-                <Users className="h-3.5 w-3.5 mr-1.5" />
-                {lang === "ar" ? "العلاقات" : "Relations"}
+                <Users className="h-3.5 w-3.5 mr-1" />
+                Relations
               </TabsTrigger>
             </TabsList>
 
             {/* ─── Profile Tab ─── */}
-            <TabsContent value="profile" className="p-6 space-y-6">
+            <TabsContent value="profile" className="p-4 sm:p-6 space-y-6">
               {/* Bilingual name fields as read-only cards */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide">
@@ -358,7 +358,7 @@ export default async function PersonPage({ params }: Props) {
             </TabsContent>
 
             {/* ─── Events Tab ─── */}
-            <TabsContent value="events" className="p-6">
+            <TabsContent value="events" className="p-4 sm:p-6">
               {events && events.length > 0 ? (
                 <ol className="relative border-s border-[var(--border)] space-y-0">
                   {events.map((e, i) => {
@@ -411,7 +411,7 @@ export default async function PersonPage({ params }: Props) {
             </TabsContent>
 
             {/* ─── Relations Tab ─── */}
-            <TabsContent value="relations" className="p-6 space-y-6">
+            <TabsContent value="relations" className="p-4 sm:p-6 space-y-6">
               {/* Parents row from person record */}
               {(person.father_id || person.mother_id) && (
                 <div>
