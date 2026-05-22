@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Breadcrumb } from "@/components/shell/Breadcrumb";
 import { UserMenu } from "@/components/shell/UserMenu";
-import { CommandTriggerClient } from "@/components/shell/CommandTriggerClient";
+import { SearchBar } from "@/components/ui/search-bar";
 import type { Lang } from "@/lib/lang/server";
 import type { User } from "@supabase/supabase-js";
 
@@ -42,9 +42,9 @@ export function TopBar({ user, lang, role }: TopBarProps) {
         <Breadcrumb />
       </div>
 
-      <div className="flex-1" />
-
-      <CommandTriggerClient />
+      <div className="flex flex-1 items-center justify-end">
+        <SearchBar lang={lang} />
+      </div>
 
       {user && <UserMenu user={user} role={role} />}
     </header>
