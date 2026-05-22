@@ -56,14 +56,14 @@ const fadeUp = {
 const sectionTransition = { duration: 0.32, ease: [0.32, 0.72, 0.32, 1] as const };
 
 function personLabel(p: PickablePerson | undefined, lang: "ar" | "en") {
-  if (!p) return lang === "ar" ? "غير معروف" : "Unknown";
+  if (!p) return "Unknown";
   const given =
     lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar;
   const family =
     lang === "ar"
       ? p.family_name_ar ?? p.family_name_en
       : p.family_name_en ?? p.family_name_ar;
-  return given || family || (lang === "ar" ? "بدون اسم" : "Unnamed");
+  return given || family || "Unnamed";
 }
 
 function personInitials(p: PickablePerson | undefined, lang: "ar" | "en") {
@@ -98,10 +98,10 @@ function SpouseRow({
   const [busy, setBusy] = useState(false);
   const name = personLabel(spouse, lang);
 
-  const statusLabels: Record<SpouseStatus, { en: string; ar: string }> = {
-    current: { en: "Married", ar: "متزوج/ة" },
-    divorced: { en: "Divorced", ar: "مطلق/ة" },
-    widowed: { en: "Widowed", ar: "أرمل/ة" },
+  const statusLabels: Record<SpouseStatus, string> = {
+    current: "Married",
+    divorced: "Divorced",
+    widowed: "Widowed",
   };
 
   const statusStyles: Record<SpouseStatus, string> = {
@@ -117,11 +117,7 @@ function SpouseRow({
     const r = await updateRelationshipStatus(relationshipId, next);
     setBusy(false);
     if (r.success) {
-      toast.success(
-        lang === "ar"
-          ? `تم تحديث الحالة: ${statusLabels[next].ar}`
-          : `Status updated: ${statusLabels[next].en}`,
-      );
+      toast.success(`Status updated: ${statusLabels[next]}`);
     } else {
       toast.error(r.error ?? "Update failed");
     }
@@ -129,19 +125,13 @@ function SpouseRow({
   }
 
   async function handleRemove() {
-    const ok = window.confirm(
-      lang === "ar"
-        ? `إزالة العلاقة مع ${name}؟`
-        : `Remove the relationship with ${name}?`,
-    );
+    const ok = window.confirm(`Remove the relationship with ${name}?`);
     if (!ok) return;
     setBusy(true);
     const r = await deleteRelationship(relationshipId, selfId);
     setBusy(false);
     if (r?.success) {
-      toast.success(
-        lang === "ar" ? "تمت إزالة الزواج" : "Marriage removed",
-      );
+      toast.success("Marriage removed");
     } else {
       toast.error((r as { error?: string } | null)?.error ?? "Remove failed");
     }
@@ -169,7 +159,7 @@ function SpouseRow({
             statusStyles[status],
           )}
         >
-          {statusLabels[status][lang]}
+          {statusLabels[status]}
         </Badge>
       </div>
       <DropdownMenu>
@@ -177,7 +167,7 @@ function SpouseRow({
           <button
             type="button"
             disabled={busy}
-            aria-label={lang === "ar" ? "تغيير الحالة" : "Change status"}
+            aria-label="Change status"
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
               "transition-[transform,background-color,color] duration-200",
@@ -198,7 +188,7 @@ function SpouseRow({
                 status === s && "font-semibold",
               )}
             >
-              {statusLabels[s][lang]}
+              {statusLabels[s]}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -207,7 +197,7 @@ function SpouseRow({
         type="button"
         onClick={handleRemove}
         disabled={busy}
-        aria-label={lang === "ar" ? "إزالة" : "Remove"}
+        aria-label="Remove"
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
           "transition-[transform,background-color,color] duration-200",
@@ -279,9 +269,7 @@ function ParentRow({
   const [busy, setBusy] = useState(false);
 
   async function handleUnlink() {
-    const ok = window.confirm(
-      lang === "ar" ? `إزالة هذا الرابط مع ${name ?? "?"}؟` : `Remove this link with ${name ?? "?"}?`,
-    );
+    const ok = window.confirm(`Remove this link with ${name ?? "?"}?`);
     if (!ok) return;
     setBusy(true);
     await unlinkParent(parentId, childId);
@@ -290,11 +278,7 @@ function ParentRow({
   }
 
   async function handleConvert() {
-    const ok = window.confirm(
-      lang === "ar"
-        ? `تحويل ${name ?? "?"} إلى زوج/ة بدلاً من والد/ة؟`
-        : `Convert ${name ?? "?"} from parent to spouse?`,
-    );
+    const ok = window.confirm(`Convert ${name ?? "?"} from parent to spouse?`);
     if (!ok) return;
     setBusy(true);
     await convertParentToSpouse(parentId, childId);
@@ -309,7 +293,7 @@ function ParentRow({
           {label}
         </span>
         <span className="truncate text-sm font-medium text-[var(--foreground)]">
-          {name ?? (lang === "ar" ? "غير معروف" : "Unknown")}
+          {name ?? "Unknown"}
         </span>
       </div>
       <TooltipProvider delayDuration={250}>
@@ -319,7 +303,7 @@ function ParentRow({
               type="button"
               onClick={handleConvert}
               disabled={busy}
-              aria-label={lang === "ar" ? "تحويل إلى زوج/ة" : "Convert to spouse"}
+              aria-label="Convert to spouse"
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
                 "transition-[transform,background-color,color] duration-200",
@@ -331,7 +315,7 @@ function ParentRow({
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            {lang === "ar" ? "تحويل إلى زوج/ة" : "Convert to spouse"}
+            Convert to spouse
           </TooltipContent>
         </Tooltip>
         <Tooltip>
@@ -340,7 +324,7 @@ function ParentRow({
               type="button"
               onClick={handleUnlink}
               disabled={busy}
-              aria-label={lang === "ar" ? "إزالة الرابط" : "Unlink"}
+              aria-label="Unlink"
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
                 "transition-[transform,background-color,color] duration-200",
@@ -352,7 +336,7 @@ function ParentRow({
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            {lang === "ar" ? "إزالة الرابط" : "Unlink"}
+            Unlink
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -469,10 +453,10 @@ export function Inspector({
 
   const genderLabel =
     person?.gender === "f"
-      ? lang === "ar" ? "أنثى" : "Female"
+      ? "Female"
       : person?.gender === "m"
-        ? lang === "ar" ? "ذكر" : "Male"
-        : lang === "ar" ? "غير محدد" : "Unknown";
+        ? "Male"
+        : "Unknown";
 
   const avatarRingColor =
     person?.gender === "f"
@@ -485,7 +469,7 @@ export function Inspector({
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent
         side="right"
-        className="glass-2 w-[22rem] sm:max-w-[22rem] flex flex-col gap-0 p-0 border-s border-[var(--border)] shadow-[var(--shadow-deep)]"
+        className="glass-2 w-full sm:w-[22rem] sm:max-w-[22rem] flex flex-col gap-0 p-0 border-s border-[var(--border)] shadow-[var(--shadow-deep)]"
       >
         {/* Decorative top sheen — burgundy → accent → transparent */}
         <div
@@ -518,7 +502,7 @@ export function Inspector({
                 className="truncate text-xl font-semibold leading-tight tracking-tight"
                 style={{ fontFamily: "var(--font-display)", fontOpticalSizing: "auto" }}
               >
-                {fullName || (lang === "ar" ? "شخص" : "Person")}
+                {fullName || "Person"}
               </SheetTitle>
               <Badge
                 variant="outline"

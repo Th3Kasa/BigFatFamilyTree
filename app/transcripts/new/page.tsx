@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getLang } from "@/lib/lang/server";
 import { createTranscript } from "@/lib/actions/transcripts";
 import { TranscriptForm } from "@/components/forms/TranscriptForm";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ChevronLeft } from "lucide-react";
 
 export default async function NewTranscriptPage() {
-  const [supabase, lang] = await Promise.all([createClient(), getLang()]);
+  const supabase = await createClient();
 
   const { data: people } = await supabase
     .from("people")
@@ -30,7 +29,7 @@ export default async function NewTranscriptPage() {
           <CardTitle className="text-xl">Upload Transcript</CardTitle>
         </CardHeader>
         <CardContent>
-          <TranscriptForm action={createTranscript} people={people ?? []} lang={lang} />
+          <TranscriptForm action={createTranscript} people={people ?? []} />
         </CardContent>
       </Card>
     </main>

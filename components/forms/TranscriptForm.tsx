@@ -28,7 +28,7 @@ function SubmitButton() {
   );
 }
 
-export function TranscriptForm({ action, people, lang }: Props) {
+export function TranscriptForm({ action, people }: Props) {
   const [state, formAction] = useActionState(action, null);
   const [audioPath, setAudioPath] = useState<string | null>(null);
 

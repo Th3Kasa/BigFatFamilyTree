@@ -21,7 +21,7 @@ type Transcript = {
 
 type Props = {
   transcripts: Transcript[];
-  lang: string;
+  lang?: string;
   selectedId: string | null;
 };
 
@@ -115,7 +115,7 @@ function TranscriptDetail({ transcript }: { transcript: Transcript }) {
   );
 }
 
-export function TranscriptsSplitView({ transcripts, lang, selectedId }: Props) {
+export function TranscriptsSplitView({ transcripts, selectedId }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
 
