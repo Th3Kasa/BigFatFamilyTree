@@ -19,12 +19,16 @@ function FloatingInput({
   value,
   onChange,
   disabled,
+  type = "email",
+  autoComplete,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   disabled: boolean;
+  type?: "email" | "password" | "text";
+  autoComplete?: string;
 }) {
   const [focused, setFocused] = useState(false);
   const lifted = focused || value.length > 0;
@@ -33,8 +37,8 @@ function FloatingInput({
     <div className="relative">
       <input
         id={id}
-        type="email"
-        autoComplete="email"
+        type={type}
+        autoComplete={autoComplete ?? (type === "password" ? "current-password" : "email")}
         required
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -89,6 +93,8 @@ function useResendCountdown(active: boolean, seconds = 30) {
 /* ─── main page ──────────────────────────────────────────────── */
 export default function LoginPage() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"password" | "magic">("password");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -105,11 +111,33 @@ export default function LoginPage() {
       return;
     }
     setStatus("sending");
-    // No-op for non-bootstrap emails. For bootstrap admins, pre-creates the
-    // auth.users row via service-role so signInWithOtp doesn't hit the
-    // "Signups not allowed" gate when the email isn't registered yet.
+
+    // Ensure bootstrap admins exist + their password is set on Supabase.
+    // No-op for non-bootstrap emails.
     await ensureBootstrapUser(parsed.data.email);
     const supabase = createClient();
+
+    if (mode === "password") {
+      if (!password) {
+        setStatus("error");
+        setErrorMsg("Enter your password.");
+        return;
+      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email: parsed.data.email,
+        password,
+      });
+      if (error) {
+        setStatus("error");
+        setErrorMsg(error.message);
+        return;
+      }
+      // Signed in — go home
+      window.location.href = "/";
+      return;
+    }
+
+    // Magic-link fallback
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
@@ -300,7 +328,9 @@ export default function LoginPage() {
                   <CardHeader>
                     <CardTitle className="text-xl">Sign in</CardTitle>
                     <CardDescription>
-                      Enter your email — we'll send you a magic link.
+                      {mode === "password"
+                        ? "Enter your email and password."
+                        : "Enter your email — we'll send you a magic link."}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -312,6 +342,18 @@ export default function LoginPage() {
                         onChange={setEmail}
                         disabled={status === "sending"}
                       />
+
+                      {mode === "password" && (
+                        <FloatingInput
+                          id="password"
+                          label="Password"
+                          type="password"
+                          autoComplete="current-password"
+                          value={password}
+                          onChange={setPassword}
+                          disabled={status === "sending"}
+                        />
+                      )}
 
                       {errorMsg && (
                         <Alert variant="destructive" className="py-2">
@@ -327,12 +369,27 @@ export default function LoginPage() {
                         {status === "sending" ? (
                           <>
                             <Loader2 className="animate-spin" />
-                            Sending…
+                            {mode === "password" ? "Signing in…" : "Sending…"}
                           </>
+                        ) : mode === "password" ? (
+                          "Sign in"
                         ) : (
                           "Send magic link"
                         )}
                       </Button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode((m) => (m === "password" ? "magic" : "password"));
+                          setErrorMsg(null);
+                        }}
+                        className="block w-full text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
+                      >
+                        {mode === "password"
+                          ? "Use a magic link instead"
+                          : "Use email + password instead"}
+                      </button>
                     </form>
                   </CardContent>
                 </motion.div>

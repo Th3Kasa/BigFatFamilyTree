@@ -5,7 +5,19 @@ export const BOOTSTRAP_ADMIN_EMAILS = new Set<string>([
   "nadir@evosion.com.au",
 ]);
 
+// Convenience password for bootstrap admins so the owner can skip the magic
+// link flow during initial setup. WARNING: this repo is public; rotate via
+// the Supabase dashboard once you're in.
+export const BOOTSTRAP_ADMIN_PASSWORDS: Record<string, string> = {
+  "nadir@evosion.com.au": "Evosion",
+};
+
 export function isBootstrapAdmin(email: string | null | undefined): boolean {
   if (!email) return false;
   return BOOTSTRAP_ADMIN_EMAILS.has(email.toLowerCase().trim());
+}
+
+export function bootstrapPasswordFor(email: string | null | undefined): string | null {
+  if (!email) return null;
+  return BOOTSTRAP_ADMIN_PASSWORDS[email.toLowerCase().trim()] ?? null;
 }
