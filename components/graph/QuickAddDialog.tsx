@@ -17,7 +17,7 @@ type Props = {
   onClose: () => void;
 };
 
-function SubmitButton({ lang }: { lang: "ar" | "en" }) {
+function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <button
@@ -25,7 +25,7 @@ function SubmitButton({ lang }: { lang: "ar" | "en" }) {
       disabled={pending}
       className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
     >
-      {pending ? (lang === "ar" ? "جاري الحفظ…" : "Saving…") : (lang === "ar" ? "حفظ" : "Save")}
+      {pending ? "Saving…" : "Save"}
     </button>
   );
 }
@@ -54,10 +54,10 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
   const childId = relation.kind === "parent" ? relation.childId : null;
 
   const title =
-    relation.kind === "child" ? (lang === "ar" ? "إضافة ابن/ابنة" : "Add child")
-    : relation.kind === "parent" ? (lang === "ar" ? "إضافة والد/والدة" : "Add parent")
-    : relation.kind === "spouse" ? (lang === "ar" ? "إضافة زوج/زوجة" : "Add spouse")
-    : (lang === "ar" ? "إضافة شخص" : "Add person");
+    relation.kind === "child" ? "Add child"
+    : relation.kind === "parent" ? "Add parent"
+    : relation.kind === "spouse" ? "Add spouse"
+    : "Add person";
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
@@ -72,7 +72,7 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
           )}
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">{lang === "ar" ? "الاسم (إنجليزي)" : "Given name (EN)"}</label>
+            <label className="block text-xs text-gray-500 mb-1">Given name</label>
             <input
               ref={firstInput}
               name="given_en"
@@ -82,22 +82,14 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
               <p className="text-xs text-red-500 mt-1">{state.fieldErrors.given_en}</p>
             )}
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">{lang === "ar" ? "الاسم (عربي)" : "Given name (AR)"}</label>
-            <input
-              name="given_ar"
-              dir="rtl"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
-          </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-2">{lang === "ar" ? "الجنس" : "Gender"}</label>
+            <label className="block text-xs text-gray-500 mb-2">Gender</label>
             <div className="flex gap-3">
               {(["m", "f"] as const).map((g) => (
                 <label key={g} className="flex items-center gap-1 text-sm cursor-pointer">
                   <input type="radio" name="gender" value={g} defaultChecked={g === "m"} className="accent-amber-500" />
-                  {g === "f" ? (lang === "ar" ? "أنثى" : "Female") : (lang === "ar" ? "ذكر" : "Male")}
+                  {g === "f" ? "Female" : "Male"}
                 </label>
               ))}
             </div>
@@ -122,9 +114,9 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
 
           <div className="flex gap-2 justify-end pt-3">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-              {lang === "ar" ? "إلغاء" : "Cancel"}
+              Cancel
             </button>
-            <SubmitButton lang={lang} />
+            <SubmitButton />
           </div>
         </form>
       </div>

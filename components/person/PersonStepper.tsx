@@ -1,18 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Loader2, Languages, SkipForward } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { PhotoUpload } from "@/components/forms/PhotoUpload";
-import { translateToArabic } from "@/lib/actions/translate";
 import type { ActionState } from "@/lib/actions/people";
-
-const SESSION_KEY = "person_stepper_en";
 
 type PeopleLookup = {
   id?: string;
@@ -36,10 +33,7 @@ type Props = {
 const INPUT_CLS =
   "w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition";
 
-const STEP_TITLES = {
-  en: ["Names", "Photo & Dates", "Confirm"],
-  ar: ["الأسماء", "صورة وتواريخ", "تأكيد"],
-};
+const STEP_TITLES = ["Names", "Photo & Dates", "Confirm"];
 
 const variants = {
   enter: (dir: number) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),
@@ -54,7 +48,7 @@ function SubmitButton({ label }: { label: string }) {
       {pending ? (
         <span className="flex items-center gap-2">
           <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-          {label === "Save" ? "Saving…" : "جاري الحفظ…"}
+          Saving…
         </span>
       ) : (
         <span className="flex items-center gap-2">
@@ -68,7 +62,6 @@ function SubmitButton({ label }: { label: string }) {
 
 export function PersonStepper({
   action,
-  people,
   lang,
   fatherId,
   motherIdProp,
@@ -80,112 +73,25 @@ export function PersonStepper({
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [isTranslating, startTranslate] = useTransition();
-  const [translateError, setTranslateError] = useState<string | null>(null);
-  // Stored EN values that came from sessionStorage (shown as hint in AR mode)
-  const [storedEn, setStoredEn] = useState<{ given_en: string; family_name_en: string } | null>(null);
 
   const [fields, setFields] = useState({
     given_en: "",
-    given_ar: "",
     family_name_en: "",
-    family_name_ar: "",
     birth_date: "",
     death_date: "",
     gender: "m" as "m" | "f",
     notes_en: "",
-    notes_ar: "",
   });
 
-  // On mount in AR mode: check sessionStorage for EN values and auto-translate
-  useEffect(() => {
-    if (lang !== "ar") return;
-    try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as { given_en?: string; family_name_en?: string };
-      if (!saved.given_en && !saved.family_name_en) return;
-      setStoredEn({ given_en: saved.given_en ?? "", family_name_en: saved.family_name_en ?? "" });
-      // Auto-translate immediately
-      setTranslateError(null);
-      startTranslate(async () => {
-        const result = await translateToArabic({
-          given_en: saved.given_en ?? undefined,
-          family_name_en: saved.family_name_en ?? undefined,
-        });
-        if (result.success) {
-          setFields((f) => ({
-            ...f,
-            given_ar: result.data.given_ar ?? f.given_ar,
-            family_name_ar: result.data.family_name_ar ?? f.family_name_ar,
-          }));
-        } else {
-          setTranslateError(result.error);
-        }
-        sessionStorage.removeItem(SESSION_KEY);
-      });
-    } catch {
-      // sessionStorage not available
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Save EN values to sessionStorage whenever they change (so lang switch preserves them)
-  useEffect(() => {
-    if (lang !== "en") return;
-    try {
-      if (fields.given_en || fields.family_name_en) {
-        sessionStorage.setItem(
-          SESSION_KEY,
-          JSON.stringify({ given_en: fields.given_en, family_name_en: fields.family_name_en })
-        );
-      }
-    } catch {
-      // sessionStorage not available
-    }
-  }, [lang, fields.given_en, fields.family_name_en]);
-
-  const t = {
-    next: lang === "ar" ? "التالي" : "Next",
-    back: lang === "ar" ? "رجوع" : "Back",
-    skip: lang === "ar" ? "تخطى" : "Skip",
-    save: lang === "ar" ? "حفظ" : "Save",
-    addingChildOf: lang === "ar" ? "إضافة طفل لـ" : "Adding child of",
-    givenName: lang === "ar" ? "الاسم الأول" : "Given name",
-    familyName: lang === "ar" ? "اسم العائلة" : "Family name",
-    photo: lang === "ar" ? "الصورة" : "Photo",
-    birthDate: lang === "ar" ? "تاريخ الميلاد" : "Birth date",
-    deathDate: lang === "ar" ? "تاريخ الوفاة" : "Death date",
-    gender: lang === "ar" ? "الجنس" : "Gender",
-    male: lang === "ar" ? "ذكر" : "Male",
-    female: lang === "ar" ? "أنثى" : "Female",
-    notesLabel: lang === "ar" ? "ملاحظات" : "Notes",
-    confirmTitle: lang === "ar" ? "مراجعة قبل الحفظ" : "Review before saving",
-    name: lang === "ar" ? "الاسم" : "Name",
-    dates: lang === "ar" ? "التواريخ" : "Dates",
-    notSet: lang === "ar" ? "غير محدد" : "Not set",
-    translatingHint: lang === "ar" ? "جاري الترجمة…" : "Translating…",
-    translateBtn: lang === "ar" ? "ترجمة من الإنجليزية" : "Translate from English",
-  };
-
   const parentBadge = fatherName && motherName
-    ? `${t.addingChildOf} ${fatherName} ${lang === "ar" ? "و" : "&"} ${motherName}`
+    ? `Adding child of ${fatherName} & ${motherName}`
     : (fatherName ?? motherName)
-      ? `${t.addingChildOf} ${fatherName ?? motherName}`
+      ? `Adding child of ${fatherName ?? motherName}`
       : null;
 
   function goNext() { setDir(1); setStep((s) => Math.min(s + 1, 2)); }
   function goBack() { setDir(-1); setStep((s) => Math.max(s - 1, 0)); }
   function skipStep() { setDir(1); setStep((s) => Math.min(s + 1, 2)); }
-
-  const fullGiven =
-    lang === "ar"
-      ? fields.given_ar || fields.given_en || "—"
-      : fields.given_en || fields.given_ar || "—";
-  const fullFamily =
-    lang === "ar"
-      ? fields.family_name_ar || fields.family_name_en || "—"
-      : fields.family_name_en || fields.family_name_ar || "—";
 
   return (
     <div className="w-full max-w-lg mx-auto">
@@ -197,7 +103,7 @@ export function PersonStepper({
 
       {/* Progress dots */}
       <div className="flex items-center justify-center gap-2 mb-6">
-        {STEP_TITLES[lang].map((title, i) => (
+        {STEP_TITLES.map((title, i) => (
           <button
             key={i}
             type="button"
@@ -223,7 +129,7 @@ export function PersonStepper({
             >
               {title}
             </span>
-            {i < STEP_TITLES[lang].length - 1 && (
+            {i < STEP_TITLES.length - 1 && (
               <span className="w-6 h-px bg-[var(--border)]" />
             )}
           </button>
@@ -240,12 +146,12 @@ export function PersonStepper({
             {motherIdProp && <input type="hidden" name="mother_id" value={motherIdProp} />}
             {spouseId && <input type="hidden" name="spouse_id" value={spouseId} />}
             <input type="hidden" name="given_en" value={fields.given_en} />
-            <input type="hidden" name="given_ar" value={fields.given_ar} />
+            <input type="hidden" name="given_ar" value="" />
             <input type="hidden" name="family_name_en" value={fields.family_name_en} />
-            <input type="hidden" name="family_name_ar" value={fields.family_name_ar} />
+            <input type="hidden" name="family_name_ar" value="" />
             <input type="hidden" name="gender" value={fields.gender} />
             <input type="hidden" name="notes_en" value={fields.notes_en} />
-            <input type="hidden" name="notes_ar" value={fields.notes_ar} />
+            <input type="hidden" name="notes_ar" value="" />
             <input type="hidden" name="birth_date" value={fields.birth_date} />
             <input type="hidden" name="death_date" value={fields.death_date} />
             <input type="hidden" name="father_name_en" value="" />
@@ -274,72 +180,37 @@ export function PersonStepper({
                     transition={{ duration: 0.22, ease: "easeInOut" }}
                     className="space-y-5"
                   >
-                    {/* Auto-translate status banner (AR mode only) */}
-                    {lang === "ar" && (isTranslating || storedEn) && (
-                      <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                        {isTranslating
-                          ? <><Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />{t.translatingHint}</>
-                          : <><Languages className="w-3.5 h-3.5 shrink-0" />{`${storedEn?.given_en ?? ""} ${storedEn?.family_name_en ?? ""}`.trim()}</>
-                        }
-                      </div>
-                    )}
-                    {translateError && (
-                      <p className="text-xs text-[var(--destructive)]">{translateError}</p>
-                    )}
-
-                    {/* Given name — single language */}
                     <div>
                       <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
-                        {t.givenName}
+                        Given name
                       </label>
-                      {lang === "en" ? (
-                        <input
-                          className={INPUT_CLS}
-                          placeholder="e.g. Samuel"
-                          value={fields.given_en}
-                          onChange={(e) => setFields((f) => ({ ...f, given_en: e.target.value }))}
-                        />
-                      ) : (
-                        <input
-                          className={INPUT_CLS}
-                          placeholder="مثال: صموئيل"
-                          dir="rtl"
-                          value={fields.given_ar}
-                          onChange={(e) => setFields((f) => ({ ...f, given_ar: e.target.value }))}
-                        />
-                      )}
+                      <input
+                        className={INPUT_CLS}
+                        placeholder="e.g. Samuel"
+                        value={fields.given_en}
+                        onChange={(e) => setFields((f) => ({ ...f, given_en: e.target.value }))}
+                      />
                     </div>
 
-                    {/* Family name — single language */}
                     <div>
                       <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
-                        {t.familyName}
+                        Family name
                       </label>
-                      {lang === "en" ? (
-                        <input
-                          className={INPUT_CLS}
-                          placeholder="e.g. Abdullah"
-                          value={fields.family_name_en}
-                          onChange={(e) => setFields((f) => ({ ...f, family_name_en: e.target.value }))}
-                        />
-                      ) : (
-                        <input
-                          className={INPUT_CLS}
-                          placeholder="مثال: عبدالله"
-                          dir="rtl"
-                          value={fields.family_name_ar}
-                          onChange={(e) => setFields((f) => ({ ...f, family_name_ar: e.target.value }))}
-                        />
-                      )}
+                      <input
+                        className={INPUT_CLS}
+                        placeholder="e.g. Abdullah"
+                        value={fields.family_name_en}
+                        onChange={(e) => setFields((f) => ({ ...f, family_name_en: e.target.value }))}
+                      />
                     </div>
 
                     <div className="pt-2 flex justify-end">
                       <Button
                         type="button"
                         onClick={goNext}
-                        disabled={lang === "en" ? !fields.given_en : !fields.given_ar}
+                        disabled={!fields.given_en}
                       >
-                        {t.next}
+                        Next
                         <ArrowRight className="h-4 w-4" />
                       </Button>
                     </div>
@@ -358,14 +229,14 @@ export function PersonStepper({
                     className="space-y-5"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <p className="text-xs text-[var(--muted-foreground)]">{t.photo}</p>
+                      <p className="text-xs text-[var(--muted-foreground)]">Photo</p>
                       <PhotoUpload currentUrl={photoUrl} onUpload={setPhotoUrl} />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-[var(--muted-foreground)] mb-1">
-                          {t.birthDate}
+                          Birth date
                         </label>
                         <input
                           type="text"
@@ -377,7 +248,7 @@ export function PersonStepper({
                       </div>
                       <div>
                         <label className="block text-xs text-[var(--muted-foreground)] mb-1">
-                          {t.deathDate}
+                          Death date
                         </label>
                         <input
                           type="text"
@@ -392,15 +263,15 @@ export function PersonStepper({
                     <div className="pt-4 flex justify-between">
                       <Button type="button" variant="ghost" onClick={goBack}>
                         <ArrowLeft className="h-4 w-4" />
-                        {t.back}
+                        Back
                       </Button>
                       <div className="flex gap-2">
                         <Button type="button" variant="outline" onClick={skipStep}>
                           <SkipForward className="h-4 w-4" />
-                          {t.skip}
+                          Skip
                         </Button>
                         <Button type="button" onClick={goNext}>
-                          {t.next}
+                          Next
                           <ArrowRight className="h-4 w-4" />
                         </Button>
                       </div>
@@ -420,9 +291,7 @@ export function PersonStepper({
                     className="space-y-5"
                   >
                     <div>
-                      <p className="text-sm font-semibold text-[var(--foreground)] mb-3">
-                        {t.gender}
-                      </p>
+                      <p className="text-sm font-semibold text-[var(--foreground)] mb-3">Gender</p>
                       <div className="flex gap-3">
                         {(["m", "f"] as const).map((g) => (
                           <label
@@ -440,49 +309,40 @@ export function PersonStepper({
                               checked={fields.gender === g}
                               onChange={() => setFields((f) => ({ ...f, gender: g }))}
                             />
-                            {g === "m" ? t.male : t.female}
+                            {g === "m" ? "Male" : "Female"}
                           </label>
                         ))}
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs text-[var(--muted-foreground)] mb-1">
-                        {t.notesLabel}
-                      </label>
+                      <label className="block text-xs text-[var(--muted-foreground)] mb-1">Notes</label>
                       <textarea
                         className={cn(INPUT_CLS, "resize-none")}
                         rows={3}
-                        dir={lang === "ar" ? "rtl" : "ltr"}
-                        value={lang === "ar" ? fields.notes_ar : fields.notes_en}
-                        onChange={(e) =>
-                          setFields((f) =>
-                            lang === "ar"
-                              ? { ...f, notes_ar: e.target.value }
-                              : { ...f, notes_en: e.target.value }
-                          )
-                        }
+                        value={fields.notes_en}
+                        onChange={(e) => setFields((f) => ({ ...f, notes_en: e.target.value }))}
                       />
                     </div>
 
                     {/* Summary */}
                     <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-4 space-y-2 text-sm">
                       <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
-                        {t.confirmTitle}
+                        Review before saving
                       </p>
                       <div className="flex justify-between">
-                        <span className="text-[var(--muted-foreground)]">{t.name}</span>
-                        <span className="font-medium">{fullGiven} {fullFamily}</span>
+                        <span className="text-[var(--muted-foreground)]">Name</span>
+                        <span className="font-medium">{fields.given_en || "—"} {fields.family_name_en}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-[var(--muted-foreground)]">{t.gender}</span>
-                        <span className="font-medium">{fields.gender === "m" ? t.male : t.female}</span>
+                        <span className="text-[var(--muted-foreground)]">Gender</span>
+                        <span className="font-medium">{fields.gender === "m" ? "Male" : "Female"}</span>
                       </div>
                       {(fields.birth_date || fields.death_date) && (
                         <div className="flex justify-between">
-                          <span className="text-[var(--muted-foreground)]">{t.dates}</span>
+                          <span className="text-[var(--muted-foreground)]">Dates</span>
                           <span className="font-medium">
-                            {fields.birth_date || t.notSet}
+                            {fields.birth_date || "Not set"}
                             {fields.death_date ? ` – ${fields.death_date}` : ""}
                           </span>
                         </div>
@@ -492,9 +352,9 @@ export function PersonStepper({
                     <div className="pt-2 flex justify-between">
                       <Button type="button" variant="ghost" onClick={goBack}>
                         <ArrowLeft className="h-4 w-4" />
-                        {t.back}
+                        Back
                       </Button>
-                      <SubmitButton label={t.save} />
+                      <SubmitButton label="Save" />
                     </div>
                   </motion.div>
                 )}
