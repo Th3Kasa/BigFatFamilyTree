@@ -1046,11 +1046,14 @@ cat > "$CLAUDE_DIR/scripts/bootstrap-alfred.sh" << 'EOF'
 CLAUDE_DIR=".claude"
 GLOBAL_DIR="$HOME/.claude"
 
-mkdir -p "$GLOBAL_DIR/agents" "$GLOBAL_DIR/commands" "$GLOBAL_DIR/shared"
+mkdir -p "$GLOBAL_DIR/agents" "$GLOBAL_DIR/commands" "$GLOBAL_DIR/shared" "$GLOBAL_DIR/agents/retired"
 
 cp "$CLAUDE_DIR/agents/"*.md "$GLOBAL_DIR/agents/" 2>/dev/null
 cp "$CLAUDE_DIR/commands/"*.md "$GLOBAL_DIR/commands/" 2>/dev/null
+[ -d "$CLAUDE_DIR/agents/retired" ] && cp "$CLAUDE_DIR/agents/retired/"*.md "$GLOBAL_DIR/agents/retired/" 2>/dev/null
 
+# Shared files: always overwrite performance-log and improvement-backlog (live data stays in project)
+# But don't overwrite if they have real data — only copy if target is empty/missing
 for f in "$CLAUDE_DIR/shared/"*.md; do
   fname="$(basename "$f")"
   [ ! -f "$GLOBAL_DIR/shared/$fname" ] && cp "$f" "$GLOBAL_DIR/shared/$fname"
@@ -1058,7 +1061,7 @@ done
 
 cp "CLAUDE.md" "$GLOBAL_DIR/CLAUDE.md" 2>/dev/null
 
-echo "[Alfred] Team installed globally for this session. 12 agents ready."
+echo "[Alfred] Team installed globally for this session. Agents ready."
 EOF
 
 chmod +x "$CLAUDE_DIR/scripts/bootstrap-alfred.sh"
@@ -1095,15 +1098,21 @@ fi
 # =============================================================================
 
 if git rev-parse --git-dir > /dev/null 2>&1; then
-  git add CLAUDE.md .claude/
+  git add CLAUDE.md .claude/ .github/
   git commit -m "feat: Install Alfred multi-agent CEO system
 
 12 specialist agents, slash commands, shared context, plugin registry,
-and SessionStart hook that auto-installs Alfred globally each session.
+performance log, agent roster, improvement backlog, and SessionStart
+hook that auto-installs Alfred globally each session.
+
+Includes self-improvement protocol: Alfred logs task performance,
+reviews team health, and evolves agents (/review-team, /evolve).
+GitHub Action for installing Alfred on past repos included.
 
 Agents: business-analyst, saas-architect, ai-automation, web-builder,
 ui-craft, copywriter, seo-growth, integrations, security-guard,
-qa-guard, devops-deploy, tech-curator"
+qa-guard, devops-deploy, tech-curator" 2>/dev/null || \
+  git commit -m "feat: Install Alfred multi-agent CEO system"
   echo ""
   echo "  [Alfred] Committed to git. Alfred is now permanent in this project."
 else
