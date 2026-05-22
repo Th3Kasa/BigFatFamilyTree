@@ -327,28 +327,27 @@ function ConstellationNode({
         )}
       </Suspense>
 
-      {/* Name label only on hover/select so the constellation stays clean at rest */}
-      {showLabel && (
-        <Html
-          position={[0, -0.95, 0]}
-          center
-          distanceFactor={11}
-          style={{ pointerEvents: "none" }}
+      {/* Name label — always visible, scales with camera distance */}
+      <Html
+        position={[0, -1.05, 0]}
+        center
+        distanceFactor={6}
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          className="whitespace-nowrap rounded-full px-3 py-1 text-sm font-semibold tracking-wide backdrop-blur-md"
+          style={{
+            background: showLabel ? "rgba(22, 14, 18, 0.9)" : "rgba(22, 14, 18, 0.7)",
+            color: "#fbf6ee",
+            border: `1px solid ${accent}${showLabel ? "aa" : "77"}`,
+            boxShadow: `0 0 ${showLabel ? "22px" : "14px"} ${accent}${showLabel ? "99" : "55"}`,
+            fontFamily: "var(--font-display)",
+            transition: "all 200ms ease-out",
+          }}
         >
-          <div
-            className="whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md"
-            style={{
-              background: "rgba(22, 14, 18, 0.7)",
-              color: "#fbf6ee",
-              border: `1px solid ${accent}77`,
-              boxShadow: `0 0 14px ${accent}66`,
-              fontFamily: "var(--font-display)",
-            }}
-          >
-            {display(person, lang)}
-          </div>
-        </Html>
-      )}
+          {display(person, lang)}
+        </div>
+      </Html>
     </group>
   );
 }
