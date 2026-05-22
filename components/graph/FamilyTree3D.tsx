@@ -4,9 +4,9 @@ import {
   useMemo,
   useRef,
   useState,
+  useEffect,
   Suspense,
   useCallback,
-  useEffect,
 } from "react";
 import { useRouter } from "next/navigation";
 import { Canvas, useLoader, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
@@ -24,6 +24,19 @@ type Props = {
 };
 
 type Vec3 = [number, number, number];
+
+/**
+ * Live-positions store.
+ *
+ * Shared between every PortraitNode (writers) and every CurvedEdge (readers).
+ * Both sides read/write THREE.Vector3 instances inside useFrame so positions
+ * stay perfectly in sync at 60fps without ever triggering a React re-render.
+ *
+ * This is the canonical R3F pattern for ref-based shared mutable state.
+ */
+type LivePositions = Map<string, THREE.Vector3>;
+
+const EDGE_SEGMENTS = 48;
 
 function display(p: PersonInput, lang: "ar" | "en") {
   return (
@@ -50,18 +63,13 @@ function initialsOf(p: PersonInput, lang: "ar" | "en") {
 }
 
 function computeGenerations(people: PersonInput[]) {
-  const byId = new Map(people.map((p) => [p.id, p]));
-  const idSet = new Set(byId.keys());
+  const idSet = new Set(people.map((p) => p.id));
   const generation = new Map<string, number>();
-
   const roots = people.filter(
     (p) =>
       (!p.father_id || !idSet.has(p.father_id)) &&
       (!p.mother_id || !idSet.has(p.mother_id)),
   );
-
-  type QItem = { id: string; gen: number };
-  const queue: QItem[] = roots.map((r) => ({ id: r.id, gen: 0 }));
   const childrenOf = new Map<string, string[]>();
   for (const p of people) {
     for (const parent of [p.father_id, p.mother_id]) {
@@ -70,7 +78,8 @@ function computeGenerations(people: PersonInput[]) {
       childrenOf.get(parent)!.push(p.id);
     }
   }
-
+  type QItem = { id: string; gen: number };
+  const queue: QItem[] = roots.map((r) => ({ id: r.id, gen: 0 }));
   while (queue.length) {
     const { id, gen } = queue.shift()!;
     const existing = generation.get(id);
@@ -79,14 +88,11 @@ function computeGenerations(people: PersonInput[]) {
     const kids = childrenOf.get(id) ?? [];
     for (const cid of kids) queue.push({ id: cid, gen: gen + 1 });
   }
-
-  for (const p of people) {
-    if (!generation.has(p.id)) generation.set(p.id, 0);
-  }
+  for (const p of people) if (!generation.has(p.id)) generation.set(p.id, 0);
   return generation;
 }
 
-function computePositions(people: PersonInput[]): Map<string, Vec3> {
+function computeInitialPositions(people: PersonInput[]): Map<string, Vec3> {
   const generation = computeGenerations(people);
   const byGen = new Map<number, PersonInput[]>();
   for (const p of people) {
@@ -94,19 +100,17 @@ function computePositions(people: PersonInput[]): Map<string, Vec3> {
     if (!byGen.has(g)) byGen.set(g, []);
     byGen.get(g)!.push(p);
   }
-
   const positions = new Map<string, Vec3>();
   const generations = [...byGen.keys()].sort((a, b) => a - b);
-
   for (const g of generations) {
     const members = byGen.get(g)!;
     const count = members.length;
     const radius = Math.max(2.5, count * 1.1);
     members.forEach((p, idx) => {
       const angle = (idx / Math.max(count, 1)) * Math.PI * 2;
-      const phaseShift = g * 0.35;
-      const x = Math.cos(angle + phaseShift) * radius;
-      const z = Math.sin(angle + phaseShift) * radius * 0.7;
+      const phase = g * 0.35;
+      const x = Math.cos(angle + phase) * radius;
+      const z = Math.sin(angle + phase) * radius * 0.7;
       const y = -g * 3.6;
       positions.set(p.id, [x, y, z]);
     });
@@ -114,37 +118,34 @@ function computePositions(people: PersonInput[]): Map<string, Vec3> {
   return positions;
 }
 
-/**
- * Each portrait has its own ref so we can:
- *  - apply ambient sine-wave drift
- *  - apply cursor-reactive pull
- *  - allow drag-to-move on the current camera plane
- */
 function PortraitNode({
   person,
-  initialPos,
+  livePositionsRef,
   lang,
   selected,
   onSelect,
   onClick,
   pointerRef,
-  draggingRef,
   setOrbitEnabled,
 }: {
   person: PersonInput;
-  initialPos: Vec3;
+  livePositionsRef: React.MutableRefObject<LivePositions>;
   lang: "ar" | "en";
   selected: boolean;
   onSelect: (id: string) => void;
   onClick: () => void;
   pointerRef: React.MutableRefObject<THREE.Vector3 | null>;
-  draggingRef: React.MutableRefObject<string | null>;
   setOrbitEnabled: (b: boolean) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const seed = useRef(Math.random() * Math.PI * 2);
-  const basePos = useRef(new THREE.Vector3(...initialPos));
-  const currentPos = useRef(new THREE.Vector3(...initialPos));
+  // The "rest" position the node returns to when no drag is in progress.
+  // Only changed by drag. Drift + cursor pull animate around this value.
+  const basePos = useRef<THREE.Vector3>(
+    livePositionsRef.current.get(person.id)?.clone() ?? new THREE.Vector3(),
+  );
+  // Currently rendered position. Lerps toward (basePos + ambient drift + cursor).
+  const currentPos = useRef<THREE.Vector3>(basePos.current.clone());
   const [hovered, setHovered] = useState(false);
   const isDragging = useRef(false);
 
@@ -153,16 +154,16 @@ function PortraitNode({
   const dragOffset = useMemo(() => new THREE.Vector3(), []);
   const ndc = useMemo(() => new THREE.Vector2(), []);
 
+  // Publish currentPos to the shared live-positions map every frame so edges
+  // (which also useFrame off this same ref) read the latest value.
   useFrame((state, delta) => {
     if (!groupRef.current) return;
 
     if (!isDragging.current) {
       const t = state.clock.getElapsedTime() + seed.current;
-      // Ambient drift — gentle sine on Y + tiny phase on X
       const bobY = Math.sin(t * 0.7) * 0.08;
       const wobbleX = Math.cos(t * 0.5) * 0.04;
 
-      // Cursor-reactive pull
       let cursorOffsetX = 0;
       let cursorOffsetY = 0;
       const ptr = pointerRef.current;
@@ -182,30 +183,30 @@ function PortraitNode({
       const targetY = basePos.current.y + bobY + cursorOffsetY;
       const targetZ = basePos.current.z;
 
-      // Spring-damped lerp toward target
       const damp = Math.min(1, delta * 6);
       currentPos.current.x += (targetX - currentPos.current.x) * damp;
       currentPos.current.y += (targetY - currentPos.current.y) * damp;
       currentPos.current.z += (targetZ - currentPos.current.z) * damp;
 
       groupRef.current.position.copy(currentPos.current);
-
-      // Face the camera
-      groupRef.current.quaternion.copy(camera.quaternion);
     }
+
+    // Always publish current position to the shared live store, dragging or not
+    const live = livePositionsRef.current.get(person.id);
+    if (live) live.copy(currentPos.current);
+
+    // Face the camera
+    groupRef.current.quaternion.copy(camera.quaternion);
   });
 
-  // Drag handlers
   const onPointerDown = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
       if (e.button !== 0) return;
       e.stopPropagation();
       onSelect(person.id);
-      // Set up drag plane perpendicular to camera, through node's current position
       const camDir = new THREE.Vector3();
       camera.getWorldDirection(camDir);
       dragPlane.setFromNormalAndCoplanarPoint(camDir, currentPos.current);
-      // Calculate offset between hit point and node center
       ndc.set(
         (e.clientX / gl.domElement.clientWidth) * 2 - 1,
         -(e.clientY / gl.domElement.clientHeight) * 2 + 1,
@@ -215,11 +216,10 @@ function PortraitNode({
       raycaster.ray.intersectPlane(dragPlane, hitPoint);
       dragOffset.copy(currentPos.current).sub(hitPoint);
       isDragging.current = true;
-      draggingRef.current = person.id;
       setOrbitEnabled(false);
       (e.target as Element).setPointerCapture?.(e.pointerId);
     },
-    [camera, dragOffset, dragPlane, gl, ndc, raycaster, draggingRef, onSelect, person.id, setOrbitEnabled],
+    [camera, dragOffset, dragPlane, gl, ndc, raycaster, onSelect, person.id, setOrbitEnabled],
   );
 
   const onPointerMove = useCallback(
@@ -237,9 +237,11 @@ function PortraitNode({
         basePos.current.copy(next);
         currentPos.current.copy(next);
         if (groupRef.current) groupRef.current.position.copy(next);
+        const live = livePositionsRef.current.get(person.id);
+        if (live) live.copy(next);
       }
     },
-    [camera, dragOffset, dragPlane, gl, ndc, raycaster],
+    [camera, dragOffset, dragPlane, gl, ndc, raycaster, livePositionsRef, person.id],
   );
 
   const onPointerUp = useCallback(
@@ -247,11 +249,10 @@ function PortraitNode({
       if (!isDragging.current) return;
       e.stopPropagation();
       isDragging.current = false;
-      draggingRef.current = null;
       setOrbitEnabled(true);
       (e.target as Element).releasePointerCapture?.(e.pointerId);
     },
-    [draggingRef, setOrbitEnabled],
+    [setOrbitEnabled],
   );
 
   const ringColor =
@@ -276,7 +277,6 @@ function PortraitNode({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
-      {/* Selected/hovered halo */}
       <mesh>
         <ringGeometry args={[1.0, 1.18, 64]} />
         <meshBasicMaterial
@@ -285,7 +285,6 @@ function PortraitNode({
           opacity={selected ? 0.9 : hovered ? 0.6 : 0.35}
         />
       </mesh>
-      {/* Ring base */}
       <mesh>
         <circleGeometry args={[0.95, 64]} />
         <meshBasicMaterial color={ringColor} transparent opacity={0.85} />
@@ -349,59 +348,98 @@ function InitialsPlane({ initials }: { initials: string }) {
 }
 
 /**
- * Curved tube edge between two points. Uses a quadratic Bezier with the
- * mid-point pulled slightly upward (or sideways) so the line feels organic.
+ * Curved edge that re-samples a quadratic Bezier between two LIVE node positions
+ * every frame, mutating its BufferGeometry position attribute in place.
+ * No React re-renders during drag.
  */
 function CurvedEdge({
-  from,
-  to,
+  fromId,
+  toId,
+  livePositionsRef,
   color,
   dashed,
-  opacity = 0.6,
+  opacity = 0.7,
   lift = 0.4,
 }: {
-  from: Vec3;
-  to: Vec3;
+  fromId: string;
+  toId: string;
+  livePositionsRef: React.MutableRefObject<LivePositions>;
   color: string;
   dashed?: boolean;
   opacity?: number;
   lift?: number;
 }) {
-  const geometry = useMemo(() => {
-    const start = new THREE.Vector3(...from);
-    const end = new THREE.Vector3(...to);
-    const mid = start.clone().lerp(end, 0.5);
-    // Pull control point away from the line for curvature
-    const dir = end.clone().sub(start);
-    const length = dir.length();
-    const perp = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
-    mid.add(perp.multiplyScalar(lift * Math.min(2, length * 0.18)));
-    mid.y += lift * 0.3;
-    const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
-    const points = curve.getPoints(48);
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    return geo;
-  }, [from, to, lift]);
-
-  const material = useMemo(() => {
-    if (dashed) {
-      return new THREE.LineDashedMaterial({
-        color,
-        dashSize: 0.22,
-        gapSize: 0.16,
-        transparent: true,
-        opacity,
-      });
-    }
-    return new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+  // Allocate geometry + material + line once. R3F handles ref reconciliation.
+  const { geometry, material, line } = useMemo(() => {
+    const arr = new Float32Array(EDGE_SEGMENTS * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+    const mat = dashed
+      ? new THREE.LineDashedMaterial({
+          color,
+          dashSize: 0.22,
+          gapSize: 0.16,
+          transparent: true,
+          opacity,
+        })
+      : new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+    const l = new THREE.Line(geo, mat);
+    l.frustumCulled = false;
+    return { geometry: geo, material: mat, line: l };
   }, [color, dashed, opacity]);
 
-  const lineRef = useRef<THREE.Line>(null);
-  useEffect(() => {
-    if (lineRef.current && dashed) lineRef.current.computeLineDistances();
-  }, [dashed, geometry]);
+  // Pre-allocated temp vectors (avoid GC churn in the per-frame loop)
+  const tmps = useMemo(
+    () => ({
+      start: new THREE.Vector3(),
+      end: new THREE.Vector3(),
+      mid: new THREE.Vector3(),
+      dir: new THREE.Vector3(),
+      perp: new THREE.Vector3(),
+    }),
+    [],
+  );
 
-  return <primitive object={new THREE.Line(geometry, material)} ref={lineRef} />;
+  useFrame(() => {
+    const from = livePositionsRef.current.get(fromId);
+    const to = livePositionsRef.current.get(toId);
+    if (!from || !to) return;
+
+    tmps.start.copy(from);
+    tmps.end.copy(to);
+    tmps.dir.subVectors(tmps.end, tmps.start);
+    const length = tmps.dir.length();
+    if (length === 0) return;
+
+    tmps.perp.set(-tmps.dir.z, 0, tmps.dir.x).normalize();
+    tmps.mid.copy(tmps.start).lerp(tmps.end, 0.5);
+    tmps.mid.add(
+      tmps.perp.multiplyScalar(lift * Math.min(2, length * 0.18)),
+    );
+    tmps.mid.y += lift * 0.3;
+
+    const arr = geometry.attributes.position.array as Float32Array;
+    for (let i = 0; i < EDGE_SEGMENTS; i++) {
+      const t = i / (EDGE_SEGMENTS - 1);
+      const u = 1 - t;
+      // Quadratic Bezier: B(t) = u²·P0 + 2u·t·P1 + t²·P2
+      arr[i * 3]     = u * u * tmps.start.x + 2 * u * t * tmps.mid.x + t * t * tmps.end.x;
+      arr[i * 3 + 1] = u * u * tmps.start.y + 2 * u * t * tmps.mid.y + t * t * tmps.end.y;
+      arr[i * 3 + 2] = u * u * tmps.start.z + 2 * u * t * tmps.mid.z + t * t * tmps.end.z;
+    }
+    (geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    geometry.boundingSphere = null;
+    if (dashed) line.computeLineDistances();
+  });
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
+
+  return <primitive object={line} />;
 }
 
 function CursorTracker({
@@ -432,53 +470,68 @@ function SceneContent({
   lang,
   onPersonClick,
 }: Props & { onPersonClick: (p: PersonInput) => void }) {
-  const positions = useMemo(() => computePositions(people), [people]);
+  const initialPositions = useMemo(
+    () => computeInitialPositions(people),
+    [people],
+  );
   const visiblePeople = useMemo(
     () => people.filter((p) => !p.is_placeholder),
     [people],
   );
 
+  // Single shared live-positions store. Keys are person ids; values are
+  // THREE.Vector3 instances that BOTH the node (writer) and edge (reader)
+  // mutate / read in useFrame. Cheap, GC-free, and React stays out of it.
+  const livePositionsRef = useRef<LivePositions>(new Map());
+  useMemo(() => {
+    const map = livePositionsRef.current;
+    // Sync map to current people list, preserving existing Vector3 instances
+    // so they remain shared across re-renders.
+    for (const [id, [x, y, z]] of initialPositions.entries()) {
+      const existing = map.get(id);
+      if (existing) existing.set(x, y, z);
+      else map.set(id, new THREE.Vector3(x, y, z));
+    }
+    for (const id of [...map.keys()]) {
+      if (!initialPositions.has(id)) map.delete(id);
+    }
+  }, [initialPositions]);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [orbitEnabled, setOrbitEnabled] = useState(true);
   const pointerRef = useRef<THREE.Vector3 | null>(null);
-  const draggingRef = useRef<string | null>(null);
 
   const parentEdges = useMemo(() => {
-    const out: { from: Vec3; to: Vec3; key: string }[] = [];
+    const out: { fromId: string; toId: string; key: string }[] = [];
     for (const p of visiblePeople) {
-      const pPos = positions.get(p.id);
-      if (!pPos) continue;
+      if (!initialPositions.has(p.id)) continue;
       for (const parentId of [p.father_id, p.mother_id]) {
-        if (!parentId) continue;
-        const parentPos = positions.get(parentId);
-        if (!parentPos) continue;
-        out.push({ from: parentPos, to: pPos, key: `pc-${parentId}-${p.id}` });
+        if (!parentId || !initialPositions.has(parentId)) continue;
+        out.push({ fromId: parentId, toId: p.id, key: `pc-${parentId}-${p.id}` });
       }
     }
     return out;
-  }, [visiblePeople, positions]);
+  }, [visiblePeople, initialPositions]);
 
   const spouseEdges = useMemo(() => {
     const out: {
-      from: Vec3;
-      to: Vec3;
+      fromId: string;
+      toId: string;
       key: string;
       status: "current" | "divorced" | "widowed";
     }[] = [];
     for (const r of relationships) {
       if (r.type !== "spouse") continue;
-      const a = positions.get(r.person_a_id);
-      const b = positions.get(r.person_b_id);
-      if (!a || !b) continue;
+      if (!initialPositions.has(r.person_a_id) || !initialPositions.has(r.person_b_id)) continue;
       out.push({
-        from: a,
-        to: b,
+        fromId: r.person_a_id,
+        toId: r.person_b_id,
         key: `sp-${r.id}`,
         status: (r.status ?? "current") as "current" | "divorced" | "widowed",
       });
     }
     return out;
-  }, [relationships, positions]);
+  }, [relationships, initialPositions]);
 
   return (
     <>
@@ -500,14 +553,23 @@ function SceneContent({
       />
 
       {parentEdges.map((e) => (
-        <CurvedEdge key={e.key} from={e.from} to={e.to} color="#7a1f3d" opacity={0.7} lift={0.6} />
+        <CurvedEdge
+          key={e.key}
+          fromId={e.fromId}
+          toId={e.toId}
+          livePositionsRef={livePositionsRef}
+          color="#7a1f3d"
+          opacity={0.7}
+          lift={0.6}
+        />
       ))}
 
       {spouseEdges.map((e) => (
         <CurvedEdge
           key={e.key}
-          from={e.from}
-          to={e.to}
+          fromId={e.fromId}
+          toId={e.toId}
+          livePositionsRef={livePositionsRef}
           color={e.status === "current" ? "#c93d5a" : "#a8a098"}
           dashed={e.status !== "current"}
           opacity={0.7}
@@ -515,24 +577,19 @@ function SceneContent({
         />
       ))}
 
-      {visiblePeople.map((p) => {
-        const pos = positions.get(p.id);
-        if (!pos) return null;
-        return (
-          <PortraitNode
-            key={p.id}
-            person={p}
-            initialPos={pos}
-            lang={lang}
-            selected={selectedId === p.id}
-            onSelect={setSelectedId}
-            onClick={() => onPersonClick(p)}
-            pointerRef={pointerRef}
-            draggingRef={draggingRef}
-            setOrbitEnabled={setOrbitEnabled}
-          />
-        );
-      })}
+      {visiblePeople.map((p) => (
+        <PortraitNode
+          key={p.id}
+          person={p}
+          livePositionsRef={livePositionsRef}
+          lang={lang}
+          selected={selectedId === p.id}
+          onSelect={setSelectedId}
+          onClick={() => onPersonClick(p)}
+          pointerRef={pointerRef}
+          setOrbitEnabled={setOrbitEnabled}
+        />
+      ))}
     </>
   );
 }
@@ -571,7 +628,6 @@ export function FamilyTree3D({ people, relationships, lang }: Props) {
         </Suspense>
       </Canvas>
 
-      {/* Floating hint overlay */}
       {hint && (
         <button
           type="button"
@@ -585,7 +641,7 @@ export function FamilyTree3D({ people, relationships, lang }: Props) {
             <>
               • اسحب: لتدوير المنظر
               <br />
-              • انقر + اسحب على وجه: لتحريكه
+              • انقر + اسحب على وجه: لتحريكه (الروابط تتبع)
               <br />
               • التمرير: للتكبير
               <br />
@@ -595,7 +651,7 @@ export function FamilyTree3D({ people, relationships, lang }: Props) {
             <>
               • Drag empty space: rotate
               <br />
-              • Click + drag a portrait: move it
+              • Click + drag a portrait: move it (edges follow live)
               <br />
               • Scroll: zoom
               <br />
