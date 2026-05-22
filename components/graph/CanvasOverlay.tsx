@@ -85,31 +85,29 @@ export function CanvasOverlay({ lang }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Bottom-center legend */}
+      {/* Bottom-center legend — informational only, not clickable */}
       <div className="pointer-events-none absolute bottom-6 left-1/2 z-20 hidden -translate-x-1/2 md:block">
-        <div className="glass-2 flex items-center gap-3 rounded-full border border-[var(--border)] px-4 py-2 shadow-[var(--shadow-floating)] text-[11px] text-[var(--muted-foreground)]">
+        <div className="glass-2 flex items-center gap-3 rounded-full border border-[var(--border)] px-3.5 py-1.5 shadow-[var(--shadow-floating)] text-[10px] text-[var(--muted-foreground)]">
+          <span
+            aria-hidden
+            className="font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]/70"
+            title={lang === "ar" ? "مفتاح الخطوط" : "Line legend"}
+          >
+            {lang === "ar" ? "المفتاح" : "Legend"}
+          </span>
+          <Sep />
           <LegendItem
             color="oklch(0.62 0.20 18)"
             label={lang === "ar" ? "زواج" : "Marriage"}
-            icon={Heart}
           />
-          <Sep />
           <LegendItem
             color="oklch(0.62 0.20 18 / 0.55)"
             label={lang === "ar" ? "طلاق" : "Divorced"}
             dashed
           />
-          <Sep />
           <LegendItem
             color="oklch(0.34 0.13 18)"
             label={lang === "ar" ? "نسب" : "Parent-child"}
-            icon={UserPlus}
-          />
-          <Sep />
-          <LegendItem
-            color="transparent"
-            label={lang === "ar" ? "اسحب للربط" : "Drag to link"}
-            icon={MousePointer2}
           />
         </div>
       </div>

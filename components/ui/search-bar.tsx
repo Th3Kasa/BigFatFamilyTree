@@ -87,15 +87,18 @@ export function SearchBar({
     return isSafari || isChromeOniOS;
   }, []);
 
-  // Fetch people once when the user first focuses the search
+  // Fetch people once when the user first focuses the search.
+  // NOTE: do NOT include `loading` in deps — setting it to true would
+  // remount the effect and cause its own cleanup to mark cancelled=true,
+  // which would then prevent setLoading(false) from ever running.
   useEffect(() => {
-    if (!isFocused || people !== null || loading) return;
+    if (!isFocused || people !== null) return;
     let cancelled = false;
+    setLoading(true);
     (async () => {
-      setLoading(true);
       try {
         const supabase = createClient();
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("people")
           .select(
             "id, slug, given_en, given_ar, family_name_en, family_name_ar, photo_url, gender, is_placeholder",
@@ -103,11 +106,17 @@ export function SearchBar({
           .is("deleted_at", null)
           .order("given_en");
         if (cancelled) return;
-        // Hide placeholder people from search results
+        if (error) {
+          // Treat as empty list so the dropdown can show "No matches"
+          setPeople([]);
+          return;
+        }
         const real = (data ?? []).filter(
           (p) => !(p as { is_placeholder?: boolean }).is_placeholder,
         );
         setPeople(real as Person[]);
+      } catch {
+        if (!cancelled) setPeople([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -115,7 +124,8 @@ export function SearchBar({
     return () => {
       cancelled = true;
     };
-  }, [isFocused, people, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocused, people]);
 
   // Filtered matches
   const matches = useMemo(() => {
