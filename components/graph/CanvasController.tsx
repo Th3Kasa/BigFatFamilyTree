@@ -4,6 +4,7 @@ import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useReactFlow, ReactFlowProvider, useNodesState, useEdgesState } from "@xyflow/react";
 import type { Connection, NodeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
+import { toast } from "sonner";
 import {
   MousePointer2,
   Plus,
@@ -15,9 +16,21 @@ import { FamilyGraph } from "./FamilyGraph";
 import { Inspector } from "./Inspector";
 import { NodeContextMenu, type ContextMenuTarget } from "./NodeContextMenu";
 import { QuickAddDialog, type QuickAddRelation } from "./QuickAddDialog";
+import {
+  RelationshipTypeDialog,
+  type RelationshipChoice,
+} from "./RelationshipTypeDialog";
 import { updateNodePosition, autoLayoutAll } from "@/lib/actions/canvas";
-import { createRelationship, deleteRelationship } from "@/lib/actions/relationships";
-import { deletePerson, linkParentChild } from "@/lib/actions/people";
+import { deleteRelationship } from "@/lib/actions/relationships";
+import {
+  addSibling,
+  deletePerson,
+  linkAdopted,
+  linkChild,
+  linkGuardian,
+  linkParentChild,
+  linkSpouse,
+} from "@/lib/actions/people";
 import {
   Tooltip,
   TooltipContent,
@@ -180,62 +193,79 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     });
   };
 
+  // Drag-to-link: capture the connection, then open the relationship-type
+  // chooser so the user explicitly picks (Parent / Child / Spouse / etc.)
+  // instead of inferring from which handle they grabbed.
+  const [pendingConn, setPendingConn] = useState<{
+    source: string;
+    target: string;
+    handle?: string | null;
+  } | null>(null);
+
   const onConnect = (c: Connection) => {
     if (!c.source || !c.target) return;
     if (c.source === c.target) return;
+    setPendingConn({ source: c.source, target: c.target, handle: c.sourceHandle });
+  };
 
-    // Left/Right handles → spouse. Top/Bottom handles (no id) → parent-child.
-    const isSpouse = c.sourceHandle === "right" || c.sourceHandle === "left";
+  function preselectFromHandle(handle: string | null | undefined): RelationshipChoice | undefined {
+    if (handle === "left" || handle === "right") return "spouse";
+    // Top/bottom handles are unlabeled; bottom→top => source is the parent.
+    return "parent";
+  }
 
-    if (!isSpouse) {
-      // c.source = parent node, c.target = child node
-      startTransition(async () => {
-        await linkParentChild(c.source!, c.target!);
-        router.refresh();
-      });
+  const personPersonName = (id: string) => {
+    const p = people.find((x) => x.id === id);
+    if (!p) return "?";
+    return (
+      (lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar) ?? "?"
+    );
+  };
+
+  async function handleRelationshipChoice(choice: RelationshipChoice) {
+    if (!pendingConn) return;
+    const { source, target } = pendingConn;
+    const srcName = personPersonName(source);
+    const tgtName = personPersonName(target);
+
+    let result: { success: boolean; error?: string } | null = null;
+    let okMsg = "";
+
+    if (choice === "parent") {
+      result = await linkParentChild(source, target);
+      okMsg = lang === "ar" ? `${srcName} هو والد ${tgtName}` : `${srcName} linked as ${tgtName}'s parent`;
+    } else if (choice === "child") {
+      result = await linkParentChild(target, source);
+      okMsg = lang === "ar" ? `${srcName} هو طفل ${tgtName}` : `${srcName} linked as ${tgtName}'s child`;
+    } else if (choice === "spouse") {
+      result = await linkSpouse(source, target, "current");
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} متزوجان` : `${srcName} and ${tgtName} are married`;
+    } else if (choice === "ex_spouse") {
+      result = await linkSpouse(source, target, "divorced");
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} مطلقان` : `${srcName} and ${tgtName} marked as divorced`;
+    } else if (choice === "sibling") {
+      result = await addSibling(source, target);
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
+    } else if (choice === "adopted") {
+      result = await linkAdopted(source, target);
+      okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} adopted ${tgtName}`;
+    } else if (choice === "guardian") {
+      result = await linkGuardian(source, target);
+      okMsg = lang === "ar" ? `${srcName} رَبَّى ${tgtName}` : `${srcName} is ${tgtName}'s guardian`;
+    } else if (choice === "unknown") {
+      setPendingConn(null);
       return;
     }
 
-    const exists = edges.some(e => {
-      const k = (e.data as any)?.edgeKind;
-      if (k !== "spouse") return false;
-      return (e.source === c.source && e.target === c.target) || (e.source === c.target && e.target === c.source);
-    });
-    if (exists) return;
+    setPendingConn(null);
 
-    const tempId = `spouse-temp-${c.source}-${c.target}`;
-    setEdges((eds) => [
-      ...eds,
-      {
-        id: tempId,
-        source: c.source!,
-        target: c.target!,
-        sourceHandle: c.sourceHandle ?? undefined,
-        targetHandle: c.targetHandle ?? undefined,
-        type: "straight",
-        data: { edgeKind: "spouse" },
-        style: { stroke: "#fda4af", strokeWidth: 2 },
-      },
-    ]);
-    const fd = new FormData();
-    fd.set("other_person_id", c.target);
-    fd.set("type", "spouse");
-    fd.set("status", "current");
-    startTransition(async () => {
-      const result = await createRelationship(c.source!, null, fd);
-      if (result?.id) {
-        setEdges((eds) =>
-          eds.map((e) =>
-            e.id === tempId
-              ? { ...e, id: `spouse-${result.id}`, data: { edgeKind: "spouse", relationshipId: result.id } }
-              : e
-          )
-        );
-      } else {
-        setEdges((eds) => eds.filter((e) => e.id !== tempId));
-      }
-    });
-  };
+    if (result?.success) {
+      toast.success(okMsg);
+      router.refresh();
+    } else if (result) {
+      toast.error(result.error ?? "Couldn't create the link");
+    }
+  }
 
   const onNodeContextMenu: NodeMouseHandler = (e, node) => {
     e.preventDefault();
@@ -439,6 +469,19 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             setQuickAdd(null);
             router.refresh();
           }}
+        />
+      )}
+
+      {pendingConn && (
+        <RelationshipTypeDialog
+          open
+          onOpenChange={(o) => { if (!o) setPendingConn(null); }}
+          source={people.find((p) => p.id === pendingConn.source) ?? null}
+          target={people.find((p) => p.id === pendingConn.target) ?? null}
+          lang={lang}
+          preselect={preselectFromHandle(pendingConn.handle)}
+          onChoose={handleRelationshipChoice}
+          onCancel={() => setPendingConn(null)}
         />
       )}
     </div>

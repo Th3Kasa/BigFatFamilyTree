@@ -367,9 +367,11 @@ export async function convertParentToSpouse(
 
 // ── linkSpouse ────────────────────────────────────────────────────────────────
 // Creates a spouse relationship between two existing people. Idempotent.
+// If a row already exists, updates its status when the caller's status differs.
 export async function linkSpouse(
   personAId: string,
   personBId: string,
+  status: "current" | "divorced" | "widowed" = "current",
 ): Promise<{ success: boolean; error?: string; relationshipId?: string }> {
   if (personAId === personBId) {
     return { success: false, error: "Cannot marry a person to themselves." };
@@ -379,7 +381,7 @@ export async function linkSpouse(
 
   const { data: existing } = await supabase
     .from("relationships")
-    .select("id")
+    .select("id, status")
     .eq("type", "spouse")
     .or(
       `and(person_a_id.eq.${personAId},person_b_id.eq.${personBId}),and(person_a_id.eq.${personBId},person_b_id.eq.${personAId})`,
@@ -387,8 +389,16 @@ export async function linkSpouse(
     .maybeSingle();
 
   if (existing) {
+    const cur = existing as { id: string; status: string };
+    if (cur.status !== status) {
+      const { error: upErr } = await supabase
+        .from("relationships")
+        .update({ status })
+        .eq("id", cur.id);
+      if (upErr) return { success: false, error: upErr.message };
+    }
     revalidatePath("/");
-    return { success: true, relationshipId: (existing as { id: string }).id };
+    return { success: true, relationshipId: cur.id };
   }
 
   const { data, error } = await supabase
@@ -397,7 +407,7 @@ export async function linkSpouse(
       person_a_id: personAId,
       person_b_id: personBId,
       type: "spouse",
-      status: "current",
+      status,
     })
     .select("id")
     .single();
@@ -406,6 +416,71 @@ export async function linkSpouse(
 
   revalidatePath("/");
   return { success: true, relationshipId: (data as { id: string }).id };
+}
+
+// ── linkAdopted ───────────────────────────────────────────────────────────────
+// Records an adoptive parent → child relationship in the relationships table.
+// Idempotent on the same parent/child pair.
+export async function linkAdopted(
+  parentId: string,
+  childId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (parentId === childId) {
+    return { success: false, error: "Cannot adopt yourself." };
+  }
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("relationships")
+    .select("id")
+    .eq("type", "adopted_by")
+    .eq("person_a_id", childId)
+    .eq("person_b_id", parentId)
+    .maybeSingle();
+  if (existing) {
+    revalidatePath("/");
+    return { success: true };
+  }
+  const { error } = await supabase.from("relationships").insert({
+    person_a_id: childId,
+    person_b_id: parentId,
+    type: "adopted_by",
+    status: "current",
+  });
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/");
+  return { success: true };
+}
+
+// ── linkGuardian ──────────────────────────────────────────────────────────────
+// Records a guardian/raised-by relationship.
+export async function linkGuardian(
+  guardianId: string,
+  childId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (guardianId === childId) {
+    return { success: false, error: "Cannot be your own guardian." };
+  }
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("relationships")
+    .select("id")
+    .eq("type", "raised_by")
+    .eq("person_a_id", childId)
+    .eq("person_b_id", guardianId)
+    .maybeSingle();
+  if (existing) {
+    revalidatePath("/");
+    return { success: true };
+  }
+  const { error } = await supabase.from("relationships").insert({
+    person_a_id: childId,
+    person_b_id: guardianId,
+    type: "raised_by",
+    status: "current",
+  });
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/");
+  return { success: true };
 }
 
 // ── linkChild ─────────────────────────────────────────────────────────────────
