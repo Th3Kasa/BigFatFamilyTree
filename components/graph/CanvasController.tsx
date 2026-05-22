@@ -319,17 +319,32 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     });
   };
 
+  async function removeCurrentEdgeRelationship(
+    edgeKind: "parent" | "spouse",
+    relationshipId: string | undefined,
+    source: string,
+    target: string,
+  ): Promise<{ success: boolean; error?: string } | null> {
+    if (edgeKind === "spouse" && relationshipId) {
+      return await deleteRelationship(relationshipId, source);
+    }
+    if (edgeKind === "parent") {
+      return await unlinkParent(source, target);
+    }
+    return null;
+  }
+
   async function handleRemoveEdge() {
     if (!edgeMenu) return;
     const { edgeKind, relationshipId, source, target, label } = edgeMenu;
     setEdgeMenu(null);
 
-    let result: { success?: boolean; error?: string } | null = null;
-    if (edgeKind === "spouse" && relationshipId) {
-      result = await deleteRelationship(relationshipId, source);
-    } else if (edgeKind === "parent") {
-      result = await unlinkParent(source, target);
-    }
+    const result = await removeCurrentEdgeRelationship(
+      edgeKind,
+      relationshipId,
+      source,
+      target,
+    );
 
     if (result?.success) {
       toast.success(
@@ -338,6 +353,85 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       router.refresh();
     } else if (result) {
       toast.error(result.error ?? "Couldn't remove");
+    }
+  }
+
+  function handleChangeEdge() {
+    if (!edgeMenu) return;
+    const { source, target, edgeKind, relationshipId } = edgeMenu;
+    setEdgeMenu(null);
+    // Remember the edge to remove once a new type is picked.
+    setReplaceConn({
+      source,
+      target,
+      currentKind: edgeKind,
+      currentRelationshipId: relationshipId,
+    });
+  }
+
+  const [replaceConn, setReplaceConn] = useState<{
+    source: string;
+    target: string;
+    currentKind: "parent" | "spouse";
+    currentRelationshipId?: string;
+  } | null>(null);
+
+  async function handleReplaceRelationshipChoice(choice: RelationshipChoice) {
+    if (!replaceConn) return;
+    const { source, target, currentKind, currentRelationshipId } = replaceConn;
+    setReplaceConn(null);
+
+    // 1) Remove the current edge
+    const removed = await removeCurrentEdgeRelationship(
+      currentKind,
+      currentRelationshipId,
+      source,
+      target,
+    );
+    if (removed && !removed.success) {
+      toast.error(removed.error ?? "Couldn't change");
+      return;
+    }
+
+    // 2) Create the new relationship using the same logic as the drag-to-link chooser
+    const srcName = personPersonName(source);
+    const tgtName = personPersonName(target);
+    let result: { success: boolean; error?: string } | null = null;
+    let okMsg = "";
+
+    if (choice === "parent") {
+      result = await linkParentChild(source, target);
+      okMsg = lang === "ar" ? `${srcName} الآن والد ${tgtName}` : `${srcName} is now ${tgtName}'s parent`;
+    } else if (choice === "child") {
+      result = await linkParentChild(target, source);
+      okMsg = lang === "ar" ? `${srcName} الآن طفل ${tgtName}` : `${srcName} is now ${tgtName}'s child`;
+    } else if (choice === "spouse") {
+      result = await linkSpouse(source, target, "current");
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} متزوجان` : `${srcName} and ${tgtName} are now married`;
+    } else if (choice === "ex_spouse") {
+      result = await linkSpouse(source, target, "divorced");
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} مطلقان` : `${srcName} and ${tgtName} are now divorced`;
+    } else if (choice === "sibling") {
+      result = await addSibling(source, target);
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} الآن أشقاء` : `${srcName} and ${tgtName} are now siblings`;
+    } else if (choice === "adopted") {
+      result = await linkAdopted(source, target);
+      okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} now adopted ${tgtName}`;
+    } else if (choice === "guardian") {
+      result = await linkGuardian(source, target);
+      okMsg = lang === "ar" ? `${srcName} الآن ولي أمر ${tgtName}` : `${srcName} is now ${tgtName}'s guardian`;
+    } else if (choice === "unknown") {
+      // User wanted to remove only — already removed above
+      toast.success(lang === "ar" ? "تمت الإزالة" : "Removed");
+      router.refresh();
+      return;
+    }
+
+    if (result?.success) {
+      toast.success(okMsg);
+      router.refresh();
+    } else if (result) {
+      toast.error(result.error ?? "Couldn't change");
     }
   }
 
@@ -562,6 +656,14 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             </div>
             <button
               type="button"
+              onClick={handleChangeEdge}
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
+            >
+              <span aria-hidden>↻</span>
+              {lang === "ar" ? "تغيير نوع العلاقة" : "Change relationship type…"}
+            </button>
+            <button
+              type="button"
               onClick={handleRemoveEdge}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/8"
             >
@@ -589,6 +691,19 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
           preselect={preselectFromHandle(pendingConn.handle)}
           onChoose={handleRelationshipChoice}
           onCancel={() => setPendingConn(null)}
+        />
+      )}
+
+      {replaceConn && (
+        <RelationshipTypeDialog
+          open
+          onOpenChange={(o) => { if (!o) setReplaceConn(null); }}
+          source={people.find((p) => p.id === replaceConn.source) ?? null}
+          target={people.find((p) => p.id === replaceConn.target) ?? null}
+          lang={lang}
+          preselect={replaceConn.currentKind === "spouse" ? "spouse" : "parent"}
+          onChoose={handleReplaceRelationshipChoice}
+          onCancel={() => setReplaceConn(null)}
         />
       )}
     </div>
