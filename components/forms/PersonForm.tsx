@@ -2,10 +2,12 @@
 
 import { useActionState, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
-import { Languages, Loader2 } from "lucide-react";
+import { Languages, Loader2, X } from "lucide-react";
 import type { ActionState } from "@/lib/actions/people";
 import { translateToArabic } from "@/lib/actions/translate";
 import { PhotoUpload } from "./PhotoUpload";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PersonPicker, type PickablePerson } from "@/components/graph/PersonPicker";
 
 type PersonRow = {
   id?: string;
@@ -65,6 +67,10 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
   const [photoUrl, setPhotoUrl] = useState<string | null>(initialData?.photo_url ?? null);
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [isTranslating, startTranslateTransition] = useTransition();
+  const [fatherId, setFatherId] = useState<string | null>(initialData?.father_id ?? null);
+  const [motherId, setMotherId] = useState<string | null>(initialData?.mother_id ?? null);
+  const [parentPicker, setParentPicker] = useState<"father" | "mother" | null>(null);
+  const peopleById = new Map(people.map((p) => [p.id, p as PickablePerson]));
 
   // Controlled Arabic fields so translate can update them
   const [givenAr, setGivenAr] = useState(initialData?.given_ar ?? "");
@@ -228,43 +234,42 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="father_id" className="block text-xs text-gray-500 mb-1">
-            {lang === "ar" ? "الأب" : "Father"}
-          </label>
-          <select
-            id="father_id"
-            name="father_id"
-            defaultValue={initialData?.father_id ?? ""}
-            className={`${INPUT_CLS} bg-white`}
-          >
-            <option value="">— none —</option>
-            {people
-              .filter((p) => p.id !== initialData?.id)
-              .map((p) => (
-                <option key={p.id} value={p.id}>{personLabel(p)}</option>
-              ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="mother_id" className="block text-xs text-gray-500 mb-1">
-            {lang === "ar" ? "الأم" : "Mother"}
-          </label>
-          <select
-            id="mother_id"
-            name="mother_id"
-            defaultValue={initialData?.mother_id ?? ""}
-            className={`${INPUT_CLS} bg-white`}
-          >
-            <option value="">— none —</option>
-            {people
-              .filter((p) => p.id !== initialData?.id)
-              .map((p) => (
-                <option key={p.id} value={p.id}>{personLabel(p)}</option>
-              ))}
-          </select>
-        </div>
+        <ParentPickerField
+          label={lang === "ar" ? "الأب" : "Father"}
+          placeholder={lang === "ar" ? "اختر…" : "Pick…"}
+          name="father_id"
+          value={fatherId}
+          person={fatherId ? peopleById.get(fatherId) : undefined}
+          onOpen={() => setParentPicker("father")}
+          onClear={() => setFatherId(null)}
+          lang={lang}
+        />
+        <ParentPickerField
+          label={lang === "ar" ? "الأم" : "Mother"}
+          placeholder={lang === "ar" ? "اختر…" : "Pick…"}
+          name="mother_id"
+          value={motherId}
+          person={motherId ? peopleById.get(motherId) : undefined}
+          onOpen={() => setParentPicker("mother")}
+          onClear={() => setMotherId(null)}
+          lang={lang}
+        />
       </div>
+      {parentPicker && (
+        <PersonPicker
+          open
+          onOpenChange={(o) => { if (!o) setParentPicker(null); }}
+          title={parentPicker === "father" ? (lang === "ar" ? "اختر الأب" : "Pick a father") : (lang === "ar" ? "اختر الأم" : "Pick a mother")}
+          description={lang === "ar" ? "ابحث بالاسم" : "Search by name"}
+          people={people as PickablePerson[]}
+          lang={lang}
+          excludeIds={initialData?.id ? [initialData.id] : []}
+          onPick={(pickedId) => {
+            if (parentPicker === "father") setFatherId(pickedId);
+            else setMotherId(pickedId);
+          }}
+        />
+      )}
 
       <div>
         <label htmlFor="notes_en" className="block text-xs text-gray-500 mb-1">
@@ -327,5 +332,77 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
 
       <SubmitButton label={submitLabel} lang={lang} />
     </form>
+  );
+}
+
+function ParentPickerField({
+  label,
+  placeholder,
+  name,
+  value,
+  person,
+  onOpen,
+  onClear,
+  lang,
+}: {
+  label: string;
+  placeholder: string;
+  name: string;
+  value: string | null;
+  person?: PickablePerson;
+  onOpen: () => void;
+  onClear: () => void;
+  lang: "ar" | "en";
+}) {
+  const display = person
+    ? (lang === "ar"
+        ? person.given_ar ?? person.given_en
+        : person.given_en ?? person.given_ar) ?? "—"
+    : null;
+  const initials = person
+    ? (((lang === "ar" ? person.given_ar : person.given_en) ?? "?")[0] ?? "?").toUpperCase() +
+      (((lang === "ar" ? person.family_name_ar : person.family_name_en) ?? "")[0] ?? "").toUpperCase()
+    : "?";
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-gray-500">{label}</label>
+      <input type="hidden" name={name} value={value ?? ""} />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="group flex h-10 flex-1 items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm shadow-sm transition-[background-color,border-color] hover:border-[var(--accent)]/60 hover:bg-[var(--muted)]/40"
+        >
+          {person ? (
+            <>
+              <Avatar className="h-7 w-7 ring-2 ring-[var(--border)]">
+                {person.photo_url && (
+                  <AvatarImage src={person.photo_url} alt={display ?? ""} className="object-cover" />
+                )}
+                <AvatarFallback className="text-[10px] font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <span className="truncate text-left text-[var(--foreground)]">
+                {display}
+              </span>
+            </>
+          ) : (
+            <span className="text-[var(--muted-foreground)]">{placeholder}</span>
+          )}
+        </button>
+        {value && (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label={lang === "ar" ? "إزالة" : "Clear"}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] transition-[background-color,color] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

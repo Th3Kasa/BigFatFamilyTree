@@ -20,6 +20,7 @@ import {
   RelationshipTypeDialog,
   type RelationshipChoice,
 } from "./RelationshipTypeDialog";
+import { CanvasOverlay } from "./CanvasOverlay";
 import { updateNodePosition, autoLayoutAll } from "@/lib/actions/canvas";
 import { deleteRelationship } from "@/lib/actions/relationships";
 import {
@@ -106,10 +107,10 @@ function FloatingToolbar({
     <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          "absolute bottom-8 left-1/2 -translate-x-1/2 z-20",
-          "flex items-center gap-1 px-3 py-2 rounded-full",
-          "bg-white/90 backdrop-blur-md border border-border",
-          "shadow-[0_1px_2px_rgb(20_20_20/0.06),0_8px_24px_rgb(20_20_20/0.1)]"
+          "absolute bottom-6 left-6 z-20",
+          "flex items-center gap-1 px-2.5 py-1.5 rounded-full",
+          "glass-2 border border-[var(--border)]",
+          "shadow-[var(--shadow-floating)]",
         )}
       >
         {tools.map((tool) => {
@@ -422,6 +423,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         onFitView={handleFitView}
         isPending={isPending}
       />
+
+      <CanvasOverlay lang={lang} />
 
       <Inspector
         person={selectedPerson}
