@@ -37,7 +37,7 @@ export function MobilePeopleSheet({ people, lang }: Props) {
             "shadow-[0_1px_2px_rgb(20_20_20/0.06),0_8px_24px_rgb(20_20_20/0.15)]",
             "transition-all duration-150 hover:scale-105 active:scale-95"
           )}
-          aria-label={lang === "ar" ? "إضافة شخص" : "Add person"}
+          aria-label="Add person"
         >
           <Plus className="w-5 h-5" />
         </a>
@@ -51,7 +51,7 @@ export function MobilePeopleSheet({ people, lang }: Props) {
             "shadow-[0_1px_2px_rgb(20_20_20/0.06),0_8px_24px_rgb(20_20_20/0.12)]",
             "transition-all duration-150 hover:scale-105 active:scale-95"
           )}
-          aria-label={lang === "ar" ? "قائمة الأشخاص" : "People list"}
+          aria-label="People list"
         >
           <Users className="w-5 h-5" />
         </button>
@@ -66,7 +66,7 @@ export function MobilePeopleSheet({ people, lang }: Props) {
           <SheetHeader className="px-6 pt-5 pb-3 border-b border-border">
             <div className="flex items-center justify-between">
               <SheetTitle className="text-base font-bold">
-                {lang === "ar" ? "أفراد العائلة" : "Family members"}
+                Family members
               </SheetTitle>
               <span className="text-xs text-muted-foreground">{real.length}</span>
             </div>

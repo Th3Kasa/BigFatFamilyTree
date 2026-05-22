@@ -423,9 +423,7 @@ export function Inspector({
 
   function handleDelete() {
     if (!person) return;
-    const confirmed = window.confirm(
-      lang === "ar" ? "هل تريد حذف هذا الشخص؟" : "Delete this person?"
-    );
+    const confirmed = window.confirm("Delete this person?");
     if (!confirmed) return;
     const id = person.id;
     onClose();
@@ -533,7 +531,7 @@ export function Inspector({
               className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/55 p-3"
             >
               <p className="text-center text-xs text-[var(--muted-foreground)]">
-                {lang === "ar" ? "شخص مبهم — أضف معلوماته" : "Placeholder — add their info"}
+                Placeholder — add their info
               </p>
             </motion.div>
           )}
@@ -542,7 +540,7 @@ export function Inspector({
           {person && spouses.length > 0 && (
             <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                {lang === "ar" ? "الزواج" : "Marriages"}
+                Marriages
               </p>
               <div className="space-y-2">
                 {spouses.map((s) => (
@@ -566,12 +564,12 @@ export function Inspector({
           {person && (person.father_id || person.mother_id) && (
             <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                {lang === "ar" ? "الوالدان" : "Parents"}
+                Parents
               </p>
               <div className="space-y-2">
                 {person.father_id && (
                   <ParentRow
-                    label={lang === "ar" ? "الأب" : "Father"}
+                    label="Father"
                     name={fatherName}
                     parentId={person.father_id}
                     childId={person.id}
@@ -584,7 +582,7 @@ export function Inspector({
                 )}
                 {person.mother_id && (
                   <ParentRow
-                    label={lang === "ar" ? "الأم" : "Mother"}
+                    label="Mother"
                     name={motherName}
                     parentId={person.mother_id}
                     childId={person.id}
@@ -603,7 +601,7 @@ export function Inspector({
           {person && children.length > 0 && (
             <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                {lang === "ar" ? `الأبناء (${children.length})` : `Children (${children.length})`}
+                {`Children (${children.length})`}
               </p>
               <div className="space-y-2">
                 {children.map((c) => (
@@ -622,7 +620,7 @@ export function Inspector({
           {person && siblings.length > 0 && (
             <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                {lang === "ar" ? `الإخوة (${siblings.length})` : `Siblings (${siblings.length})`}
+                {`Siblings (${siblings.length})`}
               </p>
               <div className="space-y-2">
                 {siblings.map((s) => (
@@ -648,7 +646,7 @@ export function Inspector({
           <Button asChild size="sm" className="w-full rounded-full">
             <Link href={person ? `/person/${person.slug ?? person.id}/edit` : "#"}>
               <Pencil className="h-3.5 w-3.5" />
-              {lang === "ar" ? "تعديل" : "Edit"}
+              Edit
             </Link>
           </Button>
           <div className="grid grid-cols-2 gap-2">
@@ -660,7 +658,7 @@ export function Inspector({
               onClick={() => setPicker("spouse")}
             >
               <Heart className="h-3.5 w-3.5" />
-              {lang === "ar" ? "إضافة زوج/ة" : "Add spouse"}
+              Add spouse
             </Button>
             <Button
               type="button"
@@ -670,7 +668,7 @@ export function Inspector({
               onClick={() => setPicker("child")}
             >
               <PlusCircle className="h-3.5 w-3.5" />
-              {lang === "ar" ? "إضافة طفل" : "Add child"}
+              Add child
             </Button>
             <Button
               type="button"
@@ -680,7 +678,7 @@ export function Inspector({
               onClick={() => setPicker("sibling")}
             >
               <Users className="h-3.5 w-3.5" />
-              {lang === "ar" ? "إضافة شقيق/ة" : "Add sibling"}
+              Add sibling
             </Button>
             <Button
               type="button"
@@ -690,13 +688,13 @@ export function Inspector({
               onClick={() => setPicker("parent")}
             >
               <UserPlus className="h-3.5 w-3.5" />
-              {lang === "ar" ? "إضافة أب/أم" : "Add parent"}
+              Add parent
             </Button>
           </div>
           <Button asChild variant="outline" size="sm" className="w-full rounded-full">
             <Link href={person ? `/person/${person.slug ?? person.id}` : "#"}>
               <ExternalLink className="h-3.5 w-3.5" />
-              {lang === "ar" ? "الصفحة الكاملة" : "Full profile"}
+              Full profile
             </Link>
           </Button>
           <Button
@@ -706,7 +704,7 @@ export function Inspector({
             onClick={handleDelete}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {lang === "ar" ? "حذف" : "Delete"}
+            Delete
           </Button>
         </motion.div>
       </SheetContent>
@@ -719,15 +717,13 @@ export function Inspector({
           parent:  `/person/new?child=${person.id}`,
           sibling: `/person/new?sibling=${person.id}`,
         };
-        const titles: Record<Exclude<PickerKind, null>, { en: string; ar: string }> = {
-          spouse:  { en: "Add spouse", ar: "إضافة زوج/ة" },
-          child:   { en: "Add child",  ar: "إضافة طفل" },
-          parent:  { en: "Add parent", ar: "إضافة أب/أم" },
-          sibling: { en: "Add sibling", ar: "إضافة شقيق/ة" },
+        const titles: Record<Exclude<PickerKind, null>, string> = {
+          spouse:  "Add spouse",
+          child:   "Add child",
+          parent:  "Add parent",
+          sibling: "Add sibling",
         };
-        const subtitle = lang === "ar"
-          ? "اختر شخصاً موجوداً أو أنشئ شخصاً جديداً"
-          : "Pick an existing person or create a new one";
+        const subtitle = "Pick an existing person or create a new one";
         const excludeIds = [person.id];
         const handlePick = async (otherId: string) => {
           const other = peopleById.get(otherId);
@@ -740,30 +736,20 @@ export function Inspector({
           let successMsg = "";
           if (picker === "spouse") {
             result = await linkSpouse(person.id, otherId);
-            successMsg = lang === "ar"
-              ? `تم ربط ${otherLabel} كزوج/ة لـ ${selfLabel}`
-              : `${otherLabel} linked as ${selfLabel}'s spouse`;
+            successMsg = `${otherLabel} linked as ${selfLabel}'s spouse`;
           } else if (picker === "child") {
             result = await linkChild(person.id, otherId);
-            successMsg = lang === "ar"
-              ? `تم ربط ${otherLabel} كطفل لـ ${selfLabel}`
-              : `${otherLabel} linked as ${selfLabel}'s child`;
+            successMsg = `${otherLabel} linked as ${selfLabel}'s child`;
           } else if (picker === "parent") {
             result = await linkParentChild(otherId, person.id);
-            successMsg = lang === "ar"
-              ? `تم ربط ${otherLabel} كأب/أم لـ ${selfLabel}`
-              : `${otherLabel} linked as ${selfLabel}'s parent`;
+            successMsg = `${otherLabel} linked as ${selfLabel}'s parent`;
           } else if (picker === "sibling") {
             const sibRes = await addSibling(person.id, otherId);
             result = sibRes;
             if (sibRes.success && sibRes.placeholderId) {
-              successMsg = lang === "ar"
-                ? `تم ربطهما كأشقاء وأضفت والداً مؤقتاً — افتحه لتعبئة الاسم`
-                : `Linked as siblings — added a placeholder parent. Click it to fill in their real parent.`;
+              successMsg = `Linked as siblings — added a placeholder parent. Click it to fill in their real parent.`;
             } else {
-              successMsg = lang === "ar"
-                ? `تم ربط ${otherLabel} كشقيق/ة لـ ${selfLabel}`
-                : `${otherLabel} linked as ${selfLabel}'s sibling`;
+              successMsg = `${otherLabel} linked as ${selfLabel}'s sibling`;
             }
           }
           if (result?.success) {
@@ -776,7 +762,7 @@ export function Inspector({
           <PersonPicker
             open
             onOpenChange={(o) => { if (!o) setPicker(null); }}
-            title={titles[picker][lang]}
+            title={titles[picker]}
             description={subtitle}
             people={people}
             lang={lang}
