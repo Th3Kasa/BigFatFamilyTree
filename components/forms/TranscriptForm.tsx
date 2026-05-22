@@ -15,7 +15,7 @@ type Props = {
   lang: "ar" | "en";
 };
 
-function SubmitButton({ lang }: { lang: "ar" | "en" }) {
+function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <button
@@ -23,9 +23,7 @@ function SubmitButton({ lang }: { lang: "ar" | "en" }) {
       disabled={pending}
       className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold transition-colors"
     >
-      {pending
-        ? (lang === "ar" ? "جاري الحفظ…" : "Saving…")
-        : (lang === "ar" ? "حفظ" : "Save transcript")}
+      {pending ? "Saving…" : "Save transcript"}
     </button>
   );
 }
@@ -46,9 +44,7 @@ export function TranscriptForm({ action, people, lang }: Props) {
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {lang === "ar" ? "ملف الصوت" : "Audio file"}
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Audio file</label>
         <AudioUpload onUpload={(path) => setAudioPath(path)} />
         <input type="hidden" name="audio_url" value={audioPath ?? ""} />
         {state?.fieldErrors?.["audio_url"] && (
@@ -57,9 +53,7 @@ export function TranscriptForm({ action, people, lang }: Props) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {lang === "ar" ? "تاريخ التسجيل" : "Date recorded"}
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Date recorded</label>
         <input
           type="date"
           name="recorded_at"
@@ -68,14 +62,12 @@ export function TranscriptForm({ action, people, lang }: Props) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {lang === "ar" ? "مسجَّل مع" : "Recorded with"}
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Recorded with</label>
         <select
           name="recorded_with"
           className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full"
         >
-          <option value="">— {lang === "ar" ? "اختياري" : "optional"} —</option>
+          <option value="">— optional —</option>
           {people.map((p) => (
             <option key={p.id} value={p.id}>
               {personLabel(p)}
@@ -84,20 +76,9 @@ export function TranscriptForm({ action, people, lang }: Props) {
         </select>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {lang === "ar" ? "النص العربي" : "Arabic transcript"}
-        </label>
-        <textarea
-          name="raw_text_ar"
-          rows={8}
-          dir="rtl"
-          placeholder={lang === "ar" ? "اكتب أو الصق النص هنا…" : "Type or paste the Arabic text here…"}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-y"
-        />
-      </div>
+      <input type="hidden" name="raw_text_ar" value="" />
 
-      <SubmitButton lang={lang} />
+      <SubmitButton />
     </form>
   );
 }

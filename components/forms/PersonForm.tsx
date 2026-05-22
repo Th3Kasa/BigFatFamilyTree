@@ -1,10 +1,9 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Languages, Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { ActionState } from "@/lib/actions/people";
-import { translateToArabic } from "@/lib/actions/translate";
 import { PhotoUpload } from "./PhotoUpload";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PersonPicker, type PickablePerson } from "@/components/graph/PersonPicker";
@@ -49,7 +48,7 @@ const GENDER_LABELS: Record<"f" | "m", { en: string; ar: string }> = {
 
 const INPUT_CLS = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400";
 
-function SubmitButton({ label, lang }: { label: string; lang: "ar" | "en" }) {
+function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -57,7 +56,7 @@ function SubmitButton({ label, lang }: { label: string; lang: "ar" | "en" }) {
       disabled={pending}
       className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold transition-colors"
     >
-      {pending ? (lang === "ar" ? "جارٍ الحفظ…" : "Saving…") : label}
+      {pending ? "Saving…" : label}
     </button>
   );
 }
@@ -65,53 +64,12 @@ function SubmitButton({ label, lang }: { label: string; lang: "ar" | "en" }) {
 export function PersonForm({ action, initialData, people, lang, submitLabel }: Props) {
   const [state, formAction] = useActionState(action, null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(initialData?.photo_url ?? null);
-  const [translateError, setTranslateError] = useState<string | null>(null);
-  const [isTranslating, startTranslateTransition] = useTransition();
   const [fatherId, setFatherId] = useState<string | null>(initialData?.father_id ?? null);
   const [motherId, setMotherId] = useState<string | null>(initialData?.mother_id ?? null);
   const [parentPicker, setParentPicker] = useState<"father" | "mother" | null>(null);
   const peopleById = new Map(people.map((p) => [p.id, p as PickablePerson]));
 
-  // Controlled Arabic fields so translate can update them
-  const [givenAr, setGivenAr] = useState(initialData?.given_ar ?? "");
-  const [familyAr, setFamilyAr] = useState(initialData?.family_name_ar ?? "");
-  const [fatherAr, setFatherAr] = useState(initialData?.father_name_ar ?? "");
-  const [grandfatherAr, setGrandfatherAr] = useState(initialData?.grandfather_name_ar ?? "");
-  const [notesAr, setNotesAr] = useState(initialData?.notes_ar ?? "");
-
-  // Refs to read EN values at translate time
-  const givenEnRef = useRef<HTMLInputElement>(null);
-  const familyEnRef = useRef<HTMLInputElement>(null);
-  const fatherEnRef = useRef<HTMLInputElement>(null);
-  const grandfatherEnRef = useRef<HTMLInputElement>(null);
-  const notesEnRef = useRef<HTMLTextAreaElement>(null);
-
   const fieldError = (name: string) => state?.fieldErrors?.[name];
-
-  const personLabel = (p: PeopleLookup[number]) =>
-    (lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar) ?? "?";
-
-  function handleTranslate() {
-    setTranslateError(null);
-    startTranslateTransition(async () => {
-      const result = await translateToArabic({
-        given_en: givenEnRef.current?.value ?? undefined,
-        family_name_en: familyEnRef.current?.value ?? undefined,
-        father_name_en: fatherEnRef.current?.value ?? undefined,
-        grandfather_name_en: grandfatherEnRef.current?.value ?? undefined,
-        notes_en: notesEnRef.current?.value ?? undefined,
-      });
-      if (!result.success) {
-        setTranslateError(result.error);
-        return;
-      }
-      if (result.data.given_ar) setGivenAr(result.data.given_ar);
-      if (result.data.family_name_ar) setFamilyAr(result.data.family_name_ar);
-      if (result.data.father_name_ar) setFatherAr(result.data.father_name_ar);
-      if (result.data.grandfather_name_ar) setGrandfatherAr(result.data.grandfather_name_ar);
-      if (result.data.notes_ar) setNotesAr(result.data.notes_ar);
-    });
-  }
 
   return (
     <form action={formAction} className="space-y-6">
@@ -127,92 +85,39 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       </div>
 
       <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold text-gray-700 mb-2">
-          {lang === "ar" ? "الاسم الأول" : "Given name"}
-        </legend>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="given_en" className="block text-xs text-gray-500 mb-1">English</label>
-            <input
-              ref={givenEnRef}
-              id="given_en"
-              name="given_en"
-              defaultValue={initialData?.given_en ?? ""}
-              placeholder="e.g. Marcelle"
-              className={INPUT_CLS}
-            />
-            {fieldError("given_en") && (
-              <p className="text-xs text-red-500 mt-1">{fieldError("given_en")}</p>
-            )}
-          </div>
-          <div>
-            <label htmlFor="given_ar" className="block text-xs text-gray-500 mb-1">عربي</label>
-            <input
-              id="given_ar"
-              name="given_ar"
-              value={givenAr}
-              onChange={(e) => setGivenAr(e.target.value)}
-              placeholder="مثال: مارسيل"
-              dir="rtl"
-              className={INPUT_CLS}
-            />
-          </div>
+        <legend className="text-sm font-semibold text-gray-700 mb-2">Given name</legend>
+        <div>
+          <label htmlFor="given_en" className="block text-xs text-gray-500 mb-1">English</label>
+          <input
+            id="given_en"
+            name="given_en"
+            defaultValue={initialData?.given_en ?? ""}
+            placeholder="e.g. Marcelle"
+            className={INPUT_CLS}
+          />
+          {fieldError("given_en") && (
+            <p className="text-xs text-red-500 mt-1">{fieldError("given_en")}</p>
+          )}
         </div>
       </fieldset>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="family_name_en" className="block text-xs text-gray-500 mb-1">Family name (EN)</label>
-          <input ref={familyEnRef} id="family_name_en" name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} className={INPUT_CLS} />
-        </div>
-        <div>
-          <label htmlFor="family_name_ar" className="block text-xs text-gray-500 mb-1">اسم العائلة</label>
-          <input id="family_name_ar" name="family_name_ar" value={familyAr} onChange={(e) => setFamilyAr(e.target.value)} dir="rtl" className={INPUT_CLS} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="father_name_en" className="block text-xs text-gray-500 mb-1">Father name (EN)</label>
-          <input ref={fatherEnRef} id="father_name_en" name="father_name_en" defaultValue={initialData?.father_name_en ?? ""} className={INPUT_CLS} />
-        </div>
-        <div>
-          <label htmlFor="father_name_ar" className="block text-xs text-gray-500 mb-1">اسم الأب</label>
-          <input id="father_name_ar" name="father_name_ar" value={fatherAr} onChange={(e) => setFatherAr(e.target.value)} dir="rtl" className={INPUT_CLS} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="grandfather_name_en" className="block text-xs text-gray-500 mb-1">Grandfather name (EN)</label>
-          <input ref={grandfatherEnRef} id="grandfather_name_en" name="grandfather_name_en" defaultValue={initialData?.grandfather_name_en ?? ""} className={INPUT_CLS} />
-        </div>
-        <div>
-          <label htmlFor="grandfather_name_ar" className="block text-xs text-gray-500 mb-1">اسم الجد</label>
-          <input id="grandfather_name_ar" name="grandfather_name_ar" value={grandfatherAr} onChange={(e) => setGrandfatherAr(e.target.value)} dir="rtl" className={INPUT_CLS} />
-        </div>
-      </div>
-
-      {/* Auto-translate button */}
       <div>
-        <button
-          type="button"
-          onClick={handleTranslate}
-          disabled={isTranslating}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
-        >
-          {isTranslating
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            : <Languages className="w-3.5 h-3.5" />}
-          {lang === "ar" ? "ترجمة إلى العربية تلقائياً" : "Auto-translate EN → AR"}
-        </button>
-        {translateError && (
-          <p className="text-xs text-red-500 mt-1">{translateError}</p>
-        )}
+        <label htmlFor="family_name_en" className="block text-xs text-gray-500 mb-1">Family name (EN)</label>
+        <input id="family_name_en" name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} className={INPUT_CLS} />
       </div>
 
       <div>
-        <p className="text-xs text-gray-500 mb-2">{lang === "ar" ? "الجنس" : "Gender"}</p>
+        <label htmlFor="father_name_en" className="block text-xs text-gray-500 mb-1">Father name (EN)</label>
+        <input id="father_name_en" name="father_name_en" defaultValue={initialData?.father_name_en ?? ""} className={INPUT_CLS} />
+      </div>
+
+      <div>
+        <label htmlFor="grandfather_name_en" className="block text-xs text-gray-500 mb-1">Grandfather name (EN)</label>
+        <input id="grandfather_name_en" name="grandfather_name_en" defaultValue={initialData?.grandfather_name_en ?? ""} className={INPUT_CLS} />
+      </div>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-2">Gender</p>
         <div className="flex gap-4">
           {(["f", "m"] as const).map((g) => (
             <label key={g} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -227,7 +132,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
                 }
                 className="accent-amber-500"
               />
-              {GENDER_LABELS[g][lang]}
+              {GENDER_LABELS[g].en}
             </label>
           ))}
         </div>
@@ -235,8 +140,8 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
 
       <div className="grid grid-cols-2 gap-3">
         <ParentPickerField
-          label={lang === "ar" ? "الأب" : "Father"}
-          placeholder={lang === "ar" ? "اختر…" : "Pick…"}
+          label="Father"
+          placeholder="Pick…"
           name="father_id"
           value={fatherId}
           person={fatherId ? peopleById.get(fatherId) : undefined}
@@ -245,8 +150,8 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
           lang={lang}
         />
         <ParentPickerField
-          label={lang === "ar" ? "الأم" : "Mother"}
-          placeholder={lang === "ar" ? "اختر…" : "Pick…"}
+          label="Mother"
+          placeholder="Pick…"
           name="mother_id"
           value={motherId}
           person={motherId ? peopleById.get(motherId) : undefined}
@@ -259,8 +164,8 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
         <PersonPicker
           open
           onOpenChange={(o) => { if (!o) setParentPicker(null); }}
-          title={parentPicker === "father" ? (lang === "ar" ? "اختر الأب" : "Pick a father") : (lang === "ar" ? "اختر الأم" : "Pick a mother")}
-          description={lang === "ar" ? "ابحث بالاسم" : "Search by name"}
+          title={parentPicker === "father" ? "Pick a father" : "Pick a mother"}
+          description="Search by name"
           people={people as PickablePerson[]}
           lang={lang}
           excludeIds={initialData?.id ? [initialData.id] : []}
@@ -272,11 +177,8 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       )}
 
       <div>
-        <label htmlFor="notes_en" className="block text-xs text-gray-500 mb-1">
-          {lang === "ar" ? "ملاحظات (إنجليزي)" : "Notes (English)"}
-        </label>
+        <label htmlFor="notes_en" className="block text-xs text-gray-500 mb-1">Notes</label>
         <textarea
-          ref={notesEnRef}
           id="notes_en"
           name="notes_en"
           defaultValue={initialData?.notes_en ?? ""}
@@ -284,24 +186,10 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
           className={`${INPUT_CLS} resize-none`}
         />
       </div>
-      <div>
-        <label htmlFor="notes_ar" className="block text-xs text-gray-500 mb-1">ملاحظات (عربي)</label>
-        <textarea
-          id="notes_ar"
-          name="notes_ar"
-          value={notesAr}
-          onChange={(e) => setNotesAr(e.target.value)}
-          rows={3}
-          dir="rtl"
-          className={`${INPUT_CLS} resize-none`}
-        />
-      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="birth_date" className="block text-xs text-gray-500 mb-1">
-            {lang === "ar" ? "تاريخ الميلاد" : "Birth date"}
-          </label>
+          <label htmlFor="birth_date" className="block text-xs text-gray-500 mb-1">Birth date</label>
           <input
             type="text"
             id="birth_date"
@@ -312,9 +200,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
           />
         </div>
         <div>
-          <label htmlFor="death_date" className="block text-xs text-gray-500 mb-1">
-            {lang === "ar" ? "تاريخ الوفاة" : "Death date"}
-          </label>
+          <label htmlFor="death_date" className="block text-xs text-gray-500 mb-1">Death date</label>
           <input
             type="text"
             id="death_date"
@@ -326,11 +212,17 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
         </div>
       </div>
 
+      {/* Preserve existing Arabic data as hidden fields so it isn't wiped on save */}
+      <input type="hidden" name="given_ar" value={initialData?.given_ar ?? ""} />
+      <input type="hidden" name="family_name_ar" value={initialData?.family_name_ar ?? ""} />
+      <input type="hidden" name="father_name_ar" value={initialData?.father_name_ar ?? ""} />
+      <input type="hidden" name="grandfather_name_ar" value={initialData?.grandfather_name_ar ?? ""} />
+      <input type="hidden" name="notes_ar" value={initialData?.notes_ar ?? ""} />
       <input type="hidden" name="is_placeholder" value="false" />
       <input type="hidden" name="great_grandfather_name_en" value={initialData?.great_grandfather_name_en ?? ""} />
       <input type="hidden" name="great_grandfather_name_ar" value={initialData?.great_grandfather_name_ar ?? ""} />
 
-      <SubmitButton label={submitLabel} lang={lang} />
+      <SubmitButton label={submitLabel} />
     </form>
   );
 }
@@ -396,7 +288,7 @@ function ParentPickerField({
           <button
             type="button"
             onClick={onClear}
-            aria-label={lang === "ar" ? "إزالة" : "Clear"}
+            aria-label="Clear"
             className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] transition-[background-color,color] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
           >
             <X className="h-3.5 w-3.5" />
