@@ -77,20 +77,37 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           style={PARENT_STYLE}
           title={tip.parentIn}
         />
-        <div
-          className={cn(
-            "w-[220px] h-[240px] rounded-3xl border-2 border-dashed border-[var(--border)] bg-[var(--muted)]/50",
-            "flex items-center justify-center transition-[transform,border-color] duration-300 ease-out",
-            selected && "border-[var(--primary)]/60",
-            hovered && "-translate-y-px border-[var(--accent)]/60",
-          )}
+        <Link
+          href={`/person/${person.slug ?? person.id}/edit`}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
+          className={cn(
+            // Sized to occupy the dagre slot (220×240) but only renders a small
+            // ghost token at the top so it feels like a junction, not a tile.
+            "relative flex w-[220px] h-[240px] cursor-pointer items-start justify-center pt-6",
+          )}
         >
-          <span className="text-xs font-medium text-[var(--muted-foreground)]">
-            {lang === "ar" ? "إضافة معلومات ←" : "Add info →"}
-          </span>
-        </div>
+          <div
+            className={cn(
+              "flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--card)]/70 px-3 py-3 text-center transition-[transform,border-color,box-shadow] duration-300 ease-out",
+              "shadow-[0_2px_10px_-4px_rgba(40,10,15,0.10)]",
+              selected && "border-[var(--primary)]/60 shadow-[var(--shadow-glow)]",
+              hovered && "-translate-y-px border-[var(--accent)]/70",
+            )}
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-[var(--muted-foreground)]/50 bg-[var(--muted)]/40 text-[var(--muted-foreground)]">
+              <span className="text-base">?</span>
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                {lang === "ar" ? "والد غير معروف" : "Unknown parent"}
+              </span>
+              <span className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
+                {lang === "ar" ? "انقر لتعبئة الاسم" : "Click to fill in"}
+              </span>
+            </div>
+          </div>
+        </Link>
         <Handle
           type="source"
           position={Position.Bottom}

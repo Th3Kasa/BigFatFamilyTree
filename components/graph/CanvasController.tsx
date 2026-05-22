@@ -245,8 +245,15 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       result = await linkSpouse(source, target, "divorced");
       okMsg = lang === "ar" ? `${srcName} و ${tgtName} مطلقان` : `${srcName} and ${tgtName} marked as divorced`;
     } else if (choice === "sibling") {
-      result = await addSibling(source, target);
-      okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
+      const sibRes = await addSibling(source, target);
+      result = sibRes;
+      if (sibRes.success && sibRes.placeholderId) {
+        okMsg = lang === "ar"
+          ? `تم ربطهما كأشقاء وأضفت والداً مؤقتاً — افتحه لتعبئة الاسم`
+          : `Linked as siblings — added a placeholder parent. Click it to fill in their real parent.`;
+      } else {
+        okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
+      }
     } else if (choice === "adopted") {
       result = await linkAdopted(source, target);
       okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} adopted ${tgtName}`;

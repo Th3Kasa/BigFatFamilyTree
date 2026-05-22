@@ -770,10 +770,17 @@ export function Inspector({
               ? `تم ربط ${otherLabel} كأب/أم لـ ${selfLabel}`
               : `${otherLabel} linked as ${selfLabel}'s parent`;
           } else if (picker === "sibling") {
-            result = await addSibling(person.id, otherId);
-            successMsg = lang === "ar"
-              ? `تم ربط ${otherLabel} كشقيق/ة لـ ${selfLabel}`
-              : `${otherLabel} linked as ${selfLabel}'s sibling`;
+            const sibRes = await addSibling(person.id, otherId);
+            result = sibRes;
+            if (sibRes.success && sibRes.placeholderId) {
+              successMsg = lang === "ar"
+                ? `تم ربطهما كأشقاء وأضفت والداً مؤقتاً — افتحه لتعبئة الاسم`
+                : `Linked as siblings — added a placeholder parent. Click it to fill in their real parent.`;
+            } else {
+              successMsg = lang === "ar"
+                ? `تم ربط ${otherLabel} كشقيق/ة لـ ${selfLabel}`
+                : `${otherLabel} linked as ${selfLabel}'s sibling`;
+            }
           }
           if (result?.success) {
             toast.success(successMsg);
