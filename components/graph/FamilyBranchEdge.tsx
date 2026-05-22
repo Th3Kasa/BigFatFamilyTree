@@ -43,32 +43,37 @@ export function FamilyBranchEdge({ data }: EdgeProps) {
   let startX: number;
   let startY: number;
 
+  // Marriage-line Y: left/right handles are at mid-height of the card.
+  // The vertical drop must originate from the centre of the marriage line
+  // (matching the reference diagram), not from below the cards.
+  const MID_Y = NODE_HEIGHT / 2;
+
   if (fatherNode && motherNode) {
-    // Both parents explicit — midpoint of their centers
-    const fx = fatherNode.position.x + NODE_WIDTH / 2;
-    const mx = motherNode.position.x + NODE_WIDTH / 2;
-    startX = (fx + mx) / 2;
+    // Both parents explicit — drop from the midpoint of the marriage line
+    startX = (fatherNode.position.x + NODE_WIDTH / 2 + motherNode.position.x + NODE_WIDTH / 2) / 2;
     startY = Math.max(
-      fatherNode.position.y + NODE_HEIGHT,
-      motherNode.position.y + NODE_HEIGHT,
+      fatherNode.position.y + MID_Y,
+      motherNode.position.y + MID_Y,
     );
   } else if (fatherNode) {
-    // Only father recorded — check for a spouse on canvas and use marriage midpoint
+    // Only father in the data — look for a spouse on canvas
     const spouse = findSpouseNode(fatherId!);
     if (spouse) {
       startX = (fatherNode.position.x + NODE_WIDTH / 2 + spouse.position.x + NODE_WIDTH / 2) / 2;
-      startY = Math.max(fatherNode.position.y + NODE_HEIGHT, spouse.position.y + NODE_HEIGHT);
+      startY = Math.max(fatherNode.position.y + MID_Y, spouse.position.y + MID_Y);
     } else {
+      // No spouse on canvas — drop from the father's bottom handle
       startX = fatherNode.position.x + NODE_WIDTH / 2;
       startY = fatherNode.position.y + NODE_HEIGHT;
     }
   } else if (motherNode) {
-    // Only mother recorded — check for a spouse on canvas and use marriage midpoint
+    // Only mother in the data — look for a spouse on canvas
     const spouse = findSpouseNode(motherId!);
     if (spouse) {
       startX = (motherNode.position.x + NODE_WIDTH / 2 + spouse.position.x + NODE_WIDTH / 2) / 2;
-      startY = Math.max(motherNode.position.y + NODE_HEIGHT, spouse.position.y + NODE_HEIGHT);
+      startY = Math.max(motherNode.position.y + MID_Y, spouse.position.y + MID_Y);
     } else {
+      // No spouse on canvas — drop from the mother's bottom handle
       startX = motherNode.position.x + NODE_WIDTH / 2;
       startY = motherNode.position.y + NODE_HEIGHT;
     }
