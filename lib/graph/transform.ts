@@ -49,14 +49,14 @@ export type GraphEdge = {
   id: string;
   source: string;
   target: string;
-  type: "smoothstep" | "straight" | "step" | "family-branch";
+  type: "smoothstep" | "straight" | "step" | "family-branch" | "spouse";
   sourceHandle?: string;
   targetHandle?: string;
   selectable?: boolean;
   focusable?: boolean;
   deletable?: boolean;
   data?: {
-    edgeKind: "parent" | "spouse" | "family-branch";
+    edgeKind: "parent" | "spouse" | "family-branch" | "adopted" | "guardian";
     relationshipId?: string;
     status?: SpouseStatus;
     fatherId?: string | null;
@@ -177,42 +177,65 @@ export function buildGraphElements(
     });
   }
 
-  // Build spouse edges after layout so we can route based on actual positions
+  // Build spouse, adoptive, and guardian edges after layout
   const posMap = new Map(nodes.map((n) => [n.id, n.position]));
   for (const r of relationships) {
     if (r.type === "spouse") {
+      if (!idSet.has(r.person_a_id) || !idSet.has(r.person_b_id)) continue;
       const posA = posMap.get(r.person_a_id);
       const posB = posMap.get(r.person_b_id);
       const aIsLeft = !posA || !posB || posA.x <= posB.x;
       const status = (r.status ?? "current") as SpouseStatus;
-      const style: React.CSSProperties = (() => {
-        if (status === "divorced") {
-          return {
-            stroke: "oklch(0.62 0.20 18 / 0.55)",
-            strokeWidth: 2,
-            strokeDasharray: "6 5",
-          };
-        }
-        if (status === "widowed") {
-          return {
-            stroke: "oklch(0.48 0.03 25 / 0.6)",
-            strokeWidth: 2,
-            strokeDasharray: "2 4",
-          };
-        }
-        // current
-        return { stroke: "oklch(0.62 0.20 18 / 0.70)", strokeWidth: 2 };
-      })();
+      // SpouseEdge computes its own stroke from data.status — no style needed here
       edges.push({
         id: `s-${r.person_a_id}-${r.person_b_id}`,
         source: aIsLeft ? r.person_a_id : r.person_b_id,
         target: aIsLeft ? r.person_b_id : r.person_a_id,
         sourceHandle: "right",
         targetHandle: "left-target",
-        type: "straight",
+        type: "spouse",
         data: { edgeKind: "spouse", relationshipId: r.id, status },
-        style,
       });
+    } else if (r.type === "adopted_by") {
+      // person_a = adopted child, person_b = adoptive parent
+      if (!idSet.has(r.person_a_id) || !idSet.has(r.person_b_id)) continue;
+      edges.push({
+        id: `adopt-${r.id}`,
+        source: r.person_b_id,
+        target: r.person_a_id,
+        sourceHandle: "bottom",
+        targetHandle: "top",
+        type: "straight",
+        selectable: true,
+        focusable: true,
+        deletable: true,
+        data: { edgeKind: "adopted", relationshipId: r.id },
+        style: {
+          stroke: "oklch(0.52 0.18 280 / 0.65)",
+          strokeWidth: 2,
+          strokeDasharray: "7 4",
+        },
+      } as GraphEdge);
+    } else if (r.type === "raised_by") {
+      // person_a = child being raised, person_b = guardian
+      if (!idSet.has(r.person_a_id) || !idSet.has(r.person_b_id)) continue;
+      edges.push({
+        id: `guardian-${r.id}`,
+        source: r.person_b_id,
+        target: r.person_a_id,
+        sourceHandle: "bottom",
+        targetHandle: "top",
+        type: "straight",
+        selectable: true,
+        focusable: true,
+        deletable: true,
+        data: { edgeKind: "guardian", relationshipId: r.id },
+        style: {
+          stroke: "oklch(0.52 0.14 150 / 0.65)",
+          strokeWidth: 2,
+          strokeDasharray: "3 3",
+        },
+      } as GraphEdge);
     }
   }
 

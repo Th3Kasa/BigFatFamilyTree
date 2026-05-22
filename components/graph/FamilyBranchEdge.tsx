@@ -121,9 +121,7 @@ export function FamilyBranchEdge({ data }: EdgeProps) {
   return (
     <path
       d={parts.join(" ")}
-      stroke="oklch(0.38 0.06 18 / 0.55)"
-      strokeWidth={1.5}
-      fill="none"
+      style={{ stroke: "oklch(0.62 0.20 18 / 0.70)", strokeWidth: 2, fill: "none" }}
       strokeLinejoin="round"
     />
   );

@@ -288,7 +288,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     edgeId: string;
     source: string;
     target: string;
-    edgeKind: "parent" | "spouse";
+    edgeKind: "parent" | "spouse" | "adopted" | "guardian";
     relationshipId?: string;
     label: string;
   } | null>(null);
@@ -296,7 +296,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const onEdgeContextMenu: EdgeMouseHandler = (e, edge) => {
     e.preventDefault();
     const data = edge.data as
-      | { edgeKind?: "parent" | "spouse" | "family-branch"; relationshipId?: string }
+      | { edgeKind?: "parent" | "spouse" | "family-branch" | "adopted" | "guardian"; relationshipId?: string }
       | undefined;
     if (!data?.edgeKind || data.edgeKind === "family-branch") return;
     const srcName = people.find((p) => p.id === edge.source);
@@ -320,12 +320,15 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   };
 
   async function removeCurrentEdgeRelationship(
-    edgeKind: "parent" | "spouse",
+    edgeKind: "parent" | "spouse" | "adopted" | "guardian",
     relationshipId: string | undefined,
     source: string,
     target: string,
   ): Promise<{ success: boolean; error?: string } | null> {
     if (edgeKind === "spouse" && relationshipId) {
+      return await deleteRelationship(relationshipId, source);
+    }
+    if ((edgeKind === "adopted" || edgeKind === "guardian") && relationshipId) {
       return await deleteRelationship(relationshipId, source);
     }
     if (edgeKind === "parent") {
@@ -372,7 +375,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const [replaceConn, setReplaceConn] = useState<{
     source: string;
     target: string;
-    currentKind: "parent" | "spouse";
+    currentKind: "parent" | "spouse" | "adopted" | "guardian";
     currentRelationshipId?: string;
   } | null>(null);
 
@@ -478,6 +481,13 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       const data = edge.data as { edgeKind?: string; relationshipId?: string } | undefined;
       if (data?.edgeKind === "family-branch") return; // handled via Inspector
       if (data?.edgeKind === "spouse" && data.relationshipId) {
+        const rid = data.relationshipId;
+        const pid = edge.source as string;
+        startTransition(async () => {
+          await deleteRelationship(rid, pid);
+          router.refresh();
+        });
+      } else if ((data?.edgeKind === "adopted" || data?.edgeKind === "guardian") && data.relationshipId) {
         const rid = data.relationshipId;
         const pid = edge.source as string;
         startTransition(async () => {

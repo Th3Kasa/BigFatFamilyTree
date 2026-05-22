@@ -106,8 +106,18 @@ export function CanvasOverlay({ lang }: Props) {
             dashed
           />
           <LegendItem
-            color="oklch(0.34 0.13 18)"
+            color="oklch(0.62 0.20 18 / 0.70)"
             label={lang === "ar" ? "نسب" : "Parent-child"}
+          />
+          <LegendItem
+            color="oklch(0.52 0.18 280 / 0.65)"
+            label={lang === "ar" ? "تبني" : "Adoptive"}
+            dashed
+          />
+          <LegendItem
+            color="oklch(0.52 0.14 150 / 0.65)"
+            label={lang === "ar" ? "ولي أمر" : "Guardian"}
+            dashed
           />
         </div>
       </div>
