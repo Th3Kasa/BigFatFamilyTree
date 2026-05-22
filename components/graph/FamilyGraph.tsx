@@ -81,7 +81,7 @@ export function FamilyGraph({
         deleteKeyCode="Delete"
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
-          style: { stroke: "#d1d5db", strokeWidth: 1.5 },
+          style: { stroke: "oklch(0.38 0.06 18 / 0.45)", strokeWidth: 1.5 },
           animated: false,
         }}
       >

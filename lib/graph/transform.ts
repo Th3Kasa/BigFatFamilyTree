@@ -49,7 +49,7 @@ export type GraphEdge = {
   id: string;
   source: string;
   target: string;
-  type: "smoothstep" | "straight";
+  type: "smoothstep" | "straight" | "step";
   sourceHandle?: string;
   targetHandle?: string;
   data?: {
@@ -101,10 +101,10 @@ export function buildGraphElements(
 
   for (const p of people) {
     if (p.father_id && idSet.has(p.father_id)) {
-      edges.push({ id: `f-${p.id}`, source: p.father_id, target: p.id, type: "smoothstep", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" } });
+      edges.push({ id: `f-${p.id}`, source: p.father_id, target: p.id, type: "step", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" }, style: { stroke: "oklch(0.38 0.06 18 / 0.55)", strokeWidth: 1.5 } });
     }
     if (p.mother_id && idSet.has(p.mother_id)) {
-      edges.push({ id: `m-${p.id}`, source: p.mother_id, target: p.id, type: "smoothstep", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" } });
+      edges.push({ id: `m-${p.id}`, source: p.mother_id, target: p.id, type: "step", sourceHandle: "bottom", targetHandle: "top", data: { edgeKind: "parent" }, style: { stroke: "oklch(0.38 0.06 18 / 0.55)", strokeWidth: 1.5 } });
     }
   }
 
@@ -156,7 +156,7 @@ export function buildGraphElements(
           };
         }
         // current
-        return { stroke: "oklch(0.62 0.20 18 / 0.85)", strokeWidth: 2.5 };
+        return { stroke: "oklch(0.62 0.20 18 / 0.70)", strokeWidth: 2 };
       })();
       edges.push({
         id: `s-${r.person_a_id}-${r.person_b_id}`,
