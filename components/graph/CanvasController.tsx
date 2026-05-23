@@ -538,15 +538,10 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
           if (r?.success) router.refresh();
           else toast.error(r?.error ?? "Couldn't remove connection");
         });
-      } else if (data?.edgeKind === "parent") {
-        const childId = edge.target as string;
-        const parentId = edge.source as string;
-        startTransition(async () => {
-          const r = await unlinkParent(parentId, childId);
-          if (r?.success) router.refresh();
-          else toast.error(r?.error ?? "Couldn't remove connection");
-        });
       }
+      // Note: "parent" edgeKind is never produced by buildGraphElements —
+      // parent-child links use family-branch edges (deletable: false) and are
+      // removed via the Inspector's unlink buttons, not edge deletion.
     }
   }, [router, startTransition]);
 
@@ -658,6 +653,10 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         <NodeContextMenu
           target={menu}
           lang={lang}
+          personName={menu.kind === "node" ? (() => {
+            const p = people.find((x) => x.id === menu.personId);
+            return p ? (lang === "ar" ? (p.given_ar ?? p.given_en) : (p.given_en ?? p.given_ar)) ?? undefined : undefined;
+          })() : undefined}
           onClose={() => { setMenu(null); setDeleteNodeConfirm(null); }}
           onAddChild={handleAddChild}
           onAddSpouse={handleAddSpouse}
@@ -673,9 +672,9 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         <QuickAddDialog
           relation={quickAdd}
           lang={lang}
-          onClose={() => {
+          onClose={(didSave) => {
             setQuickAdd(null);
-            router.refresh();
+            if (didSave) router.refresh();
           }}
         />
       )}

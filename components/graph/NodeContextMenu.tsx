@@ -9,6 +9,7 @@ export type ContextMenuTarget =
 type Props = {
   target: ContextMenuTarget;
   lang: "ar" | "en";
+  personName?: string;
   onClose: () => void;
   onAddChild: () => void;
   onAddSpouse: () => void;
@@ -20,7 +21,8 @@ type Props = {
 };
 
 export function NodeContextMenu({
-  target, lang, onClose,
+  target, lang, personName,
+  onClose,
   onAddChild, onAddSpouse, onAddParent, onEdit, onDelete, onAddPerson,
   deleteConfirm = false,
 }: Props) {
@@ -69,6 +71,11 @@ export function NodeContextMenu({
       className="fixed z-[100] min-w-[180px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg overflow-hidden"
       style={{ left: pos.left, top: pos.top }}
       role="menu"
+      aria-label={
+        target.kind === "node" && personName
+          ? (lang === "ar" ? `إجراءات لـ ${personName}` : `Actions for ${personName}`)
+          : (lang === "ar" ? "إجراءات اللوحة" : "Canvas actions")
+      }
     >
       {target.kind === "node" ? (
         <>

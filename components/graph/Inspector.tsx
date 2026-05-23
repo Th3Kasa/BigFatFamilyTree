@@ -125,8 +125,13 @@ function InlineQuickAdd({
     if (needsSiblingLink) {
       addSibling(p.id, formState.personId!)
         .then((r) => {
-          if (!r.success) toast.error(r.error ?? "Sibling link failed — check back to reconnect");
-          else onDone();
+          if (!r.success) {
+            // Roll back the orphaned person before surfacing the error.
+            deletePersonCanvas(formState.personId!).catch(() => {});
+            toast.error(r.error ?? "Sibling link failed");
+          } else {
+            onDone();
+          }
         })
         .catch(() => toast.error("Sibling link failed"));
     } else {
@@ -400,7 +405,7 @@ function SpouseRow({
         {spouse?.photo_url && (
           <AvatarImage src={spouse.photo_url} alt={name} className="object-cover" />
         )}
-        <AvatarFallback className="text-[10px] font-semibold bg-rose-50 text-rose-500">
+        <AvatarFallback className="text-[10px] font-semibold">
           {personInitials(spouse, lang)}
         </AvatarFallback>
       </Avatar>

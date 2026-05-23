@@ -14,7 +14,7 @@ export type QuickAddRelation =
 type Props = {
   relation: QuickAddRelation;
   lang: "ar" | "en";
-  onClose: () => void;
+  onClose: (didSave?: boolean) => void;
 };
 
 function SubmitButton() {
@@ -37,15 +37,15 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
   useEffect(() => {
     firstInput.current?.focus();
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onClose(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Close dialog after successful save (no redirect in createPersonQuick)
+  // Close dialog after successful save and signal that data changed.
   useEffect(() => {
-    if (state?.success) onClose();
+    if (state?.success) onClose(true);
   }, [state?.success, onClose]);
 
   const fatherId = relation.kind === "child" && relation.parentGender !== "f" ? relation.parentId : null;
@@ -60,7 +60,7 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
     : "Add person";
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40" onClick={onClose} aria-hidden="true">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40" onClick={() => onClose(false)} aria-hidden="true">
       <div
         role="dialog"
         aria-modal="true"
@@ -117,7 +117,7 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
           <input type="hidden" name="notes_ar" value="" />
 
           <div className="flex gap-2 justify-end pt-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] rounded-lg transition-colors">
+            <button type="button" onClick={() => onClose(false)} className="px-4 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] rounded-lg transition-colors">
               Cancel
             </button>
             <SubmitButton />

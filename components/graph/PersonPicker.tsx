@@ -136,6 +136,7 @@ export function PersonPicker({
           <Search className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
           <input
             autoFocus
+            aria-label={lang === "ar" ? "ابحث بالاسم" : "Search by name"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={lang === "ar" ? "ابحث بالاسم…" : "Search by name…"}

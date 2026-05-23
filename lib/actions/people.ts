@@ -173,6 +173,25 @@ export async function createPersonQuick(
   }
 
   const supabase = await createClient();
+
+  // Pre-flight: check child slot isn't already occupied before creating the person.
+  const childId = raw.child_id;
+  if (childId && UUID_RE.test(childId)) {
+    const field = parsed.data.gender === "f" ? "mother_id" : "father_id";
+    const { data: existingChild } = await supabase
+      .from("people")
+      .select("father_id, mother_id")
+      .eq("id", childId)
+      .maybeSingle();
+    if (existingChild) {
+      const occupiedId = (existingChild as Record<string, string | null>)[field];
+      if (occupiedId) {
+        const role = field === "father_id" ? "father" : "mother";
+        return { success: false, error: `This person already has a ${role}. Unlink the existing one first.` };
+      }
+    }
+  }
+
   const baseSlug = generateSlug(parsed.data.given_en, parsed.data.family_name_en, parsed.data.given_ar);
   const slug = await uniqueSlug(supabase, baseSlug);
 
@@ -197,7 +216,6 @@ export async function createPersonQuick(
     if (relErr) return { success: false, error: `Person created but spouse link failed: ${relErr.message}` };
   }
 
-  const childId = raw.child_id;
   if (childId && UUID_RE.test(childId)) {
     const field = parsed.data.gender === "f" ? "mother_id" : "father_id";
     const { error: childErr } = await supabase.from("people").update({ [field]: newId }).eq("id", childId).is("deleted_at", null);
