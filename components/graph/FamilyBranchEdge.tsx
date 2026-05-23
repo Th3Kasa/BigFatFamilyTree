@@ -1,6 +1,7 @@
 "use client";
 
-import { useNodes, useEdges, type EdgeProps } from "@xyflow/react";
+import { useEdges, useInternalNode, useStore, type EdgeProps } from "@xyflow/react";
+import type { Edge } from "@xyflow/react";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 240;
@@ -12,122 +13,138 @@ type FamilyBranchData = {
   childIds: string[];
 };
 
-export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: EdgeProps) {
-  const nodes = useNodes();
-  const edges = useEdges();
-  const { fatherId, motherId, childIds } = (data ?? {}) as FamilyBranchData;
+// Structural lookup — no node positions involved.
+function getSpouseId(parentId: string, edges: Edge[]): string | null {
+  const spouseEdges = edges.filter(
+    (e) =>
+      (e.data as { edgeKind?: string } | undefined)?.edgeKind === "spouse" &&
+      (e.source === parentId || e.target === parentId),
+  );
+  const preferred =
+    spouseEdges.find(
+      (e) => (e.data as { status?: string } | undefined)?.status === "current",
+    ) ?? spouseEdges[0];
+  if (!preferred) return null;
+  return preferred.source === parentId ? preferred.target : preferred.source;
+}
 
-  // sourceX/sourceY from EdgeProps are updated every drag frame by React Flow
-  // (they represent the bottom handle of the source parent).
-  // Derive source parent's card-centre X and marriage-line Y from them directly
-  // so the primary parent's position is always lag-free.
-  // sourceX = node centre X (bottom handle is horizontally centred)
-  // sourceY = node bottom Y  →  midY = sourceY - MID_Y
+function posEq(
+  a: Record<string, { x: number; y: number }>,
+  b: Record<string, { x: number; y: number }>,
+): boolean {
+  const ak = Object.keys(a);
+  if (ak.length !== Object.keys(b).length) return false;
+  for (const id of ak) {
+    if (a[id].x !== b[id]?.x || a[id].y !== b[id]?.y) return false;
+  }
+  return true;
+}
+
+export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: EdgeProps) {
+  // useEdges is structural (relationship graph), not position-sensitive.
+  // It only re-renders this component when edges are added/removed, not on drag.
+  const edges = useEdges();
+  const { fatherId = null, motherId = null, childIds = [] } = (data ?? {}) as Partial<FamilyBranchData>;
+
+  // Derive spouse IDs structurally before calling hooks.
+  const fatherSpouseId = fatherId ? getSpouseId(fatherId, edges) : null;
+  const motherSpouseId = motherId ? getSpouseId(motherId, edges) : null;
+
+  // Subscribe to exactly 4 individual node positions.
+  // Each useInternalNode re-renders only when THAT specific node moves,
+  // rather than the entire node array (which is what useNodes() would do).
+  const fatherNode = useInternalNode(fatherId ?? "");
+  const motherNode = useInternalNode(motherId ?? "");
+  const fatherSpouseNode = useInternalNode(fatherSpouseId ?? "");
+  const motherSpouseNode = useInternalNode(motherSpouseId ?? "");
+
+  // For sibling children (beyond childIds[0] which uses lag-free EdgeProps),
+  // subscribe to only those specific positions via a narrow store selector.
+  const siblingChildIds = childIds.slice(1);
+  const siblingPositions = useStore(
+    (s) => {
+      const map: Record<string, { x: number; y: number }> = {};
+      for (const node of s.nodes) {
+        if (siblingChildIds.includes(node.id)) {
+          map[node.id] = node.position;
+        }
+      }
+      return map;
+    },
+    posEq,
+  );
+
+  // ── source parent (lag-free via EdgeProps) ───────────────────
   const srcCentreX = sourceX;
   const srcMidY    = sourceY - NODE_HEIGHT / 2;
+  const MID_Y      = NODE_HEIGHT / 2;
 
-  const fatherNode = fatherId ? nodes.find((n) => n.id === fatherId) : null;
-  const motherNode = motherId ? nodes.find((n) => n.id === motherId) : null;
-
-  // When only one parent is known in the family group, look for that parent's
-  // spouse edge on the canvas and use the marriage midpoint as the drop origin.
-  // Prefers current-status spouse; falls back to any spouse.
-  function findSpouseNode(parentId: string) {
-    const spouseEdges = edges.filter(
-      (e) =>
-        (e.data as { edgeKind?: string } | undefined)?.edgeKind === "spouse" &&
-        (e.source === parentId || e.target === parentId),
-    );
-    const preferred =
-      spouseEdges.find(
-        (e) => (e.data as { status?: string } | undefined)?.status === "current",
-      ) ?? spouseEdges[0];
-    if (!preferred) return null;
-    const spouseId =
-      preferred.source === parentId ? preferred.target : preferred.source;
-    return nodes.find((n) => n.id === spouseId) ?? null;
-  }
-
-  // ── parent drop-start point ───────────────────────────────────
+  // ── marriage-line start point ─────────────────────────────────
   let startX: number;
   let startY: number;
 
-  // Marriage-line Y: left/right handles are at mid-height of the card.
-  // The vertical drop must originate from the centre of the marriage line
-  // (matching the reference diagram), not from below the cards.
-  const MID_Y = NODE_HEIGHT / 2;
-
   if (fatherNode && motherNode) {
-    // Both parents explicit — midpoint of their marriage line.
-    // Use srcCentreX/srcMidY for the source (father) for lag-free drag;
-    // fall back to useNodes() for the other parent.
     startX = (srcCentreX + motherNode.position.x + NODE_WIDTH / 2) / 2;
     startY = Math.max(srcMidY, motherNode.position.y + MID_Y);
   } else if (fatherNode) {
-    // Only father in the data — look for a spouse on canvas
-    const spouse = findSpouseNode(fatherId!);
+    const spouse = fatherSpouseNode;
     if (spouse) {
       startX = (srcCentreX + spouse.position.x + NODE_WIDTH / 2) / 2;
       startY = Math.max(srcMidY, spouse.position.y + MID_Y);
     } else {
       startX = srcCentreX;
-      startY = sourceY; // bottom handle, no spouse
+      startY = sourceY;
     }
   } else if (motherNode) {
-    // Only mother in the data — look for a spouse on canvas
-    const spouse = findSpouseNode(motherId!);
+    const spouse = motherSpouseNode;
     if (spouse) {
       startX = (srcCentreX + spouse.position.x + NODE_WIDTH / 2) / 2;
       startY = Math.max(srcMidY, spouse.position.y + MID_Y);
     } else {
       startX = srcCentreX;
-      startY = sourceY; // bottom handle, no spouse
+      startY = sourceY;
     }
   } else {
     return null;
   }
 
   // ── child positions ───────────────────────────────────────────
-  // targetX/targetY (EdgeProps) are updated every drag frame for the edge's
-  // target node (childIds[0]).  Use them for that child to avoid the one-frame
-  // lag that useNodes() can introduce during drag.
-  const targetChildId = (childIds ?? [])[0];
-  const childNodes = (childIds ?? [])
-    .map((id) => nodes.find((n) => n.id === id))
-    .filter((n): n is NonNullable<typeof n> => n != null);
+  const targetChildId = childIds[0];
+  const childCenterXs: number[] = [];
+  const childTopYs: number[] = [];
 
-  if (childNodes.length === 0) return null;
+  for (const id of childIds) {
+    if (id === targetChildId) {
+      childCenterXs.push(targetX);
+      childTopYs.push(targetY);
+    } else {
+      const pos = siblingPositions[id];
+      if (pos) {
+        childCenterXs.push(pos.x + NODE_WIDTH / 2);
+        childTopYs.push(pos.y);
+      }
+    }
+  }
 
-  const childCenterXs = childNodes.map((n) =>
-    n.id === targetChildId ? targetX : n.position.x + NODE_WIDTH / 2,
-  );
-  const childTopYs = childNodes.map((n) =>
-    n.id === targetChildId ? targetY : n.position.y,
-  );
-  const minChildTopY  = Math.min(...childTopYs);
+  if (childCenterXs.length === 0) return null;
 
-  // Junction Y sits halfway between parent bottom and nearest child top
-  const gap       = minChildTopY - startY;
-  const junctionY = startY + Math.max(gap * 0.5, 20);
-
-  const minChildX = Math.min(...childCenterXs);
-  const maxChildX = Math.max(...childCenterXs);
+  const minChildTopY = Math.min(...childTopYs);
+  const gap          = minChildTopY - startY;
+  const junctionY    = startY + Math.max(gap * 0.5, 20);
+  const minChildX    = Math.min(...childCenterXs);
+  const maxChildX    = Math.max(...childCenterXs);
 
   // ── build SVG path ────────────────────────────────────────────
-  // Each segment is a separate M…L so we get disconnected strokes
   const parts: string[] = [
-    // Vertical drop from parent midpoint → junction
     `M ${startX} ${startY} L ${startX} ${junctionY}`,
   ];
 
-  // Horizontal bar (only needed when >1 child)
-  if (childNodes.length > 1) {
+  if (childCenterXs.length > 1) {
     const barLeft  = Math.min(startX, minChildX);
     const barRight = Math.max(startX, maxChildX);
     parts.push(`M ${barLeft} ${junctionY} L ${barRight} ${junctionY}`);
   }
 
-  // Individual verticals from junction → each child top
   for (let i = 0; i < childCenterXs.length; i++) {
     parts.push(`M ${childCenterXs[i]} ${junctionY} L ${childCenterXs[i]} ${childTopYs[i]}`);
   }
