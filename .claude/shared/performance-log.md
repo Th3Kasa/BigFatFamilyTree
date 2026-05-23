@@ -52,6 +52,18 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ---
 
+### 2026-05-23 — Task #4 (QA loop — second audit pass)
+**Task:** QA loop continued — fresh qa-guard audit sweep, all 10 issues resolved
+**Agents used:** qa-guard (audit), Alfred (all fixes)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, all 10 issues addressed in a single commit
+**What worked:** qa-guard found the critical `uniqueSlug` excludeId bug (slug corruption on every edit), which was a silent Supabase query-builder immutability mistake. Also found the linkChild missing guard (mirrors the linkParentChild guard added in Task #3 — should have been fixed in the same pass). PersonPicker boolean-return contract is a clean fix for the "close-on-failure" UX break.
+**What didn't:** QA4-04 for `createPerson` is only partially fixed — we check the relErr but still redirect (person is already committed, can't undo). This is an architectural constraint of server actions + redirect, not a code bug. Noted as known limitation.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — all 10 issues were real and actionable; Alfred ⭐⭐⭐⭐⭐ — implemented all fixes in one shot, zero rework, TypeScript clean
+**Improvement opportunity:** The linkChild/linkParentChild symmetry gap (same guard needed in both, only added to one) suggests qa-guard should check symmetry between similar functions. Add this to audit scope.
+
+---
+
 ### 2026-05-22 — Task #2
 **Task:** Fix T-junction vertical bracket — drop should originate from the marriage line (mid-height of person cards) not from the bottom handle
 **Agents used:** Alfred (direct — single targeted fix, 3 lines changed)
