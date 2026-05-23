@@ -27,15 +27,17 @@ async function uniqueSlug(
   base: string,
   excludeId?: string,
 ): Promise<string> {
-  let candidate = base;
+  const safeBase = base || Math.random().toString(36).slice(2, 10);
+  let candidate = safeBase;
   let n = 2;
-  while (true) {
+  while (n < 200) {
     const q = supabase.from("people").select("id").eq("slug", candidate);
     if (excludeId) q.neq("id", excludeId);
     const { data } = await q.maybeSingle();
     if (!data) return candidate;
-    candidate = `${base}-${n++}`;
+    candidate = `${safeBase}-${n++}`;
   }
+  return Math.random().toString(36).slice(2, 10);
 }
 
 // ── createPerson ──────────────────────────────────────────────────────────────
@@ -600,11 +602,10 @@ export async function addSibling(
   return { success: true };
 }
 
-// ── deletePerson (soft delete) ────────────────────────────────────────────────
+// ── deletePerson (soft delete — redirects, for full-page flows) ──────────────
 export async function deletePerson(id: string) {
   const supabase = await createClient();
 
-  // Null out references from children so they don't point to a deleted person
   await Promise.all([
     supabase.from("people").update({ father_id: null }).eq("father_id", id).is("deleted_at", null),
     supabase.from("people").update({ mother_id: null }).eq("mother_id", id).is("deleted_at", null),
@@ -619,4 +620,24 @@ export async function deletePerson(id: string) {
 
   revalidatePath("/");
   redirect("/");
+}
+
+// ── deletePersonCanvas (soft delete — no redirect, for in-canvas use) ────────
+export async function deletePersonCanvas(id: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  await Promise.all([
+    supabase.from("people").update({ father_id: null }).eq("father_id", id).is("deleted_at", null),
+    supabase.from("people").update({ mother_id: null }).eq("mother_id", id).is("deleted_at", null),
+  ]);
+
+  const { error } = await supabase
+    .from("people")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/");
+  return { success: true };
 }

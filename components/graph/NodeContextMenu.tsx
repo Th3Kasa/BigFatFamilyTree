@@ -16,11 +16,13 @@ type Props = {
   onEdit: () => void;
   onDelete: () => void;
   onAddPerson: () => void;
+  deleteConfirm?: boolean;
 };
 
 export function NodeContextMenu({
   target, lang, onClose,
   onAddChild, onAddSpouse, onAddParent, onEdit, onDelete, onAddPerson,
+  deleteConfirm = false,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -39,37 +41,49 @@ export function NodeContextMenu({
     };
   }, [onClose]);
 
-  const item = "block w-full text-start px-3 py-2 text-sm hover:bg-amber-50 transition-colors";
-  const danger = "block w-full text-start px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors";
+  const item =
+    "block w-full text-start px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors";
+  const dangerItem =
+    "block w-full text-start px-3 py-2 text-sm text-[var(--destructive)] hover:bg-[var(--destructive)]/10 transition-colors";
 
   return (
     <div
       ref={ref}
-      className="fixed z-[100] min-w-[180px] bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
+      className="fixed z-[100] min-w-[180px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg overflow-hidden"
       style={{ left: target.x, top: target.y }}
       role="menu"
     >
       {target.kind === "node" ? (
         <>
-          <button onClick={onAddChild} className={item}>
+          <button type="button" onClick={onAddChild} className={item}>
             {lang === "ar" ? "إضافة ابن/ابنة" : "Add child"}
           </button>
-          <button onClick={onAddSpouse} className={item}>
+          <button type="button" onClick={onAddSpouse} className={item}>
             {lang === "ar" ? "إضافة زوج/زوجة" : "Add spouse"}
           </button>
-          <button onClick={onAddParent} className={item}>
+          <button type="button" onClick={onAddParent} className={item}>
             {lang === "ar" ? "إضافة والد/والدة" : "Add parent"}
           </button>
-          <hr className="border-gray-100" />
-          <button onClick={onEdit} className={item}>
+          <hr className="border-[var(--border)]" />
+          <button type="button" onClick={onEdit} className={item}>
             {lang === "ar" ? "تعديل" : "Edit"}
           </button>
-          <button onClick={onDelete} className={danger}>
-            {lang === "ar" ? "حذف" : "Delete"}
+          <button
+            type="button"
+            onClick={onDelete}
+            className={
+              deleteConfirm
+                ? "block w-full text-start px-3 py-2 text-sm text-white bg-[var(--destructive)] transition-colors"
+                : dangerItem
+            }
+          >
+            {deleteConfirm
+              ? (lang === "ar" ? "تأكيد؟" : "Confirm?")
+              : (lang === "ar" ? "حذف" : "Delete")}
           </button>
         </>
       ) : (
-        <button onClick={onAddPerson} className={item}>
+        <button type="button" onClick={onAddPerson} className={item}>
           {lang === "ar" ? "＋ إضافة شخص" : "＋ Add person"}
         </button>
       )}

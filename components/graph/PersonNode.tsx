@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Eye, Plus, Heart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { deletePerson } from "@/lib/actions/people";
+import { deletePersonCanvas } from "@/lib/actions/people";
 import type { PersonNodeData } from "@/lib/graph/transform";
 
 type PersonNodeType = Node<PersonNodeData, "person">;
@@ -49,21 +49,21 @@ const STACKED_TARGET_STYLE: React.CSSProperties = {
 export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
   const { person, spouseId, lang } = data;
   const [hovered, setHovered] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const router = useRouter();
   const [, startTransition] = useTransition();
 
   async function handleDeletePlaceholder(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const ok = window.confirm(
-      lang === "ar"
-        ? "حذف هذا الوالد المؤقت؟ سيتم فصل أطفاله."
-        : "Remove this placeholder parent? Its children will be detached.",
-    );
-    if (!ok) return;
-    const r = await deletePerson(person.id);
-    if (r && !(r as { success?: boolean }).success) {
-      toast.error((r as { error?: string }).error ?? "Couldn't remove");
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      return;
+    }
+    setDeleteConfirm(false);
+    const r = await deletePersonCanvas(person.id);
+    if (!r.success) {
+      toast.error(r.error ?? "Couldn't remove");
       return;
     }
     toast.success(lang === "ar" ? "تمت الإزالة" : "Placeholder removed");
@@ -122,14 +122,20 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
             <button
               type="button"
               onClick={handleDeletePlaceholder}
-              aria-label={lang === "ar" ? "إزالة" : "Remove placeholder"}
-              title={lang === "ar" ? "إزالة" : "Remove placeholder"}
+              onBlur={() => setDeleteConfirm(false)}
+              aria-label={deleteConfirm
+                ? (lang === "ar" ? "تأكيد الحذف" : "Confirm removal")
+                : (lang === "ar" ? "إزالة" : "Remove placeholder")}
+              title={deleteConfirm
+                ? (lang === "ar" ? "تأكيد؟" : "Confirm?")
+                : (lang === "ar" ? "إزالة" : "Remove placeholder")}
               className={cn(
                 "absolute -right-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full",
-                "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
-                "shadow-sm transition-[transform,background-color,color,opacity] duration-200",
-                "hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
-                hovered ? "opacity-100" : "opacity-0 pointer-events-none",
+                "border shadow-sm transition-[transform,background-color,color,opacity,border-color] duration-200",
+                deleteConfirm
+                  ? "border-[var(--destructive)] bg-[var(--destructive)] text-white opacity-100"
+                  : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
+                !deleteConfirm && (hovered ? "opacity-100" : "opacity-0 pointer-events-none"),
               )}
             >
               <X className="h-3 w-3" />
@@ -292,7 +298,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
                         : "bg-[var(--muted)] text-[var(--foreground)]",
                   )}
                 >
-                  {initials || (isFemale ? "♀" : "♂")}
+                  {initials || (isFemale ? "♀" : isMale ? "♂" : "?")}
                 </AvatarFallback>
               </Avatar>
             </div>

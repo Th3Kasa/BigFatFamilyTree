@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  deletePerson,
+  deletePersonCanvas,
   unlinkParent,
   convertParentToSpouse,
   linkSpouse,
@@ -248,7 +248,7 @@ function InlineQuickAdd({
 
           {/* Gender hidden for spouse */}
           {!showGender && (
-            <input type="hidden" name="gender" value="m" />
+            <input type="hidden" name="gender" value="unknown" />
           )}
 
           {/* Hidden relational FK fields */}
@@ -697,10 +697,14 @@ export function Inspector({
     }
     setDeleteConfirm(false);
     const id = person.id;
-    onClose();
     startTransition(async () => {
-      await deletePerson(id);
-      router.refresh();
+      const r = await deletePersonCanvas(id);
+      if (r.success) {
+        onClose();
+        router.refresh();
+      } else {
+        toast.error(r.error ?? "Delete failed");
+      }
     });
   }
   const open = person !== null;
@@ -879,10 +883,7 @@ export function Inspector({
                             parentId={person.father_id}
                             childId={person.id}
                             lang={lang}
-                            onChange={() => {
-                              onClose();
-                              router.refresh();
-                            }}
+                            onChange={() => router.refresh()}
                           />
                         )}
                         {person.mother_id && (
@@ -892,10 +893,7 @@ export function Inspector({
                             parentId={person.mother_id}
                             childId={person.id}
                             lang={lang}
-                            onChange={() => {
-                              onClose();
-                              router.refresh();
-                            }}
+                            onChange={() => router.refresh()}
                           />
                         )}
                       </div>
@@ -1063,6 +1061,7 @@ export function Inspector({
           }
           if (result?.success) {
             toast.success(successMsg);
+            router.refresh();
           } else if (result) {
             toast.error(result.error ?? "Couldn't create the link");
           }

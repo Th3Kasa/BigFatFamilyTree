@@ -25,7 +25,7 @@ import { updateNodePosition, autoLayoutAll } from "@/lib/actions/canvas";
 import { deleteRelationship } from "@/lib/actions/relationships";
 import {
   addSibling,
-  deletePerson,
+  deletePersonCanvas,
   linkAdopted,
   linkChild,
   linkGuardian,
@@ -179,8 +179,19 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges as any[]);
 
-  useEffect(() => { setNodes(initialNodes as any[]); }, [initialNodes, setNodes]);
-  useEffect(() => { setEdges(initialEdges as any[]); }, [initialEdges, setEdges]);
+  // Sync from server — skip while a mutation is in-flight to avoid snapping
+  // dragged nodes back to their pre-drag positions mid-transition.
+  useEffect(() => { if (!isPending) setNodes(initialNodes as any[]); }, [initialNodes, setNodes, isPending]);
+  useEffect(() => { if (!isPending) setEdges(initialEdges as any[]); }, [initialEdges, setEdges, isPending]);
+
+  // Re-sync selectedPerson when people list refreshes so Inspector stays current.
+  useEffect(() => {
+    if (selectedPerson) {
+      const updated = people.find((p) => p.id === selectedPerson.id) ?? null;
+      setSelectedPerson(updated);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [people]);
 
   // Fit view once after initial mount
   useEffect(() => {
@@ -248,13 +259,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     } else if (choice === "sibling") {
       const sibRes = await addSibling(source, target);
       result = sibRes;
-      if (sibRes.success && sibRes.placeholderId) {
-        okMsg = lang === "ar"
-          ? `تم ربطهما كأشقاء وأضفت والداً مؤقتاً — افتحه لتعبئة الاسم`
-          : `Linked as siblings — added a placeholder parent. Click it to fill in their real parent.`;
-      } else {
-        okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
-      }
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
     } else if (choice === "adopted") {
       result = await linkAdopted(source, target);
       okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} adopted ${tgtName}`;
@@ -464,15 +469,24 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     router.push(`/person/${menu.personId}/edit`);
   }
 
+  const [deleteNodeConfirm, setDeleteNodeConfirm] = useState<string | null>(null);
+
   function handleDelete() {
     if (menu?.kind !== "node") return;
-    const confirmed = window.confirm(lang === "ar" ? "حذف هذا الشخص؟" : "Delete this person?");
-    if (!confirmed) return;
     const id = menu.personId;
+    if (deleteNodeConfirm !== id) {
+      setDeleteNodeConfirm(id);
+      return;
+    }
+    setDeleteNodeConfirm(null);
     setMenu(null);
     startTransition(async () => {
-      await deletePerson(id);
-      router.refresh();
+      const r = await deletePersonCanvas(id);
+      if (r.success) {
+        router.refresh();
+      } else {
+        toast.error(r.error ?? "Delete failed");
+      }
     });
   }
 
@@ -495,19 +509,10 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
           router.refresh();
         });
       } else if (data?.edgeKind === "parent") {
-        // Determine which FK to clear: edge.id is "f-{childId}" or "m-{childId}"
         const childId = edge.target as string;
         const parentId = edge.source as string;
         startTransition(async () => {
-          const supabase = (await import("@/lib/supabase/client")).createClient();
-          const { data: child } = await supabase
-            .from("people")
-            .select("father_id, mother_id")
-            .eq("id", childId)
-            .maybeSingle();
-          if (!child) return;
-          const field = child.father_id === parentId ? "father_id" : "mother_id";
-          await supabase.from("people").update({ [field]: null }).eq("id", childId);
+          await unlinkParent(parentId, childId);
           router.refresh();
         });
       }
@@ -568,7 +573,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     fitView({ padding: 0.15, duration: 400 });
   }
 
-  const panOnDrag: number[] = toolMode === "pan" ? [0, 1, 2] : [1, 2];
+  const panOnDrag: number[] = toolMode === "pan" ? [0, 1] : [1, 2];
 
   return (
     <div className="relative w-full h-full">
@@ -628,13 +633,14 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         <NodeContextMenu
           target={menu}
           lang={lang}
-          onClose={() => setMenu(null)}
+          onClose={() => { setMenu(null); setDeleteNodeConfirm(null); }}
           onAddChild={handleAddChild}
           onAddSpouse={handleAddSpouse}
           onAddParent={handleAddParent}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onAddPerson={handleAddStandalone}
+          deleteConfirm={menu?.kind === "node" && deleteNodeConfirm === menu.personId}
         />
       )}
 
