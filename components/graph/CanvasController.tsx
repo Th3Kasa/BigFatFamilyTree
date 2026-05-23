@@ -424,8 +424,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       source,
       target,
     );
-    if (removed && !removed.success) {
-      toast.error(removed.error ?? "Couldn't change");
+    if (!removed || !removed.success) {
+      toast.error(removed?.error ?? "Couldn't remove existing connection");
       return;
     }
 
@@ -562,8 +562,26 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     if (spouseEdge) {
       const spouseId = spouseEdge.source === parent.id ? spouseEdge.target : spouseEdge.source;
       const spouse = personById(spouseId);
-      const fatherId = parent.gender !== "f" ? parent.id : (spouse?.gender !== "f" ? spouseId : undefined);
-      const motherId = parent.gender === "f" ? parent.id : (spouse?.gender === "f" ? spouseId : undefined);
+      // Assign mother/father by gender; when genders are the same or unknown,
+      // default parent → father and spouse → mother so both are always linked.
+      let fatherId: string | undefined;
+      let motherId: string | undefined;
+      if (parent.gender === "f") {
+        motherId = parent.id;
+        if (spouse?.gender !== "f") fatherId = spouseId; // m or unknown → father slot
+      } else if (parent.gender === "m") {
+        fatherId = parent.id;
+        if (spouse?.gender !== "m") motherId = spouseId; // f or unknown → mother slot
+      } else {
+        // parent gender unknown — pick by spouse gender, else arbitrary
+        if (spouse?.gender === "f") {
+          fatherId = parent.id; motherId = spouseId;
+        } else if (spouse?.gender === "m") {
+          fatherId = spouseId; motherId = parent.id;
+        } else {
+          fatherId = parent.id; motherId = spouseId;
+        }
+      }
       const params = new URLSearchParams();
       if (fatherId) params.set("father", fatherId);
       if (motherId) params.set("mother", motherId);
