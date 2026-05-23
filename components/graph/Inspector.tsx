@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
-import { motion } from "framer-motion";
-import { PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users, Baby } from "lucide-react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,6 +38,8 @@ import {
   linkChild,
   linkParentChild,
   addSibling,
+  createPersonQuick,
+  type ActionState,
 } from "@/lib/actions/people";
 import {
   deleteRelationship,
@@ -54,6 +57,237 @@ const fadeUp = {
   animate: { opacity: 1, y: 0 },
 };
 const sectionTransition = { duration: 0.32, ease: [0.32, 0.72, 0.32, 1] as const };
+
+// ── Inline Quick-Add ──────────────────────────────────────────────────────────
+
+type QuickAddKind = "spouse" | "child" | "parent" | "sibling";
+
+const quickAddLabels: Record<QuickAddKind, string> = {
+  spouse:  "spouse for",
+  child:   "child of",
+  parent:  "parent of",
+  sibling: "sibling of",
+};
+
+function QuickAddSaveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button
+      type="submit"
+      size="sm"
+      disabled={pending}
+      className="w-full rounded-full"
+    >
+      {pending ? "Saving…" : "Save"}
+    </Button>
+  );
+}
+
+type InlineQuickAddProps = {
+  kind: QuickAddKind;
+  personName: string;
+  person: PersonInput;
+  onBack: () => void;
+  onLinkExisting: () => void;
+  onSuccess: () => void;
+};
+
+function InlineQuickAdd({
+  kind,
+  personName,
+  person,
+  onBack,
+  onLinkExisting,
+  onSuccess,
+}: InlineQuickAddProps) {
+  const [formState, formAction] = useActionState<ActionState, FormData>(createPersonQuick, null);
+  const givenRef = useRef<HTMLInputElement>(null);
+
+  // Autofocus when mounted
+  useEffect(() => {
+    const t = setTimeout(() => givenRef.current?.focus(), 50);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Close and refresh on success
+  useEffect(() => {
+    if (formState?.success) {
+      onSuccess();
+    }
+  }, [formState?.success, onSuccess]);
+
+  // Derive hidden FK values
+  const fatherId = kind === "child" && person.gender !== "f" ? person.id : "";
+  const motherId = kind === "child" && person.gender === "f" ? person.id : "";
+  const spouseId = kind === "spouse" ? person.id : "";
+  const childId  = kind === "parent" ? person.id : "";
+  // For sibling: pass same father_id / mother_id as the current person
+  const sibFatherId = kind === "sibling" ? (person.father_id ?? "") : "";
+  const sibMotherId = kind === "sibling" ? (person.mother_id ?? "") : "";
+
+  const resolvedFatherId = kind === "sibling" ? sibFatherId : fatherId;
+  const resolvedMotherId = kind === "sibling" ? sibMotherId : motherId;
+
+  const showGender = kind !== "spouse";
+  const contextLabel = `Adding ${quickAddLabels[kind]} ${personName}`;
+
+  return (
+    <motion.div
+      key="quick-add-panel"
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 24 }}
+      transition={{ duration: 0.22, ease: [0.32, 0.72, 0.32, 1] }}
+      className="flex flex-col flex-1 min-h-0"
+    >
+      {/* Panel header */}
+      <div className="flex items-center gap-2 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
+            "transition-[transform,background-color,color] duration-200",
+            "hover:-translate-y-px hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+          )}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div className="min-w-0">
+          <p className="truncate text-xs text-[var(--muted-foreground)] leading-tight capitalize">
+            {contextLabel}
+          </p>
+        </div>
+      </div>
+
+      {/* Form body */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <form action={formAction} className="space-y-4">
+          {/* Error message */}
+          {formState && !formState.success && formState.error && (
+            <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/5 px-3 py-2">
+              <p className="text-xs text-[var(--destructive)]">{formState.error}</p>
+            </div>
+          )}
+
+          {/* Given name */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="quick-given"
+              className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]"
+            >
+              Given name <span className="text-[var(--destructive)]">*</span>
+            </label>
+            <input
+              ref={givenRef}
+              id="quick-given"
+              name="given_en"
+              required
+              autoComplete="off"
+              placeholder="e.g. Sarah"
+              className={cn(
+                "w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm",
+                "placeholder:text-[var(--muted-foreground)]/50",
+                "outline-none ring-0 transition-shadow duration-200",
+                "focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20",
+              )}
+            />
+            {formState?.fieldErrors?.given_en && (
+              <p className="text-xs text-[var(--destructive)]">{formState.fieldErrors.given_en}</p>
+            )}
+          </div>
+
+          {/* Family name */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="quick-family"
+              className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]"
+            >
+              Family name
+            </label>
+            <input
+              id="quick-family"
+              name="family_name_en"
+              autoComplete="off"
+              placeholder="Optional"
+              className={cn(
+                "w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm",
+                "placeholder:text-[var(--muted-foreground)]/50",
+                "outline-none ring-0 transition-shadow duration-200",
+                "focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20",
+              )}
+            />
+          </div>
+
+          {/* Gender (not shown for spouse — gender can be any) */}
+          {showGender && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                Gender
+              </p>
+              <div className="flex gap-3">
+                {(["m", "f"] as const).map((g) => (
+                  <label
+                    key={g}
+                    className="flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] has-[:checked]:border-[var(--primary)] has-[:checked]:bg-[var(--primary)]/5 transition-colors duration-150"
+                  >
+                    <input
+                      type="radio"
+                      name="gender"
+                      value={g}
+                      defaultChecked={g === "m"}
+                      className="accent-[var(--primary)]"
+                    />
+                    {g === "m" ? "Male" : "Female"}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Gender hidden for spouse */}
+          {!showGender && (
+            <input type="hidden" name="gender" value="m" />
+          )}
+
+          {/* Hidden relational FK fields */}
+          <input type="hidden" name="father_id"   value={resolvedFatherId} />
+          <input type="hidden" name="mother_id"   value={resolvedMotherId} />
+          <input type="hidden" name="spouse_id"   value={spouseId} />
+          <input type="hidden" name="child_id"    value={childId} />
+          <input type="hidden" name="is_placeholder" value="false" />
+          <input type="hidden" name="photo_url"   value="" />
+          <input type="hidden" name="father_name_en" value="" />
+          <input type="hidden" name="father_name_ar" value="" />
+          <input type="hidden" name="grandfather_name_en" value="" />
+          <input type="hidden" name="grandfather_name_ar" value="" />
+          <input type="hidden" name="great_grandfather_name_en" value="" />
+          <input type="hidden" name="great_grandfather_name_ar" value="" />
+          <input type="hidden" name="family_name_ar" value="" />
+          <input type="hidden" name="notes_en"    value="" />
+          <input type="hidden" name="notes_ar"    value="" />
+
+          <QuickAddSaveButton />
+        </form>
+
+        {/* Secondary: link existing person */}
+        <div className="mt-4 flex items-center gap-2">
+          <div className="h-px flex-1 bg-[var(--border)]" />
+          <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">or</span>
+          <div className="h-px flex-1 bg-[var(--border)]" />
+        </div>
+        <button
+          type="button"
+          onClick={onLinkExisting}
+          className="mt-3 w-full text-center text-xs text-[var(--primary)] underline underline-offset-2 hover:opacity-70 transition-opacity"
+        >
+          Link existing person
+        </button>
+      </div>
+    </motion.div>
+  );
+}
 
 function personLabel(p: PickablePerson | undefined, lang: "ar" | "en") {
   if (!p) return "Unknown";
@@ -368,6 +602,7 @@ export function Inspector({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [picker, setPicker] = useState<PickerKind>(null);
+  const [quickAdd, setQuickAdd] = useState<QuickAddKind | null>(null);
 
   const peopleById = useMemo(() => {
     const m = new Map<string, PickablePerson>();
@@ -464,7 +699,7 @@ export function Inspector({
         : "ring-border";
 
   return (
-    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setQuickAdd(null); setPicker(null); onClose(); } }}>
       <SheetContent
         side="right"
         className="glass-2 w-full sm:w-[22rem] sm:max-w-[22rem] flex flex-col gap-0 p-0 border-s border-[var(--border)] shadow-[var(--shadow-deep)]"
@@ -516,12 +751,39 @@ export function Inspector({
           </motion.div>
         </SheetHeader>
 
+        {/* Inline quick-add panel — replaces body + footer when active */}
+        <AnimatePresence mode="wait">
+          {quickAdd && person && (
+            <InlineQuickAdd
+              key={quickAdd}
+              kind={quickAdd}
+              personName={fullName || "Person"}
+              person={person}
+              onBack={() => setQuickAdd(null)}
+              onLinkExisting={() => {
+                setQuickAdd(null);
+                setPicker(quickAdd);
+              }}
+              onSuccess={() => {
+                setQuickAdd(null);
+                toast.success(
+                  quickAdd === "child"   ? "Child added" :
+                  quickAdd === "spouse"  ? "Spouse added" :
+                  quickAdd === "sibling" ? "Sibling added" :
+                                          "Parent added"
+                );
+                router.refresh();
+              }}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Body */}
         <motion.div
           initial="initial"
           animate="animate"
           variants={{ animate: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } } }}
-          className="scrollbar-thin flex-1 space-y-5 overflow-y-auto px-6 py-6"
+          className={cn("scrollbar-thin flex-1 space-y-5 overflow-y-auto px-6 py-6", quickAdd && "hidden")}
         >
           {/* Placeholder notice */}
           {person?.is_placeholder && (
@@ -636,12 +898,12 @@ export function Inspector({
           )}
         </motion.div>
 
-        {/* Footer actions */}
+        {/* Footer actions — hidden when inline quick-add is open */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.32, ease: [0.32, 0.72, 0.32, 1], delay: 0.18 }}
-          className="space-y-2 border-t border-[var(--border)] px-6 py-5"
+          className={cn("space-y-2 border-t border-[var(--border)] px-6 py-5", quickAdd && "hidden")}
         >
           <Button asChild size="sm" className="w-full rounded-full">
             <Link href={person ? `/person/${person.slug ?? person.id}/edit` : "#"}>
@@ -655,7 +917,7 @@ export function Inspector({
               variant="outline"
               size="sm"
               className="rounded-full"
-              onClick={() => setPicker("spouse")}
+              onClick={() => setQuickAdd("spouse")}
             >
               <Heart className="h-3.5 w-3.5" />
               Add spouse
@@ -665,7 +927,7 @@ export function Inspector({
               variant="outline"
               size="sm"
               className="rounded-full"
-              onClick={() => setPicker("child")}
+              onClick={() => setQuickAdd("child")}
             >
               <PlusCircle className="h-3.5 w-3.5" />
               Add child
@@ -675,7 +937,7 @@ export function Inspector({
               variant="outline"
               size="sm"
               className="rounded-full"
-              onClick={() => setPicker("sibling")}
+              onClick={() => setQuickAdd("sibling")}
             >
               <Users className="h-3.5 w-3.5" />
               Add sibling
@@ -685,7 +947,7 @@ export function Inspector({
               variant="outline"
               size="sm"
               className="rounded-full"
-              onClick={() => setPicker("parent")}
+              onClick={() => setQuickAdd("parent")}
             >
               <UserPlus className="h-3.5 w-3.5" />
               Add parent
