@@ -22,6 +22,36 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-05-23 — Task #3 (QA loop — autonomous)
+**Task:** Continuous QA loop on 2D canvas — fix bugs, improve UX, keep working
+**Agents used:** Alfred (direct), qa-guard (audit pass)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — multiple rounds, all fixes landed clean
+**What worked:** qa-guard's 10-issue audit report was high signal: found the critical `return` vs `continue` bug in onEdgesDelete that would silently skip DB unlinking for entire edge batches, and the deleteConfirm-not-reset that could cause accidental person deletion. FamilyBranchEdge perf rewrite (useNodes → useInternalNode + useStore) eliminated O(edges × nodes) drag-frame re-renders.
+**What didn't:** qa-guard Issue 2 (setTimeout race) was a false positive — the pendingQuickAddRef design already handles both orderings correctly.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — 10 issues, 3 critical/high that were real and impactful; Alfred ⭐⭐⭐⭐⭐ — implemented all fixes without rework
+**Improvement opportunity:** qa-guard's audit scope was well-calibrated. The inline quick-add via forwardRef + useImperativeHandle is a pattern worth capturing for future Inspector-like panels.
+
+**Bugs fixed this session:**
+- BUG-02: linkParentChild silent parent FK overwrite (pre-flight check)
+- BUG-05: PersonPicker swallowed errors (toast catch block)
+- BUG-06: InlineQuickAdd sibling with no parents (addSibling call)
+- BUG-07: Dead placeholderId branch in picker
+- BUG-10: Context menu off-screen (useLayoutEffect viewport clamping)
+- BUG-13: `<button>` nested inside `<Link>` in placeholder PersonNode (invalid HTML)
+- BUG-16: Node card "Add child"/"Add spouse" buttons opened full /person/new form; now open Inspector inline quick-add (forwardRef + useImperativeHandle)
+- BUG-21: deleteKeyCode="Delete" allowed client-side node removal without server action
+- Critical: onEdgesDelete `return` → `continue` (silently skipped DB unlinking)
+- High: deleteConfirm not reset on person change (could trigger immediate delete)
+- High: sibling addSibling fire-and-forget (orphan record on error)
+- High: handleAddChild gender-binary logic dropped spouse when both unknown gender
+- High: edge context menu had no viewport clamping
+- Medium: removeCurrentEdgeRelationship null treated as success
+- Medium: placeholder keyboard trap (Enter on delete button also fired navigation)
+- Perf: FamilyBranchEdge eliminated useNodes() O(n×m) subscription per drag frame
+
+---
+
 ### 2026-05-22 — Task #2
 **Task:** Fix T-junction vertical bracket — drop should originate from the marriage line (mid-height of person cards) not from the bottom handle
 **Agents used:** Alfred (direct — single targeted fix, 3 lines changed)

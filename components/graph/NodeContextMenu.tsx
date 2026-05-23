@@ -32,11 +32,16 @@ export function NodeContextMenu({
     const { width, height } = ref.current.getBoundingClientRect();
     const maxLeft = window.innerWidth - width - 8;
     const maxTop = window.innerHeight - height - 8;
+    // In RTL (Arabic) open leftward from the click point so the menu doesn't
+    // overlap the cursor origin text. Fall back toward the right edge if needed.
+    const rawLeft = lang === "ar"
+      ? Math.max(8, target.x - width)
+      : Math.min(Math.max(8, target.x), maxLeft);
     setPos({
-      left: Math.min(Math.max(8, target.x), maxLeft),
+      left: Math.min(rawLeft, maxLeft),
       top: Math.min(Math.max(8, target.y), maxTop),
     });
-  }, [target.x, target.y]);
+  }, [target.x, target.y, lang]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
