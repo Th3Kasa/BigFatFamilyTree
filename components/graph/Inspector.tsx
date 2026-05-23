@@ -7,7 +7,7 @@ import { useFormStatus } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, getDisplayName } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -309,13 +309,7 @@ function InlineQuickAdd({
 
 function personLabel(p: PickablePerson | undefined, lang: "ar" | "en") {
   if (!p) return "Unknown";
-  const given =
-    lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar;
-  const family =
-    lang === "ar"
-      ? p.family_name_ar ?? p.family_name_en
-      : p.family_name_en ?? p.family_name_ar;
-  return given || family || "Unnamed";
+  return getDisplayName(p, lang);
 }
 
 function personInitials(p: PickablePerson | undefined, lang: "ar" | "en") {

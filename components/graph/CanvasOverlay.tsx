@@ -98,15 +98,27 @@ export function CanvasOverlay({ lang }: Props) {
           <Sep />
           <LegendItem
             color="oklch(0.62 0.20 18)"
-            label={lang === "ar" ? "زواج" : "Marriage"}
+            label={lang === "ar" ? "زواج حالي" : "Current couple"}
+            enclosure
           />
           <LegendItem
-            color="oklch(0.62 0.20 18 / 0.55)"
+            color="oklch(0.55 0.02 25 / 0.75)"
+            label={lang === "ar" ? "ترمل" : "Widowed"}
+            glyph="†"
+          />
+          <LegendItem
+            color="oklch(0.62 0.20 18 / 0.40)"
             label={lang === "ar" ? "طلاق" : "Divorced"}
             dashed
           />
           <LegendItem
-            color="oklch(0.62 0.20 18 / 0.70)"
+            color="oklch(0.62 0.20 18 / 0.40)"
+            label={lang === "ar" ? "زواج سابق" : "Remarried (past)"}
+            dashed
+            ghost
+          />
+          <LegendItem
+            color="oklch(0.55 0.10 200)"
             label={lang === "ar" ? "نسب" : "Parent-child"}
           />
           <LegendItem
@@ -159,11 +171,17 @@ function LegendItem({
   label,
   icon: Icon,
   dashed,
+  enclosure,
+  glyph,
+  ghost,
 }: {
   color: string;
   label: string;
   icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   dashed?: boolean;
+  enclosure?: boolean;
+  glyph?: string;
+  ghost?: boolean;
 }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -172,11 +190,33 @@ function LegendItem({
       ) : (
         <span
           aria-hidden
-          className="inline-block h-3 w-5"
-          style={{
-            borderTop: `2px ${dashed ? "dashed" : "solid"} ${color}`,
-          }}
-        />
+          className="relative inline-flex h-3.5 w-6 items-center justify-center"
+          style={{ opacity: ghost ? 0.5 : 1 }}
+        >
+          {enclosure ? (
+            <span
+              className="absolute inset-0 rounded-md"
+              style={{
+                background: "oklch(0.62 0.20 18 / 0.12)",
+                border: "1px solid oklch(0.62 0.20 18 / 0.28)",
+              }}
+            />
+          ) : null}
+          <span
+            className="relative inline-block h-0 w-5"
+            style={{
+              borderTop: `2px ${dashed ? "dashed" : "solid"} ${color}`,
+            }}
+          />
+          {glyph ? (
+            <span
+              className="relative -ml-2 px-0.5 text-[10px] font-semibold leading-none"
+              style={{ color, background: "var(--background)" }}
+            >
+              {glyph}
+            </span>
+          ) : null}
+        </span>
       )}
       <span>{label}</span>
     </div>

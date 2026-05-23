@@ -43,14 +43,16 @@ describe("buildGraphElements", () => {
     expect(n.data.lang).toBe("ar");
   });
 
-  it("creates father_id edge as f-<child>", () => {
+  it("creates a family-branch edge connecting p3 to its parent pair", () => {
     const { edges } = buildGraphElements(people, relationships, "en");
-    expect(edges.find((e) => e.id === "f-p3")).toBeDefined();
-  });
-
-  it("creates mother_id edge as m-<child>", () => {
-    const { edges } = buildGraphElements(people, relationships, "en");
-    expect(edges.find((e) => e.id === "m-p3")).toBeDefined();
+    const fb = edges.find(
+      (e) =>
+        e.data?.edgeKind === "family-branch" &&
+        e.data?.fatherId === "p2" &&
+        e.data?.motherId === "p1" &&
+        e.data?.childIds?.includes("p3"),
+    );
+    expect(fb).toBeDefined();
   });
 
   it("creates spouse edge from relationships", () => {

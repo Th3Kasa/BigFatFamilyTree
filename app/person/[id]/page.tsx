@@ -25,6 +25,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeletePersonButton } from "@/components/person/DeletePersonButton";
+import {
+  inferParents,
+  type PersonRow,
+  type RelationshipRow,
+  type ParentDisplay,
+} from "@/lib/people/inferParents";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -412,32 +418,91 @@ export default async function PersonPage({ params }: Props) {
 
             {/* ─── Relations Tab ─── */}
             <TabsContent value="relations" className="p-4 sm:p-6 space-y-6">
-              {/* Parents row from person record */}
-              {(person.father_id || person.mother_id) && (
-                <div>
-                  <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
-                    {lang === "ar" ? "الوالدان" : "Parents"}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {person.father_id && (
-                      <Link href={`/person/${person.father_id}`}>
-                        <Badge variant="outline" className="px-3 py-1.5 text-sm cursor-pointer hover:bg-[var(--accent)] transition-colors">
-                          <User className="h-3 w-3 mr-1.5" />
-                          {lang === "ar" ? "الأب" : "Father"}
-                        </Badge>
+              {/* Parents row — uses inference helper so that when one parent_id
+                  is missing but the recorded parent has a single current
+                  spouse, we *display* that spouse as the second parent. */}
+              {(() => {
+                const childRow = {
+                  id: personId,
+                  father_id: person.father_id ?? null,
+                  mother_id: person.mother_id ?? null,
+                };
+                const allPeople: PersonRow[] = (people ?? []) as PersonRow[];
+                const allRels: RelationshipRow[] = (relationships ?? []) as RelationshipRow[];
+                const { father, mother } = inferParents(childRow, allPeople, allRels);
+
+                const editHref = `/person/${(person as { slug?: string | null }).slug ?? id}/edit`;
+
+                const labels = {
+                  father: lang === "ar" ? "الأب" : "Father",
+                  mother: lang === "ar" ? "الأم" : "Mother",
+                  inferred: lang === "ar" ? "(مستنتج من الزواج)" : "(inferred from marriage)",
+                  notRecorded: lang === "ar" ? "غير مسجَّل" : "Not recorded",
+                  addFather: lang === "ar" ? "+ إضافة الأب" : "+ Add father",
+                  addMother: lang === "ar" ? "+ إضافة الأم" : "+ Add mother",
+                };
+
+                const renderParent = (slot: "father" | "mother", pd: ParentDisplay) => {
+                  const slotLabel = slot === "father" ? labels.father : labels.mother;
+                  if (pd.kind === "recorded" || pd.kind === "inferred") {
+                    const name =
+                      lang === "ar"
+                        ? (pd.person.given_ar ?? pd.person.given_en ?? "?")
+                        : (pd.person.given_en ?? pd.person.given_ar ?? "?");
+                    return (
+                      <div key={slot} className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-[var(--muted-foreground)] w-16 shrink-0">
+                          {slotLabel}
+                        </span>
+                        <Link href={`/person/${pd.personId}`}>
+                          <Badge
+                            variant="outline"
+                            className="px-3 py-1.5 text-sm cursor-pointer hover:bg-[var(--accent)] transition-colors"
+                          >
+                            <User className="h-3 w-3 mr-1.5" />
+                            {name}
+                          </Badge>
+                        </Link>
+                        {pd.kind === "inferred" && (
+                          <span className="text-xs italic text-[var(--muted-foreground)]">
+                            {labels.inferred}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }
+                  // not-recorded
+                  const addLabel = slot === "father" ? labels.addFather : labels.addMother;
+                  return (
+                    <div key={slot} className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-[var(--muted-foreground)] w-16 shrink-0">
+                        {slotLabel}
+                      </span>
+                      <span className="text-sm italic text-[var(--muted-foreground)]">
+                        {labels.notRecorded}
+                      </span>
+                      <Link
+                        href={editHref}
+                        className="text-xs font-medium text-[var(--primary)] hover:underline"
+                      >
+                        {addLabel}
                       </Link>
-                    )}
-                    {person.mother_id && (
-                      <Link href={`/person/${person.mother_id}`}>
-                        <Badge variant="outline" className="px-3 py-1.5 text-sm cursor-pointer hover:bg-[var(--accent)] transition-colors">
-                          <User className="h-3 w-3 mr-1.5" />
-                          {lang === "ar" ? "الأم" : "Mother"}
-                        </Badge>
-                      </Link>
-                    )}
+                    </div>
+                  );
+                };
+
+                return (
+                  <div>
+                    <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
+                      {lang === "ar" ? "الوالدان" : "Parents"}
+                    </p>
+                    <div className="space-y-2">
+                      {renderParent("father", father)}
+                      {renderParent("mother", mother)}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Explicit relationships */}
               {relationships && relationships.length > 0 ? (
@@ -488,12 +553,6 @@ export default async function PersonPage({ params }: Props) {
                     })}
                   </div>
                 </div>
-              ) : !person.father_id && !person.mother_id ? (
-                <p className="text-sm text-[var(--muted-foreground)] py-4">
-                  {lang === "ar"
-                    ? "لا توجد علاقات مسجّلة."
-                    : "No relationships recorded yet."}
-                </p>
               ) : null}
 
               {/* Add relationship form */}

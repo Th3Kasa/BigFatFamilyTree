@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/command";
 import { Home, Mic, LogOut, Languages, LayoutGrid, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { getDisplayName } from "@/lib/utils";
 
 interface Person {
   id: string;
@@ -49,18 +50,14 @@ export function CommandPalette({ open, onOpenChange, people = [], lang = "en" }:
 
         {people.length > 0 && (
           <CommandGroup heading="People">
-            {people.slice(0, 8).map((p) => {
-              const family = p.family_name_en ?? p.family_name_ar;
-              const given = p.given_en ?? p.given_ar;
-              return (
-                <CommandItem
-                  key={p.id}
-                  onSelect={() => run(() => router.push(`/person/${p.slug ?? p.id}`))}
-                >
-                  {[given, family].filter(Boolean).join(" ")}
-                </CommandItem>
-              );
-            })}
+            {people.slice(0, 8).map((p) => (
+              <CommandItem
+                key={p.id}
+                onSelect={() => run(() => router.push(`/person/${p.slug ?? p.id}`))}
+              >
+                {getDisplayName(p, lang)}
+              </CommandItem>
+            ))}
           </CommandGroup>
         )}
 

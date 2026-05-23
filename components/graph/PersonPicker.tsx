@@ -11,7 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { cn, getDisplayName } from "@/lib/utils";
 
 export type PickablePerson = {
   id: string;
@@ -35,24 +35,14 @@ type Props = {
   onPick: (personId: string) => boolean | void | Promise<boolean | void>;
 };
 
-function display(p: PickablePerson, lang: "ar" | "en") {
+function initials(p: PickablePerson, lang: "ar" | "en") {
   const given =
-    lang === "ar"
-      ? (p.given_ar ?? p.given_en)
-      : (p.given_en ?? p.given_ar);
+    lang === "ar" ? (p.given_ar ?? p.given_en) : (p.given_en ?? p.given_ar);
   const family =
     lang === "ar"
       ? (p.family_name_ar ?? p.family_name_en)
       : (p.family_name_en ?? p.family_name_ar);
-  return {
-    given: given ?? (lang === "ar" ? "بدون اسم" : "Unnamed"),
-    family: family ?? "",
-  };
-}
-
-function initials(p: PickablePerson, lang: "ar" | "en") {
-  const { given, family } = display(p, lang);
-  return (given.charAt(0) + (family.charAt(0) || "")).toUpperCase();
+  return ((given ?? "?").charAt(0) + (family ?? "").charAt(0)).toUpperCase();
 }
 
 function searchHaystack(p: PickablePerson) {
@@ -163,7 +153,7 @@ export function PersonPicker({
           ) : (
             <ul className="space-y-0.5">
               {choices.map((p) => {
-                const { given, family } = display(p, lang);
+                const fullName = getDisplayName(p, lang);
                 const isBusy = busy === p.id;
                 return (
                   <li key={p.id}>
@@ -188,7 +178,7 @@ export function PersonPicker({
                         )}
                       >
                         {p.photo_url && (
-                          <AvatarImage src={p.photo_url} alt={given} className="object-cover" />
+                          <AvatarImage src={p.photo_url} alt={fullName} className="object-cover" />
                         )}
                         <AvatarFallback className="text-[10px] font-semibold">
                           {initials(p, lang)}
@@ -196,13 +186,8 @@ export function PersonPicker({
                       </Avatar>
                       <div className="flex min-w-0 flex-1 flex-col leading-tight">
                         <span className="truncate text-sm font-medium text-[var(--foreground)]">
-                          {given}
+                          {fullName}
                         </span>
-                        {family && (
-                          <span className="truncate text-[10px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-                            {family}
-                          </span>
-                        )}
                       </div>
                       {isBusy && (
                         <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--muted-foreground)]" />

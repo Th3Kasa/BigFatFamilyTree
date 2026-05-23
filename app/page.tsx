@@ -7,8 +7,17 @@ import { MobilePeopleSheet } from "@/components/MobilePeopleSheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
-export default async function HomePage() {
-  const [supabase, lang] = await Promise.all([createClient(), getLang()]);
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ layout?: string }>;
+}) {
+  const [supabase, lang, sp] = await Promise.all([
+    createClient(),
+    getLang(),
+    searchParams ?? Promise.resolve({} as { layout?: string }),
+  ]);
+  const layout: "v1" | "v2" = sp.layout === "v2" ? "v2" : "v1";
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -47,7 +56,7 @@ export default async function HomePage() {
   }
 
   const typedPeople = people as PersonInput[];
-  const { nodes, edges } = buildGraphElements(typedPeople, relationships ?? [], lang);
+  const { nodes, edges } = buildGraphElements(typedPeople, relationships ?? [], lang, { layout });
 
   return (
     <>

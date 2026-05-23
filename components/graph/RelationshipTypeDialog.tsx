@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { cn, getDisplayName } from "@/lib/utils";
 import type { PickablePerson } from "./PersonPicker";
 
 export type RelationshipChoice =
@@ -45,13 +45,7 @@ type Props = {
 
 function display(p: PickablePerson | null, lang: "ar" | "en") {
   if (!p) return lang === "ar" ? "؟" : "?";
-  const given =
-    lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar;
-  const family =
-    lang === "ar"
-      ? p.family_name_ar ?? p.family_name_en
-      : p.family_name_en ?? p.family_name_ar;
-  return given || family || (lang === "ar" ? "بدون اسم" : "Unnamed");
+  return getDisplayName(p, lang);
 }
 
 function initials(p: PickablePerson | null, lang: "ar" | "en") {

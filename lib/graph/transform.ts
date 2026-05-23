@@ -1,6 +1,7 @@
 import type React from "react";
 import * as dagre from "@dagrejs/dagre";
 import type { Lang } from "@/lib/lang/server";
+import { autoLayoutV2 } from "./layout-v2";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 240;
@@ -46,11 +47,13 @@ export type GraphNode = {
 
 export type SpouseStatus = "current" | "divorced" | "widowed";
 
+export type GraphEdgeType = "smoothstep" | "straight" | "step" | "family-branch" | "spouse";
+
 export type GraphEdge = {
   id: string;
   source: string;
   target: string;
-  type: "smoothstep" | "straight" | "step" | "family-branch" | "spouse";
+  type: GraphEdgeType;
   sourceHandle?: string;
   targetHandle?: string;
   selectable?: boolean;
@@ -63,16 +66,24 @@ export type GraphEdge = {
     fatherId?: string | null;
     motherId?: string | null;
     childIds?: string[];
+    /** True when this spouse edge is a past relationship of a remarried person. */
+    ghost?: boolean;
   };
   style?: React.CSSProperties;
   animated?: boolean;
+};
+
+export type BuildGraphOptions = {
+  layout?: "v1" | "v2";
 };
 
 export function buildGraphElements(
   people: PersonInput[],
   relationships: RelationshipInput[],
   lang: Lang,
-): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  options: BuildGraphOptions = {},
+): { nodes: GraphNode[]; edges: GraphEdge[]; midpoints?: Map<string, { x: number; y: number }> } {
+  const layoutMode = options.layout ?? "v1";
   const idSet = new Set(people.map((p) => p.id));
 
   // Build spouse map for "add child" links. Prefer a current spouse;
@@ -146,6 +157,52 @@ export function buildGraphElements(
     } as GraphEdge);
   }
 
+  // Detect remarriage: a person who has a current spouse AND at least one
+  // past (divorced/widowed) relationship. Past edges are flagged ghost so the
+  // CoupleEdge renders them at reduced opacity.
+  const hasCurrentSpouse = new Set<string>();
+  for (const r of relationships) {
+    if (r.type === "spouse" && r.status === "current") {
+      hasCurrentSpouse.add(r.person_a_id);
+      hasCurrentSpouse.add(r.person_b_id);
+    }
+  }
+
+  // ---- v2 layout branch ---------------------------------------------------
+  // v2 is render-only: ignore pos_x/pos_y entirely, run autoLayoutV2,
+  // overwrite all node positions, and return midpoints for edge routing.
+  if (layoutMode === "v2") {
+    const { positions, midpoints } = autoLayoutV2(people, relationships, {
+      lang,
+    });
+    for (const n of nodes) {
+      const pos = positions.get(n.id);
+      if (pos) n.position = { x: pos.x, y: pos.y };
+    }
+    const posMapV2 = new Map(nodes.map((n) => [n.id, n.position]));
+    for (const r of relationships) {
+      if (r.type !== "spouse") continue;
+      const posA = posMapV2.get(r.person_a_id);
+      const posB = posMapV2.get(r.person_b_id);
+      const aIsLeft = !posA || !posB || posA.x <= posB.x;
+      const status = (r.status ?? "current") as SpouseStatus;
+      const ghost =
+        status !== "current" &&
+        (hasCurrentSpouse.has(r.person_a_id) ||
+          hasCurrentSpouse.has(r.person_b_id));
+      edges.push({
+        id: `s-${r.person_a_id}-${r.person_b_id}`,
+        source: aIsLeft ? r.person_a_id : r.person_b_id,
+        target: aIsLeft ? r.person_b_id : r.person_a_id,
+        sourceHandle: "right",
+        targetHandle: "left-target",
+        type: "spouse",
+        data: { edgeKind: "spouse", relationshipId: r.id, status, ghost },
+      });
+    }
+    return { nodes, edges, midpoints };
+  }
+
   // Only nodes WITHOUT stored positions go through dagre
   const unpositioned = nodes.filter((n) => {
     const p = (n.data as PersonNodeData).person;
@@ -188,6 +245,10 @@ export function buildGraphElements(
       const aIsLeft = !posA || !posB || posA.x <= posB.x;
       const status = (r.status ?? "current") as SpouseStatus;
       // SpouseEdge computes its own stroke from data.status — no style needed here
+      const ghost =
+        status !== "current" &&
+        (hasCurrentSpouse.has(r.person_a_id) ||
+          hasCurrentSpouse.has(r.person_b_id));
       edges.push({
         id: `s-${r.person_a_id}-${r.person_b_id}`,
         source: aIsLeft ? r.person_a_id : r.person_b_id,
@@ -195,7 +256,7 @@ export function buildGraphElements(
         sourceHandle: "right",
         targetHandle: "left-target",
         type: "spouse",
-        data: { edgeKind: "spouse", relationshipId: r.id, status },
+        data: { edgeKind: "spouse", relationshipId: r.id, status, ghost },
       });
     } else if (r.type === "adopted_by") {
       // person_a = adopted child, person_b = adoptive parent
