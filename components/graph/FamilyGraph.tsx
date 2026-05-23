@@ -86,7 +86,7 @@ export function FamilyGraph({
         onEdgesDelete={onEdgesDelete}
         panOnDrag={panOnDrag}
         selectionOnDrag={selectionMode}
-        deleteKeyCode="Delete"
+        deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
           style: { stroke: "oklch(0.38 0.06 18 / 0.45)", strokeWidth: 1.5 },

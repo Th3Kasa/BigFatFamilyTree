@@ -109,12 +109,23 @@ function InlineQuickAdd({
     return () => clearTimeout(t);
   }, []);
 
-  // Close and refresh on success
+  // Close and refresh on success.
+  // For sibling with no shared parents: the form created a person but no link.
+  // Call addSibling to establish the relationship via a placeholder parent.
   useEffect(() => {
-    if (formState?.success) {
+    if (!formState?.success) return;
+    const needsSiblingLink =
+      kind === "sibling" &&
+      !person.father_id &&
+      !person.mother_id &&
+      formState.personId;
+    if (needsSiblingLink) {
+      addSibling(person.id, formState.personId!).then(() => onSuccess());
+    } else {
       onSuccess();
     }
-  }, [formState?.success, onSuccess]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formState?.success]);
 
   // Derive hidden FK values
   const fatherId = kind === "child" && person.gender !== "f" ? person.id : "";
@@ -1051,13 +1062,8 @@ export function Inspector({
             result = await linkParentChild(otherId, person.id);
             successMsg = `${otherLabel} linked as ${selfLabel}'s parent`;
           } else if (picker === "sibling") {
-            const sibRes = await addSibling(person.id, otherId);
-            result = sibRes;
-            if (sibRes.success && sibRes.placeholderId) {
-              successMsg = `Linked as siblings — added a placeholder parent. Click it to fill in their real parent.`;
-            } else {
-              successMsg = `${otherLabel} linked as ${selfLabel}'s sibling`;
-            }
+            result = await addSibling(person.id, otherId);
+            successMsg = `${otherLabel} linked as ${selfLabel}'s sibling`;
           }
           if (result?.success) {
             toast.success(successMsg);

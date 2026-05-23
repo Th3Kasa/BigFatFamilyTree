@@ -217,6 +217,18 @@ export async function linkParentChild(parentId: string, childId: string): Promis
   if (!parent) return { success: false, error: "Parent not found." };
 
   const field = parent.gender === "f" ? "mother_id" : "father_id";
+
+  // Guard: don't silently overwrite an existing parent link
+  const { data: child } = await supabase
+    .from("people")
+    .select("father_id, mother_id")
+    .eq("id", childId)
+    .maybeSingle();
+  if (child && child[field] && child[field] !== parentId) {
+    const role = field === "father_id" ? "father" : "mother";
+    return { success: false, error: `This person already has a ${role}. Unlink the existing one first.` };
+  }
+
   const { error } = await supabase
     .from("people")
     .update({ [field]: parentId })

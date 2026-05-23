@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -95,6 +96,8 @@ export function PersonPicker({
     setBusy(id);
     try {
       await onPick(id);
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setBusy(null);
       onOpenChange(false);
