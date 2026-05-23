@@ -22,6 +22,18 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-05-23 — Task #5 (QA loop — third audit + user UX requests)
+**Task:** Fix auto-layout hierarchy (extra rank issue), connector line gap when dragging, Add Child/Spouse/Parent → Inspector panel; fix QA5 defects (idempotency, onBlur resets, dark-mode dialog, aria, convertParentToSpouse guard)
+**Agents used:** Alfred (direct — all fixes), qa-guard (audit pass, background)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, TypeScript clean
+**What worked:** Eliminating virtual couple nodes from Dagre entirely (anchor-parent approach) solved the extra rank cleanly without layout regressions. junctionY clamp fix was surgical. Inspector quick-add routing removed the form-page navigation for Add Child/Spouse/Parent as the user wanted.
+**What didn't:** Session context ran out mid-implementation; QA5-03/05/06 were completed in the resumed session from summary. No rework required.
+**Agent ratings this task:** Alfred ⭐⭐⭐⭐⭐ — all fixes implemented, zero TypeScript errors, clean commit; qa-guard ⭐⭐⭐⭐⭐ — QA5 issues were accurate and actionable
+**Improvement opportunity:** convertParentToSpouse silent-success-on-missing-link was a critical QA5-06 find — missing guard on the else branch of a field detection conditional. This pattern (conditional action without an else guard) should be explicit in qa-guard audit scope.
+
+---
+
 ### 2026-05-23 — Task #3 (QA loop — autonomous)
 **Task:** Continuous QA loop on 2D canvas — fix bugs, improve UX, keep working
 **Agents used:** Alfred (direct), qa-guard (audit pass)

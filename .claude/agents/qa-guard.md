@@ -58,6 +58,18 @@ test('user can sign up and reach dashboard', async ({ page }) => {
 [ ] Dark mode: nothing invisible
 ```
 
+## Server Action Audit — Symmetric Function Check
+When auditing server actions, always check for **symmetric counterparts** — pairs of functions with the same responsibility but different entry points (e.g. `linkChild`/`linkParentChild`, `deletePerson`/`deletePersonCanvas`, `createPerson`/`createPersonQuick`). A guard or validation added to one must be present in its symmetric twin. Missing symmetric guards are a Medium/High severity finding.
+
+Also flag: conditional action blocks missing an else/early-return guard. Pattern:
+```typescript
+if (field) {
+  await doSomething(); // ← no else: silent no-op when field is null
+}
+// still continues to do more work below — wrong
+```
+This should be: early return with an error when `field` is null, not a silent skip.
+
 ## Sign-off Decision
 **SHIP ✅ when**: all tests pass, TypeScript clean, manual checklist complete, no open security findings
 **HOLD 🚫 when**: critical/high security finding open, core flow E2E fails, TypeScript errors introduced
