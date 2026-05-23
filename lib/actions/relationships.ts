@@ -49,6 +49,7 @@ export async function createRelationship(
   if (dup) {
     revalidatePath("/");
     revalidatePath(`/person/${personId}`);
+    revalidatePath(`/person/${otherPersonId}`);
     return { success: true, id: (dup as { id: string }).id };
   }
 
@@ -63,6 +64,7 @@ export async function createRelationship(
 
   revalidatePath("/");
   revalidatePath(`/person/${personId}`);
+  revalidatePath(`/person/${otherPersonId}`);
   return { success: true, id: data.id };
 }
 

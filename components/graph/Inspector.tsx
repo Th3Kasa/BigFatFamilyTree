@@ -401,7 +401,7 @@ function SpouseRow({
 
   return (
     <div className="group flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-sm">
-      <Avatar className="h-9 w-9 ring-2 ring-rose-200/80">
+      <Avatar className="h-9 w-9 ring-2 ring-[var(--border)]">
         {spouse?.photo_url && (
           <AvatarImage src={spouse.photo_url} alt={name} className="object-cover" />
         )}
@@ -819,8 +819,8 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
                 variant="outline"
                 className={cn(
                   "mt-2 rounded-full px-2.5 text-[10px] uppercase tracking-wider",
-                  person?.gender === "f" && "border-rose-200/80 bg-rose-50/80 text-rose-600",
-                  person?.gender === "m" && "border-sky-200/80 bg-sky-50/80 text-sky-600",
+                  person?.gender === "f" && "border-[var(--highlight)]/40 bg-[var(--highlight)]/10 text-[var(--highlight)]",
+                  person?.gender === "m" && "border-[var(--primary)]/30 bg-[var(--primary)]/10 text-[var(--primary)]",
                 )}
               >
                 {genderLabel}

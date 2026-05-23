@@ -246,10 +246,11 @@ export async function linkParentChild(parentId: string, childId: string): Promis
   // Guard: don't silently overwrite an existing parent link
   const { data: child } = await supabase
     .from("people")
-    .select("father_id, mother_id")
+    .select("father_id, mother_id, slug")
     .eq("id", childId)
     .maybeSingle();
-  if (child && child[field] && child[field] !== parentId) {
+  const ch = child as { father_id: string | null; mother_id: string | null; slug: string | null } | null;
+  if (ch && ch[field as "father_id" | "mother_id"] && ch[field as "father_id" | "mother_id"] !== parentId) {
     const role = field === "father_id" ? "father" : "mother";
     return { success: false, error: `This person already has a ${role}. Unlink the existing one first.` };
   }
@@ -263,6 +264,8 @@ export async function linkParentChild(parentId: string, childId: string): Promis
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
+  revalidatePath(`/person/${childId}`);
+  if (ch?.slug) revalidatePath(`/person/${ch.slug}`);
   return { success: true };
 }
 
@@ -477,6 +480,8 @@ export async function linkAdopted(
     .maybeSingle();
   if (existing) {
     revalidatePath("/");
+    revalidatePath(`/person/${parentId}`);
+    revalidatePath(`/person/${childId}`);
     return { success: true };
   }
   const { error } = await supabase.from("relationships").insert({
@@ -487,6 +492,8 @@ export async function linkAdopted(
   });
   if (error) return { success: false, error: error.message };
   revalidatePath("/");
+  revalidatePath(`/person/${parentId}`);
+  revalidatePath(`/person/${childId}`);
   return { success: true };
 }
 
@@ -509,6 +516,8 @@ export async function linkGuardian(
     .maybeSingle();
   if (existing) {
     revalidatePath("/");
+    revalidatePath(`/person/${guardianId}`);
+    revalidatePath(`/person/${childId}`);
     return { success: true };
   }
   const { error } = await supabase.from("relationships").insert({
@@ -519,6 +528,8 @@ export async function linkGuardian(
   });
   if (error) return { success: false, error: error.message };
   revalidatePath("/");
+  revalidatePath(`/person/${guardianId}`);
+  revalidatePath(`/person/${childId}`);
   return { success: true };
 }
 
@@ -545,10 +556,10 @@ export async function linkChild(
 
   const { data: child } = await supabase
     .from("people")
-    .select("father_id, mother_id")
+    .select("father_id, mother_id, slug")
     .eq("id", childId)
     .maybeSingle();
-  const ch = child as { father_id: string | null; mother_id: string | null } | null;
+  const ch = child as { father_id: string | null; mother_id: string | null; slug: string | null } | null;
   if (ch && ch[field as "father_id" | "mother_id"] && ch[field as "father_id" | "mother_id"] !== parentId) {
     const role = field === "father_id" ? "father" : "mother";
     return { success: false, error: `This child already has a ${role}. Unlink the existing one first.` };
@@ -563,6 +574,8 @@ export async function linkChild(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
+  revalidatePath(`/person/${childId}`);
+  if (ch?.slug) revalidatePath(`/person/${ch.slug}`);
   return { success: true };
 }
 

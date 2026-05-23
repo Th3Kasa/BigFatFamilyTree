@@ -189,9 +189,11 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   useEffect(() => { if (!isPending) setEdges(initialEdges as any[]); }, [initialEdges, setEdges, isPending]);
 
   // Re-sync selectedPerson when people list refreshes so Inspector stays current.
+  // Read via ref to avoid a stale closure when people changes rapidly.
   useEffect(() => {
-    if (selectedPerson) {
-      const updated = people.find((p) => p.id === selectedPerson.id) ?? null;
+    const current = selectedPersonRef.current;
+    if (current) {
+      const updated = people.find((p) => p.id === current.id) ?? null;
       setSelectedPerson(updated);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,50 +265,53 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     );
   };
 
-  async function handleRelationshipChoice(choice: RelationshipChoice) {
+  function handleRelationshipChoice(choice: RelationshipChoice) {
     if (!pendingConn) return;
     const { source, target } = pendingConn;
     const srcName = personPersonName(source);
     const tgtName = personPersonName(target);
 
-    let result: { success: boolean; error?: string } | null = null;
-    let okMsg = "";
-
-    if (choice === "parent") {
-      result = await linkParentChild(source, target);
-      okMsg = lang === "ar" ? `${srcName} هو والد ${tgtName}` : `${srcName} linked as ${tgtName}'s parent`;
-    } else if (choice === "child") {
-      result = await linkParentChild(target, source);
-      okMsg = lang === "ar" ? `${srcName} هو طفل ${tgtName}` : `${srcName} linked as ${tgtName}'s child`;
-    } else if (choice === "spouse") {
-      result = await linkSpouse(source, target, "current");
-      okMsg = lang === "ar" ? `${srcName} و ${tgtName} متزوجان` : `${srcName} and ${tgtName} are married`;
-    } else if (choice === "ex_spouse") {
-      result = await linkSpouse(source, target, "divorced");
-      okMsg = lang === "ar" ? `${srcName} و ${tgtName} مطلقان` : `${srcName} and ${tgtName} marked as divorced`;
-    } else if (choice === "sibling") {
-      const sibRes = await addSibling(source, target);
-      result = sibRes;
-      okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
-    } else if (choice === "adopted") {
-      result = await linkAdopted(source, target);
-      okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} adopted ${tgtName}`;
-    } else if (choice === "guardian") {
-      result = await linkGuardian(source, target);
-      okMsg = lang === "ar" ? `${srcName} رَبَّى ${tgtName}` : `${srcName} is ${tgtName}'s guardian`;
-    } else if (choice === "unknown") {
+    if (choice === "unknown") {
       setPendingConn(null);
       return;
     }
 
     setPendingConn(null);
 
-    if (result?.success) {
-      toast.success(okMsg);
-      router.refresh();
-    } else if (result) {
-      toast.error(result.error ?? "Couldn't create the link");
-    }
+    startTransition(async () => {
+      let result: { success: boolean; error?: string } | null = null;
+      let okMsg = "";
+
+      if (choice === "parent") {
+        result = await linkParentChild(source, target);
+        okMsg = lang === "ar" ? `${srcName} هو والد ${tgtName}` : `${srcName} linked as ${tgtName}'s parent`;
+      } else if (choice === "child") {
+        result = await linkParentChild(target, source);
+        okMsg = lang === "ar" ? `${srcName} هو طفل ${tgtName}` : `${srcName} linked as ${tgtName}'s child`;
+      } else if (choice === "spouse") {
+        result = await linkSpouse(source, target, "current");
+        okMsg = lang === "ar" ? `${srcName} و ${tgtName} متزوجان` : `${srcName} and ${tgtName} are married`;
+      } else if (choice === "ex_spouse") {
+        result = await linkSpouse(source, target, "divorced");
+        okMsg = lang === "ar" ? `${srcName} و ${tgtName} مطلقان` : `${srcName} and ${tgtName} marked as divorced`;
+      } else if (choice === "sibling") {
+        result = await addSibling(source, target);
+        okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
+      } else if (choice === "adopted") {
+        result = await linkAdopted(source, target);
+        okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} adopted ${tgtName}`;
+      } else if (choice === "guardian") {
+        result = await linkGuardian(source, target);
+        okMsg = lang === "ar" ? `${srcName} رَبَّى ${tgtName}` : `${srcName} is ${tgtName}'s guardian`;
+      }
+
+      if (result?.success) {
+        toast.success(okMsg);
+        router.refresh();
+      } else if (result) {
+        toast.error(result.error ?? "Couldn't create the link");
+      }
+    });
   }
 
   const onNodeContextMenu: NodeMouseHandler = (e, node) => {
@@ -412,63 +417,65 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     currentRelationshipId?: string;
   } | null>(null);
 
-  async function handleReplaceRelationshipChoice(choice: RelationshipChoice) {
+  function handleReplaceRelationshipChoice(choice: RelationshipChoice) {
     if (!replaceConn) return;
     const { source, target, currentKind, currentRelationshipId } = replaceConn;
     setReplaceConn(null);
 
-    // 1) Remove the current edge
-    const removed = await removeCurrentEdgeRelationship(
-      currentKind,
-      currentRelationshipId,
-      source,
-      target,
-    );
-    if (!removed || !removed.success) {
-      toast.error(removed?.error ?? "Couldn't remove existing connection");
-      return;
-    }
+    startTransition(async () => {
+      // 1) Remove the current edge
+      const removed = await removeCurrentEdgeRelationship(
+        currentKind,
+        currentRelationshipId,
+        source,
+        target,
+      );
+      if (!removed || !removed.success) {
+        toast.error(removed?.error ?? "Couldn't remove existing connection");
+        return;
+      }
 
-    // 2) Create the new relationship using the same logic as the drag-to-link chooser
-    const srcName = personPersonName(source);
-    const tgtName = personPersonName(target);
-    let result: { success: boolean; error?: string } | null = null;
-    let okMsg = "";
+      // 2) Create the new relationship using the same logic as the drag-to-link chooser
+      const srcName = personPersonName(source);
+      const tgtName = personPersonName(target);
+      let result: { success: boolean; error?: string } | null = null;
+      let okMsg = "";
 
-    if (choice === "parent") {
-      result = await linkParentChild(source, target);
-      okMsg = lang === "ar" ? `${srcName} الآن والد ${tgtName}` : `${srcName} is now ${tgtName}'s parent`;
-    } else if (choice === "child") {
-      result = await linkParentChild(target, source);
-      okMsg = lang === "ar" ? `${srcName} الآن طفل ${tgtName}` : `${srcName} is now ${tgtName}'s child`;
-    } else if (choice === "spouse") {
-      result = await linkSpouse(source, target, "current");
-      okMsg = lang === "ar" ? `${srcName} و ${tgtName} متزوجان` : `${srcName} and ${tgtName} are now married`;
-    } else if (choice === "ex_spouse") {
-      result = await linkSpouse(source, target, "divorced");
-      okMsg = lang === "ar" ? `${srcName} و ${tgtName} مطلقان` : `${srcName} and ${tgtName} are now divorced`;
-    } else if (choice === "sibling") {
-      result = await addSibling(source, target);
-      okMsg = lang === "ar" ? `${srcName} و ${tgtName} الآن أشقاء` : `${srcName} and ${tgtName} are now siblings`;
-    } else if (choice === "adopted") {
-      result = await linkAdopted(source, target);
-      okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} now adopted ${tgtName}`;
-    } else if (choice === "guardian") {
-      result = await linkGuardian(source, target);
-      okMsg = lang === "ar" ? `${srcName} الآن ولي أمر ${tgtName}` : `${srcName} is now ${tgtName}'s guardian`;
-    } else if (choice === "unknown") {
-      // User wanted to remove only — already removed above
-      toast.success(lang === "ar" ? "تمت الإزالة" : "Removed");
-      router.refresh();
-      return;
-    }
+      if (choice === "parent") {
+        result = await linkParentChild(source, target);
+        okMsg = lang === "ar" ? `${srcName} الآن والد ${tgtName}` : `${srcName} is now ${tgtName}'s parent`;
+      } else if (choice === "child") {
+        result = await linkParentChild(target, source);
+        okMsg = lang === "ar" ? `${srcName} الآن طفل ${tgtName}` : `${srcName} is now ${tgtName}'s child`;
+      } else if (choice === "spouse") {
+        result = await linkSpouse(source, target, "current");
+        okMsg = lang === "ar" ? `${srcName} و ${tgtName} متزوجان` : `${srcName} and ${tgtName} are now married`;
+      } else if (choice === "ex_spouse") {
+        result = await linkSpouse(source, target, "divorced");
+        okMsg = lang === "ar" ? `${srcName} و ${tgtName} مطلقان` : `${srcName} and ${tgtName} are now divorced`;
+      } else if (choice === "sibling") {
+        result = await addSibling(source, target);
+        okMsg = lang === "ar" ? `${srcName} و ${tgtName} الآن أشقاء` : `${srcName} and ${tgtName} are now siblings`;
+      } else if (choice === "adopted") {
+        result = await linkAdopted(source, target);
+        okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} now adopted ${tgtName}`;
+      } else if (choice === "guardian") {
+        result = await linkGuardian(source, target);
+        okMsg = lang === "ar" ? `${srcName} الآن ولي أمر ${tgtName}` : `${srcName} is now ${tgtName}'s guardian`;
+      } else if (choice === "unknown") {
+        // User wanted to remove only — already removed above
+        toast.success(lang === "ar" ? "تمت الإزالة" : "Removed");
+        router.refresh();
+        return;
+      }
 
-    if (result?.success) {
-      toast.success(okMsg);
-      router.refresh();
-    } else if (result) {
-      toast.error(result.error ?? "Couldn't change");
-    }
+      if (result?.success) {
+        toast.success(okMsg);
+        router.refresh();
+      } else if (result) {
+        toast.error(result.error ?? "Couldn't change");
+      }
+    });
   }
 
   const onPaneContextMenu = (e: React.MouseEvent | MouseEvent) => {
