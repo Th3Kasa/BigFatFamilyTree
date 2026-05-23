@@ -330,5 +330,49 @@ export function autoLayoutPositions(
     }
   }
 
+  // ── 5. X-align floating spouses ───────────────────────────────────────────
+  // When one spouse has no parents in the tree, Dagre places them at rank 0
+  // (top level), giving them an X unrelated to their spouse's position.
+  // After Y-snap their Y is correct but X is wrong.
+  // Fix: place the floating spouse immediately adjacent to the anchored one.
+  const SPOUSE_GAP = 60; // matches Dagre nodesep
+  function hasParentInTree(personId: string) {
+    const p = people.find((x) => x.id === personId);
+    if (!p) return false;
+    return (p.father_id != null && idSet.has(p.father_id)) ||
+           (p.mother_id != null && idSet.has(p.mother_id));
+  }
+
+  for (const [, { fid, mid }] of pairGroups) {
+    const fidAnchored = hasParentInTree(fid);
+    const midAnchored = hasParentInTree(mid);
+    if (fidAnchored === midAnchored) continue; // both anchored or both floating — Dagre handles it
+    if (midAnchored && !fidAnchored) {
+      // Mother anchored, father floating — place father to the LEFT of mother
+      const midPos = out.get(mid);
+      if (midPos) out.set(fid, { x: midPos.x - NODE_WIDTH - SPOUSE_GAP, y: midPos.y });
+    } else if (fidAnchored && !midAnchored) {
+      // Father anchored, mother floating — place mother to the RIGHT of father
+      const fidPos = out.get(fid);
+      if (fidPos) out.set(mid, { x: fidPos.x + NODE_WIDTH + SPOUSE_GAP, y: fidPos.y });
+    }
+  }
+
+  // Apply the same X-alignment to spouse pairs with no shared children
+  for (const r of relationships) {
+    if (r.type !== "spouse") continue;
+    if (!idSet.has(r.person_a_id) || !idSet.has(r.person_b_id)) continue;
+    const aAnchored = hasParentInTree(r.person_a_id);
+    const bAnchored = hasParentInTree(r.person_b_id);
+    if (aAnchored === bAnchored) continue;
+    if (aAnchored && !bAnchored) {
+      const pA = out.get(r.person_a_id);
+      if (pA) out.set(r.person_b_id, { x: pA.x + NODE_WIDTH + SPOUSE_GAP, y: pA.y });
+    } else if (bAnchored && !aAnchored) {
+      const pB = out.get(r.person_b_id);
+      if (pB) out.set(r.person_a_id, { x: pB.x - NODE_WIDTH - SPOUSE_GAP, y: pB.y });
+    }
+  }
+
   return out;
 }

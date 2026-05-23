@@ -12,7 +12,7 @@ type FamilyBranchData = {
   childIds: string[];
 };
 
-export function FamilyBranchEdge({ data, sourceX, sourceY }: EdgeProps) {
+export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: EdgeProps) {
   const nodes = useNodes();
   const edges = useEdges();
   const { fatherId, motherId, childIds } = (data ?? {}) as FamilyBranchData;
@@ -88,14 +88,22 @@ export function FamilyBranchEdge({ data, sourceX, sourceY }: EdgeProps) {
   }
 
   // ── child positions ───────────────────────────────────────────
+  // targetX/targetY (EdgeProps) are updated every drag frame for the edge's
+  // target node (childIds[0]).  Use them for that child to avoid the one-frame
+  // lag that useNodes() can introduce during drag.
+  const targetChildId = (childIds ?? [])[0];
   const childNodes = (childIds ?? [])
     .map((id) => nodes.find((n) => n.id === id))
     .filter((n): n is NonNullable<typeof n> => n != null);
 
   if (childNodes.length === 0) return null;
 
-  const childCenterXs = childNodes.map((n) => n.position.x + NODE_WIDTH / 2);
-  const childTopYs    = childNodes.map((n) => n.position.y);
+  const childCenterXs = childNodes.map((n) =>
+    n.id === targetChildId ? targetX : n.position.x + NODE_WIDTH / 2,
+  );
+  const childTopYs = childNodes.map((n) =>
+    n.id === targetChildId ? targetY : n.position.y,
+  );
   const minChildTopY  = Math.min(...childTopYs);
 
   // Junction Y sits halfway between parent bottom and nearest child top
