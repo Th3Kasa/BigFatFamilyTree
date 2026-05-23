@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { forwardRef, useActionState, useEffect, useImperativeHandle, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users } from "lucide-react";
@@ -60,7 +60,8 @@ const sectionTransition = { duration: 0.32, ease: [0.32, 0.72, 0.32, 1] as const
 
 // ── Inline Quick-Add ──────────────────────────────────────────────────────────
 
-type QuickAddKind = "spouse" | "child" | "parent" | "sibling";
+export type QuickAddKind = "spouse" | "child" | "parent" | "sibling";
+export type InspectorHandle = { openWithQuickAdd: (kind: QuickAddKind) => void };
 
 const quickAddLabels: Record<QuickAddKind, string> = {
   spouse:  "spouse for",
@@ -626,7 +627,7 @@ type Props = {
 
 type PickerKind = "spouse" | "child" | "parent" | "sibling" | null;
 
-export function Inspector({
+export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
   person,
   lang,
   onClose,
@@ -634,16 +635,28 @@ export function Inspector({
   motherName,
   people = [],
   edges = [],
-}: Props) {
+}: Props, ref) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [picker, setPicker] = useState<PickerKind>(null);
   const [quickAdd, setQuickAdd] = useState<QuickAddKind | null>(null);
 
-  // Reset picker and quickAdd state when the selected person changes
+  // Pending quick-add kind set via imperative handle before person changes commit.
+  const pendingQuickAddRef = useRef<QuickAddKind | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    openWithQuickAdd(kind) {
+      pendingQuickAddRef.current = kind;
+      setQuickAdd(kind);
+    },
+  }));
+
+  // Reset state when person changes; honour any pending quick-add from node button.
   useEffect(() => {
     setPicker(null);
-    setQuickAdd(null);
+    const pending = pendingQuickAddRef.current;
+    pendingQuickAddRef.current = null;
+    setQuickAdd(pending ?? null);
   }, [person?.id]);
 
   const peopleById = useMemo(() => {
@@ -1087,4 +1100,4 @@ export function Inspector({
       })()}
     </Sheet>
   );
-}
+});

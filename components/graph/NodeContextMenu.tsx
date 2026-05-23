@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export type ContextMenuTarget =
   | { kind: "node"; personId: string; x: number; y: number }
@@ -25,6 +25,18 @@ export function NodeContextMenu({
   deleteConfirm = false,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState({ left: target.x, top: target.y });
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const { width, height } = ref.current.getBoundingClientRect();
+    const maxLeft = window.innerWidth - width - 8;
+    const maxTop = window.innerHeight - height - 8;
+    setPos({
+      left: Math.min(Math.max(8, target.x), maxLeft),
+      top: Math.min(Math.max(8, target.y), maxTop),
+    });
+  }, [target.x, target.y]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -50,7 +62,7 @@ export function NodeContextMenu({
     <div
       ref={ref}
       className="fixed z-[100] min-w-[180px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg overflow-hidden"
-      style={{ left: target.x, top: target.y }}
+      style={{ left: pos.left, top: pos.top }}
       role="menu"
     >
       {target.kind === "node" ? (

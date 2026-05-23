@@ -34,6 +34,7 @@ export type PersonNodeData = {
   person: PersonInput;
   spouseId?: string;
   lang: Lang;
+  onQuickAdd?: (kind: "child" | "spouse") => void;
 };
 
 export type GraphNode = {

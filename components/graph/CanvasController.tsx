@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback, useEffect } from "react";
+import { useState, useTransition, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useReactFlow, ReactFlowProvider, useNodesState, useEdgesState } from "@xyflow/react";
 import type { Connection, NodeMouseHandler, EdgeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
@@ -13,7 +13,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { FamilyGraph } from "./FamilyGraph";
-import { Inspector } from "./Inspector";
+import { Inspector, type InspectorHandle } from "./Inspector";
 import { NodeContextMenu, type ContextMenuTarget } from "./NodeContextMenu";
 import { QuickAddDialog, type QuickAddRelation } from "./QuickAddDialog";
 import {
@@ -176,6 +176,10 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const [toolMode, setToolMode] = useState<ToolMode>("select");
 
   const { fitView } = useReactFlow() as { fitView: (opts?: { padding?: number; duration?: number }) => void };
+  const inspectorRef = useRef<InspectorHandle>(null);
+  const selectedPersonRef = useRef(selectedPerson);
+  selectedPersonRef.current = selectedPerson;
+
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges as any[]);
 
@@ -199,6 +203,30 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Inject onQuickAdd callbacks so node card buttons open the Inspector quick-add
+  // panel instead of navigating to the full /person/new form.
+  const nodesWithCallbacks = useMemo(() =>
+    (nodes as import("@/lib/graph/transform").GraphNode[]).map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        onQuickAdd: (kind: "child" | "spouse") => {
+          const person = people.find((p) => p.id === n.id) ?? null;
+          if (selectedPersonRef.current?.id === n.id) {
+            inspectorRef.current?.openWithQuickAdd(kind);
+          } else {
+            setSelectedPerson(person);
+            // setTimeout fires after React effects flush, including the Inspector's
+            // person-change reset effect, so openWithQuickAdd wins.
+            setTimeout(() => inspectorRef.current?.openWithQuickAdd(kind), 0);
+          }
+        },
+      },
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nodes, people],
+  );
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
     startTransition(async () => {
@@ -578,7 +606,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   return (
     <div className="relative w-full h-full">
       <FamilyGraph
-        nodes={nodes}
+        nodes={nodesWithCallbacks}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -606,6 +634,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       <CanvasOverlay lang={lang} />
 
       <Inspector
+        ref={inspectorRef}
         person={selectedPerson}
         lang={lang}
         onClose={() => setSelectedPerson(null)}
