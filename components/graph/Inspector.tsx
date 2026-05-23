@@ -579,6 +579,7 @@ function ParentRow({
             <button
               type="button"
               onClick={handleConvert}
+              onBlur={() => setConvertConfirm(false)}
               disabled={busy}
               aria-label="Convert to spouse"
               className={cn(
@@ -600,6 +601,7 @@ function ParentRow({
             <button
               type="button"
               onClick={handleUnlink}
+              onBlur={() => setUnlinkConfirm(false)}
               disabled={busy}
               aria-label="Unlink"
               className={cn(

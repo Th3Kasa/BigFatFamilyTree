@@ -60,34 +60,38 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
     : "Add person";
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40" onClick={onClose} aria-hidden="true">
       <div
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-add-title"
+        className="bg-[var(--card)] rounded-2xl shadow-2xl max-w-md w-full p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">{title}</h2>
+        <h2 id="quick-add-title" className="text-lg font-semibold text-[var(--foreground)] mb-4">{title}</h2>
         <form action={formAction} className="space-y-3">
           {state && !state.success && state.error && (
-            <p className="text-sm text-red-600">{state.error}</p>
+            <p className="text-sm text-[var(--destructive)]">{state.error}</p>
           )}
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Given name</label>
+            <label className="block text-xs text-[var(--muted-foreground)] mb-1">Given name</label>
             <input
               ref={firstInput}
               name="given_en"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              required
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-[var(--card)] text-[var(--foreground)]"
             />
             {state && !state.success && state.fieldErrors?.given_en && (
-              <p className="text-xs text-red-500 mt-1">{state.fieldErrors.given_en}</p>
+              <p className="text-xs text-[var(--destructive)] mt-1">{state.fieldErrors.given_en}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-2">Gender</label>
+            <label className="block text-xs text-[var(--muted-foreground)] mb-2">Gender</label>
             <div className="flex gap-3">
               {(["m", "f"] as const).map((g) => (
-                <label key={g} className="flex items-center gap-1 text-sm cursor-pointer">
+                <label key={g} className="flex items-center gap-1 text-sm cursor-pointer text-[var(--foreground)]">
                   <input type="radio" name="gender" value={g} defaultChecked={g === "m"} className="accent-amber-500" />
                   {g === "f" ? "Female" : "Male"}
                 </label>
@@ -113,7 +117,7 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
           <input type="hidden" name="notes_ar" value="" />
 
           <div className="flex gap-2 justify-end pt-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] rounded-lg transition-colors">
               Cancel
             </button>
             <SubmitButton />

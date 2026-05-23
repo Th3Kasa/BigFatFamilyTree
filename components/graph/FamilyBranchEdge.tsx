@@ -130,7 +130,12 @@ export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: E
 
   const minChildTopY = Math.min(...childTopYs);
   const gap          = minChildTopY - startY;
-  const junctionY    = startY + Math.max(gap * 0.5, 20);
+  // Clamp junctionY so it never overshoots the topmost child. Without this,
+  // dragging a child close to its parent makes junctionY exceed minChildTopY,
+  // causing the drop line to render upward through the parent node.
+  const junctionY = gap > 0
+    ? Math.min(startY + Math.max(gap * 0.5, 20), minChildTopY - 2)
+    : (startY + minChildTopY) / 2;
   const minChildX    = Math.min(...childCenterXs);
   const maxChildX    = Math.max(...childCenterXs);
 

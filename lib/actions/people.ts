@@ -352,13 +352,13 @@ export async function convertParentToSpouse(
         ? "mother_id"
         : null;
 
-  if (field) {
-    const { error: unlinkErr } = await supabase
-      .from("people")
-      .update({ [field]: null })
-      .eq("id", childId);
-    if (unlinkErr) return { success: false, error: unlinkErr.message };
-  }
+  if (!field) return { success: false, error: "No parent link found between these two people." };
+
+  const { error: unlinkErr } = await supabase
+    .from("people")
+    .update({ [field]: null })
+    .eq("id", childId);
+  if (unlinkErr) return { success: false, error: unlinkErr.message };
 
   const { data: existing } = await supabase
     .from("relationships")

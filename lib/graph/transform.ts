@@ -249,8 +249,12 @@ export function autoLayoutPositions(
 ): Map<string, { x: number; y: number }> {
   const idSet = new Set(people.map((p) => p.id));
 
-  // ── 1. Build parent-pair groups (for T-junction couples) ─────────────────
-  // Key: sorted "fid|mid" so the same couple is always one entry.
+  function hasParentInTree(personId: string): boolean {
+    const p = people.find((x) => x.id === personId);
+    return !!(p && ((p.father_id && idSet.has(p.father_id)) || (p.mother_id && idSet.has(p.mother_id))));
+  }
+
+  // Build pair groups for spouse Y-snap and X-align steps below.
   const pairGroups = new Map<string, { fid: string; mid: string; childIds: string[] }>();
   for (const p of people) {
     const fid = p.father_id && idSet.has(p.father_id) ? p.father_id : null;
@@ -261,53 +265,43 @@ export function autoLayoutPositions(
     pairGroups.get(key)!.childIds.push(p.id);
   }
 
-  // ── 2. Build Dagre graph with virtual couple nodes ────────────────────────
+  // ── 1. Build Dagre graph — no virtual couple nodes ────────────────────────
+  // Virtual couple nodes add an extra rank when one parent is already deeper
+  // in the tree (has their own parents), pushing grandchildren one level too
+  // deep. Instead, route each child through a single "anchor" parent and
+  // use Y/X alignment to place the other parent at the correct position.
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 90, marginx: 40, marginy: 40 });
 
-  // Real person nodes
   people.forEach((p) => g.setNode(p.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
 
-  // Virtual couple node (1×1) per two-parent family
-  for (const key of pairGroups.keys()) {
-    g.setNode(`__c__${key}`, { width: 1, height: 1 });
-  }
-
-  // Couple edges: both parents → couple node (high weight keeps them together)
-  for (const [key, { fid, mid }] of pairGroups) {
-    g.setEdge(fid, `__c__${key}`, { weight: 2 });
-    g.setEdge(mid, `__c__${key}`, { weight: 2 });
-  }
-
-  // Couple node → each child
-  for (const [key, { childIds }] of pairGroups) {
-    for (const cid of childIds) {
-      g.setEdge(`__c__${key}`, cid);
-    }
-  }
-
-  // Single-parent children (father or mother only)
   for (const p of people) {
     const fid = p.father_id && idSet.has(p.father_id) ? p.father_id : null;
     const mid = p.mother_id && idSet.has(p.mother_id) ? p.mother_id : null;
-    if (fid && mid) continue; // already handled via couple node above
-    if (fid) g.setEdge(fid, p.id);
-    else if (mid) g.setEdge(mid, p.id);
+    if (!fid && !mid) continue;
+
+    // Prefer the parent who is already deeper in the tree (has parents of their
+    // own). If both or neither qualify, default to father.
+    let anchorId: string;
+    if (fid && mid) {
+      anchorId = (hasParentInTree(mid) && !hasParentInTree(fid)) ? mid : fid;
+    } else {
+      anchorId = fid ?? mid!;
+    }
+    g.setEdge(anchorId, p.id);
   }
 
   dagre.layout(g);
 
-  // ── 3. Extract positions (ignore virtual couple nodes) ────────────────────
+  // ── 2. Extract positions ──────────────────────────────────────────────────
   const out = new Map<string, { x: number; y: number }>();
   people.forEach((p) => {
     const pos = g.node(p.id);
     if (pos) out.set(p.id, { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 });
   });
 
-  // ── 4. Snap spouses to the same Y level ──────────────────────────────────
-  // Two-parent families: snap to the lower of the two dagre Y values so the
-  // marriage line is always horizontal and the T-junction formula aligns.
+  // ── 3. Y-snap spouses to the same row ────────────────────────────────────
   for (const [, { fid, mid }] of pairGroups) {
     const pA = out.get(fid);
     const pB = out.get(mid);
@@ -318,7 +312,6 @@ export function autoLayoutPositions(
     }
   }
 
-  // Registered spouse pairs without shared children in this tree
   for (const r of relationships) {
     if (r.type !== "spouse") continue;
     if (!idSet.has(r.person_a_id) || !idSet.has(r.person_b_id)) continue;
@@ -331,35 +324,26 @@ export function autoLayoutPositions(
     }
   }
 
-  // ── 5. X-align floating spouses ───────────────────────────────────────────
-  // When one spouse has no parents in the tree, Dagre places them at rank 0
-  // (top level), giving them an X unrelated to their spouse's position.
-  // After Y-snap their Y is correct but X is wrong.
-  // Fix: place the floating spouse immediately adjacent to the anchored one.
-  const SPOUSE_GAP = 60; // matches Dagre nodesep
-  function hasParentInTree(personId: string) {
-    const p = people.find((x) => x.id === personId);
-    if (!p) return false;
-    return (p.father_id != null && idSet.has(p.father_id)) ||
-           (p.mother_id != null && idSet.has(p.mother_id));
-  }
+  // ── 4. X-align floating spouses ───────────────────────────────────────────
+  // A "floating" spouse has no parents in the tree, so Dagre places them at
+  // rank 0 with an X position unrelated to their partner. After Y-snap their
+  // Y is correct; fix X by placing them immediately to the RIGHT of the
+  // anchored partner (consistent visual convention regardless of gender).
+  const SPOUSE_GAP = 60;
 
   for (const [, { fid, mid }] of pairGroups) {
     const fidAnchored = hasParentInTree(fid);
     const midAnchored = hasParentInTree(mid);
-    if (fidAnchored === midAnchored) continue; // both anchored or both floating — Dagre handles it
+    if (fidAnchored === midAnchored) continue;
     if (midAnchored && !fidAnchored) {
-      // Mother anchored, father floating — place father to the LEFT of mother
       const midPos = out.get(mid);
-      if (midPos) out.set(fid, { x: midPos.x - NODE_WIDTH - SPOUSE_GAP, y: midPos.y });
+      if (midPos) out.set(fid, { x: midPos.x + NODE_WIDTH + SPOUSE_GAP, y: midPos.y });
     } else if (fidAnchored && !midAnchored) {
-      // Father anchored, mother floating — place mother to the RIGHT of father
       const fidPos = out.get(fid);
       if (fidPos) out.set(mid, { x: fidPos.x + NODE_WIDTH + SPOUSE_GAP, y: fidPos.y });
     }
   }
 
-  // Apply the same X-alignment to spouse pairs with no shared children
   for (const r of relationships) {
     if (r.type !== "spouse") continue;
     if (!idSet.has(r.person_a_id) || !idSet.has(r.person_b_id)) continue;
@@ -371,7 +355,7 @@ export function autoLayoutPositions(
       if (pA) out.set(r.person_b_id, { x: pA.x + NODE_WIDTH + SPOUSE_GAP, y: pA.y });
     } else if (bAnchored && !aAnchored) {
       const pB = out.get(r.person_b_id);
-      if (pB) out.set(r.person_a_id, { x: pB.x - NODE_WIDTH - SPOUSE_GAP, y: pB.y });
+      if (pB) out.set(r.person_a_id, { x: pB.x + NODE_WIDTH + SPOUSE_GAP, y: pB.y });
     }
   }
 

@@ -550,60 +550,35 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     }
   }, [router, startTransition]);
 
+  function openInspectorQuickAdd(personId: string, kind: "child" | "spouse" | "parent" | "sibling") {
+    const person = people.find((p) => p.id === personId) ?? null;
+    if (selectedPersonRef.current?.id === personId) {
+      inspectorRef.current?.openWithQuickAdd(kind);
+    } else {
+      setSelectedPerson(person);
+      setTimeout(() => inspectorRef.current?.openWithQuickAdd(kind), 0);
+    }
+  }
+
   function handleAddChild() {
     if (menu?.kind !== "node") return;
-    const parent = personById(menu.personId);
-    if (!parent) return;
+    const id = menu.personId;
     setMenu(null);
-
-    // Find spouse to link both parents
-    const spouseEdge = edges.find(
-      (e) =>
-        e.data?.edgeKind === "spouse" &&
-        (e.source === parent.id || e.target === parent.id)
-    );
-    if (spouseEdge) {
-      const spouseId = spouseEdge.source === parent.id ? spouseEdge.target : spouseEdge.source;
-      const spouse = personById(spouseId);
-      // Assign mother/father by gender; when genders are the same or unknown,
-      // default parent → father and spouse → mother so both are always linked.
-      let fatherId: string | undefined;
-      let motherId: string | undefined;
-      if (parent.gender === "f") {
-        motherId = parent.id;
-        if (spouse?.gender !== "f") fatherId = spouseId; // m or unknown → father slot
-      } else if (parent.gender === "m") {
-        fatherId = parent.id;
-        if (spouse?.gender !== "m") motherId = spouseId; // f or unknown → mother slot
-      } else {
-        // parent gender unknown — pick by spouse gender, else arbitrary
-        if (spouse?.gender === "f") {
-          fatherId = parent.id; motherId = spouseId;
-        } else if (spouse?.gender === "m") {
-          fatherId = spouseId; motherId = parent.id;
-        } else {
-          fatherId = parent.id; motherId = spouseId;
-        }
-      }
-      const params = new URLSearchParams();
-      if (fatherId) params.set("father", fatherId);
-      if (motherId) params.set("mother", motherId);
-      router.push(`/person/new?${params.toString()}`);
-    } else {
-      setQuickAdd({ kind: "child", parentId: parent.id, parentGender: parent.gender });
-    }
+    openInspectorQuickAdd(id, "child");
   }
 
   function handleAddSpouse() {
     if (menu?.kind !== "node") return;
+    const id = menu.personId;
     setMenu(null);
-    setQuickAdd({ kind: "spouse", otherId: menu.personId });
+    openInspectorQuickAdd(id, "spouse");
   }
 
   function handleAddParent() {
     if (menu?.kind !== "node") return;
+    const id = menu.personId;
     setMenu(null);
-    setQuickAdd({ kind: "parent", childId: menu.personId, parentGender: "unknown" });
+    openInspectorQuickAdd(id, "parent");
   }
 
   function handleAddStandalone() {
@@ -709,12 +684,14 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         <>
           {/* Backdrop to dismiss on outside click */}
           <div
+            aria-hidden="true"
             className="fixed inset-0 z-40"
             onClick={() => setEdgeMenu(null)}
             onContextMenu={(e) => { e.preventDefault(); setEdgeMenu(null); }}
           />
           <div
             role="menu"
+            aria-label={lang === "ar" ? `خيارات: ${edgeMenu.label}` : `Options: ${edgeMenu.label}`}
             className="glass-2 fixed z-50 flex flex-col gap-1 rounded-xl border border-[var(--border)] p-2 shadow-[var(--shadow-deep)] min-w-[14rem]"
             style={{
               left: Math.min(edgeMenu.x, window.innerWidth - 240),
