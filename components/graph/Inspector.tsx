@@ -138,7 +138,7 @@ function InlineQuickAdd({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0.32, 1] }}
-      className="flex flex-col flex-1 min-h-0"
+      className="absolute inset-0 flex flex-col bg-[var(--background,white)] dark:bg-[var(--background)]"
     >
       {/* Panel header */}
       <div className="flex items-center gap-2 px-6 pt-5 pb-4 border-b border-[var(--border)]">
@@ -330,6 +330,7 @@ function SpouseRow({
   onChange: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState(false);
   const name = personLabel(spouse, lang);
 
   const statusLabels: Record<SpouseStatus, string> = {
@@ -359,8 +360,11 @@ function SpouseRow({
   }
 
   async function handleRemove() {
-    const ok = window.confirm(`Remove the relationship with ${name}?`);
-    if (!ok) return;
+    if (!removeConfirm) {
+      setRemoveConfirm(true);
+      return;
+    }
+    setRemoveConfirm(false);
     setBusy(true);
     const r = await deleteRelationship(relationshipId, selfId);
     setBusy(false);
@@ -430,13 +434,16 @@ function SpouseRow({
       <button
         type="button"
         onClick={handleRemove}
+        onBlur={() => setRemoveConfirm(false)}
         disabled={busy}
-        aria-label="Remove"
+        aria-label={removeConfirm ? "Confirm removal" : "Remove"}
+        title={removeConfirm ? "Confirm?" : "Remove"}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
-          "transition-[transform,background-color,color] duration-200",
-          "hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
+          "flex h-8 w-8 items-center justify-center rounded-full border transition-[transform,background-color,color] duration-200",
           "disabled:opacity-50 disabled:cursor-not-allowed",
+          removeConfirm
+            ? "border-[var(--destructive)] bg-[var(--destructive)] text-white hover:-translate-y-px"
+            : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
         )}
       >
         <Link2Off className="h-3.5 w-3.5" />
@@ -501,22 +508,40 @@ function ParentRow({
   onChange: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [unlinkConfirm, setUnlinkConfirm] = useState(false);
+  const [convertConfirm, setConvertConfirm] = useState(false);
 
   async function handleUnlink() {
-    const ok = window.confirm(`Remove this link with ${name ?? "?"}?`);
-    if (!ok) return;
+    if (!unlinkConfirm) {
+      setUnlinkConfirm(true);
+      return;
+    }
+    setUnlinkConfirm(false);
     setBusy(true);
-    await unlinkParent(parentId, childId);
+    const r = await unlinkParent(parentId, childId);
     setBusy(false);
+    if (r?.success) {
+      toast.success("Parent link removed");
+    } else {
+      toast.error(r?.error ?? "Remove failed");
+    }
     onChange();
   }
 
   async function handleConvert() {
-    const ok = window.confirm(`Convert ${name ?? "?"} from parent to spouse?`);
-    if (!ok) return;
+    if (!convertConfirm) {
+      setConvertConfirm(true);
+      return;
+    }
+    setConvertConfirm(false);
     setBusy(true);
-    await convertParentToSpouse(parentId, childId);
+    const r = await convertParentToSpouse(parentId, childId);
     setBusy(false);
+    if (r?.success) {
+      toast.success("Converted to spouse");
+    } else {
+      toast.error(r?.error ?? "Convert failed");
+    }
     onChange();
   }
 
@@ -604,6 +629,12 @@ export function Inspector({
   const [picker, setPicker] = useState<PickerKind>(null);
   const [quickAdd, setQuickAdd] = useState<QuickAddKind | null>(null);
 
+  // Reset picker and quickAdd state when the selected person changes
+  useEffect(() => {
+    setPicker(null);
+    setQuickAdd(null);
+  }, [person?.id]);
+
   const peopleById = useMemo(() => {
     const m = new Map<string, PickablePerson>();
     for (const p of people) m.set(p.id, p);
@@ -656,10 +687,15 @@ export function Inspector({
     });
   }, [people, person]);
 
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+
   function handleDelete() {
     if (!person) return;
-    const confirmed = window.confirm("Delete this person?");
-    if (!confirmed) return;
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      return;
+    }
+    setDeleteConfirm(false);
     const id = person.id;
     onClose();
     startTransition(async () => {
@@ -751,241 +787,252 @@ export function Inspector({
           </motion.div>
         </SheetHeader>
 
-        {/* Inline quick-add panel — replaces body + footer when active */}
-        <AnimatePresence mode="wait">
-          {quickAdd && person && (
-            <InlineQuickAdd
-              key={quickAdd}
-              kind={quickAdd}
-              personName={fullName || "Person"}
-              person={person}
-              onBack={() => setQuickAdd(null)}
-              onLinkExisting={() => {
-                setQuickAdd(null);
-                setPicker(quickAdd);
-              }}
-              onSuccess={() => {
-                setQuickAdd(null);
-                toast.success(
-                  quickAdd === "child"   ? "Child added" :
-                  quickAdd === "spouse"  ? "Spouse added" :
-                  quickAdd === "sibling" ? "Sibling added" :
-                                          "Parent added"
-                );
-                router.refresh();
-              }}
-            />
-          )}
-        </AnimatePresence>
+        {/* Scrollable body + footer area — absolute panels swap here */}
+        <div className="relative flex-1 overflow-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            {quickAdd && person ? (
+              <InlineQuickAdd
+                key={quickAdd}
+                kind={quickAdd}
+                personName={fullName || "Person"}
+                person={person}
+                onBack={() => setQuickAdd(null)}
+                onLinkExisting={() => {
+                  setQuickAdd(null);
+                  setPicker(quickAdd);
+                }}
+                onSuccess={() => {
+                  setQuickAdd(null);
+                  toast.success(
+                    quickAdd === "child"   ? "Child added" :
+                    quickAdd === "spouse"  ? "Spouse added" :
+                    quickAdd === "sibling" ? "Sibling added" :
+                                            "Parent added"
+                  );
+                  router.refresh();
+                }}
+              />
+            ) : (
+              <motion.div
+                key="inspector-main"
+                initial={{ opacity: 0, x: -24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -24 }}
+                transition={{ duration: 0.22, ease: [0.32, 0.72, 0.32, 1] }}
+                className="absolute inset-0 flex flex-col"
+              >
+                {/* Body */}
+                <motion.div
+                  initial="initial"
+                  animate="animate"
+                  variants={{ animate: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } } }}
+                  className="scrollbar-thin flex-1 space-y-5 overflow-y-auto px-6 py-6"
+                >
+                  {/* Placeholder notice */}
+                  {person?.is_placeholder && (
+                    <motion.div
+                      variants={fadeUp}
+                      transition={sectionTransition}
+                      className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/55 p-3"
+                    >
+                      <p className="text-center text-xs text-[var(--muted-foreground)]">
+                        Placeholder — add their info
+                      </p>
+                    </motion.div>
+                  )}
 
-        {/* Body */}
-        <motion.div
-          initial="initial"
-          animate="animate"
-          variants={{ animate: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } } }}
-          className={cn("scrollbar-thin flex-1 space-y-5 overflow-y-auto px-6 py-6", quickAdd && "hidden")}
-        >
-          {/* Placeholder notice */}
-          {person?.is_placeholder && (
-            <motion.div
-              variants={fadeUp}
-              transition={sectionTransition}
-              className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/55 p-3"
-            >
-              <p className="text-center text-xs text-[var(--muted-foreground)]">
-                Placeholder — add their info
-              </p>
-            </motion.div>
-          )}
+                  {/* Spouses — current + ex with status badges and actions */}
+                  {person && spouses.length > 0 && (
+                    <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                        Marriages
+                      </p>
+                      <div className="space-y-2">
+                        {spouses.map((s) => (
+                          <SpouseRow
+                            key={s.relationshipId || `${s.otherId}-${s.status}`}
+                            selfId={person.id}
+                            spouse={peopleById.get(s.otherId)}
+                            relationshipId={s.relationshipId}
+                            status={s.status}
+                            lang={lang}
+                            onChange={() => {
+                              router.refresh();
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
 
-          {/* Spouses — current + ex with status badges and actions */}
-          {person && spouses.length > 0 && (
-            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                Marriages
-              </p>
-              <div className="space-y-2">
-                {spouses.map((s) => (
-                  <SpouseRow
-                    key={s.relationshipId || `${s.otherId}-${s.status}`}
-                    selfId={person.id}
-                    spouse={peopleById.get(s.otherId)}
-                    relationshipId={s.relationshipId}
-                    status={s.status}
-                    lang={lang}
-                    onChange={() => {
-                      router.refresh();
-                    }}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
+                  {/* Parents — with quick-fix actions */}
+                  {person && (person.father_id || person.mother_id) && (
+                    <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                        Parents
+                      </p>
+                      <div className="space-y-2">
+                        {person.father_id && (
+                          <ParentRow
+                            label="Father"
+                            name={fatherName}
+                            parentId={person.father_id}
+                            childId={person.id}
+                            lang={lang}
+                            onChange={() => {
+                              onClose();
+                              router.refresh();
+                            }}
+                          />
+                        )}
+                        {person.mother_id && (
+                          <ParentRow
+                            label="Mother"
+                            name={motherName}
+                            parentId={person.mother_id}
+                            childId={person.id}
+                            lang={lang}
+                            onChange={() => {
+                              onClose();
+                              router.refresh();
+                            }}
+                          />
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
 
-          {/* Parents — with quick-fix actions */}
-          {person && (person.father_id || person.mother_id) && (
-            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                Parents
-              </p>
-              <div className="space-y-2">
-                {person.father_id && (
-                  <ParentRow
-                    label="Father"
-                    name={fatherName}
-                    parentId={person.father_id}
-                    childId={person.id}
-                    lang={lang}
-                    onChange={() => {
-                      onClose();
-                      router.refresh();
-                    }}
-                  />
-                )}
-                {person.mother_id && (
-                  <ParentRow
-                    label="Mother"
-                    name={motherName}
-                    parentId={person.mother_id}
-                    childId={person.id}
-                    lang={lang}
-                    onChange={() => {
-                      onClose();
-                      router.refresh();
-                    }}
-                  />
-                )}
-              </div>
-            </motion.div>
-          )}
+                  {/* Children */}
+                  {person && children.length > 0 && (
+                    <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                        {`Children (${children.length})`}
+                      </p>
+                      <div className="space-y-2">
+                        {children.map((c) => (
+                          <KinRow
+                            key={c.id}
+                            person={c}
+                            lang={lang}
+                            accent={c.gender === "f" ? "rose" : c.gender === "m" ? "coral" : "neutral"}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
 
-          {/* Children */}
-          {person && children.length > 0 && (
-            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                {`Children (${children.length})`}
-              </p>
-              <div className="space-y-2">
-                {children.map((c) => (
-                  <KinRow
-                    key={c.id}
-                    person={c}
-                    lang={lang}
-                    accent={c.gender === "f" ? "rose" : c.gender === "m" ? "coral" : "neutral"}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
+                  {/* Siblings */}
+                  {person && siblings.length > 0 && (
+                    <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                        {`Siblings (${siblings.length})`}
+                      </p>
+                      <div className="space-y-2">
+                        {siblings.map((s) => (
+                          <KinRow
+                            key={s.id}
+                            person={s}
+                            lang={lang}
+                            accent={s.gender === "f" ? "rose" : s.gender === "m" ? "coral" : "neutral"}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </motion.div>
 
-          {/* Siblings */}
-          {person && siblings.length > 0 && (
-            <motion.div variants={fadeUp} transition={sectionTransition} className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                {`Siblings (${siblings.length})`}
-              </p>
-              <div className="space-y-2">
-                {siblings.map((s) => (
-                  <KinRow
-                    key={s.id}
-                    person={s}
-                    lang={lang}
-                    accent={s.gender === "f" ? "rose" : s.gender === "m" ? "coral" : "neutral"}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </motion.div>
-
-        {/* Footer actions — hidden when inline quick-add is open */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32, ease: [0.32, 0.72, 0.32, 1], delay: 0.18 }}
-          className={cn("space-y-2 border-t border-[var(--border)] px-6 py-5", quickAdd && "hidden")}
-        >
-          <Button asChild size="sm" className="w-full rounded-full">
-            <Link href={person ? `/person/${person.slug ?? person.id}/edit` : "#"}>
-              <Pencil className="h-3.5 w-3.5" />
-              Edit
-            </Link>
-          </Button>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              onClick={() => setQuickAdd("spouse")}
-            >
-              <Heart className="h-3.5 w-3.5" />
-              Add spouse
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              onClick={() => setQuickAdd("child")}
-            >
-              <PlusCircle className="h-3.5 w-3.5" />
-              Add child
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              onClick={() => setQuickAdd("sibling")}
-            >
-              <Users className="h-3.5 w-3.5" />
-              Add sibling
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              onClick={() => setQuickAdd("parent")}
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              Add parent
-            </Button>
-          </div>
-          <Button asChild variant="outline" size="sm" className="w-full rounded-full">
-            <Link href={person ? `/person/${person.slug ?? person.id}` : "#"}>
-              <ExternalLink className="h-3.5 w-3.5" />
-              Full profile
-            </Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full rounded-full border-[var(--destructive)]/30 text-[var(--destructive)] hover:bg-[var(--destructive)]/5 hover:text-[var(--destructive)]"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </Button>
-        </motion.div>
+                {/* Footer actions */}
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.32, ease: [0.32, 0.72, 0.32, 1], delay: 0.18 }}
+                  className="space-y-2 border-t border-[var(--border)] px-6 py-5"
+                >
+                  <Button asChild size="sm" className="w-full rounded-full">
+                    <Link href={person ? `/person/${person.slug ?? person.id}/edit` : "#"}>
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </Link>
+                  </Button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => setQuickAdd("spouse")}
+                    >
+                      <Heart className="h-3.5 w-3.5" />
+                      Add spouse
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => setQuickAdd("child")}
+                    >
+                      <PlusCircle className="h-3.5 w-3.5" />
+                      Add child
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => setQuickAdd("sibling")}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      Add sibling
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => setQuickAdd("parent")}
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Add parent
+                    </Button>
+                  </div>
+                  <Button asChild variant="outline" size="sm" className="w-full rounded-full">
+                    <Link href={person ? `/person/${person.slug ?? person.id}` : "#"}>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Full profile
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "w-full rounded-full transition-colors",
+                      deleteConfirm
+                        ? "border-[var(--destructive)] bg-[var(--destructive)] text-white hover:bg-[var(--destructive)]/90"
+                        : "border-[var(--destructive)]/30 text-[var(--destructive)] hover:bg-[var(--destructive)]/5 hover:text-[var(--destructive)]",
+                    )}
+                    onClick={handleDelete}
+                    onBlur={() => setDeleteConfirm(false)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {deleteConfirm ? "Confirm?" : "Delete"}
+                  </Button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </SheetContent>
 
-      {/* Relationship pickers — share existing person OR create new */}
+      {/* Relationship picker — link existing person (secondary flow, no navigation) */}
       {person && picker && (() => {
-        const createHrefs: Record<Exclude<PickerKind, null>, string> = {
-          spouse:  `/person/new?spouse=${person.id}`,
-          child:   `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`,
-          parent:  `/person/new?child=${person.id}`,
-          sibling: `/person/new?sibling=${person.id}`,
-        };
         const titles: Record<Exclude<PickerKind, null>, string> = {
-          spouse:  "Add spouse",
-          child:   "Add child",
-          parent:  "Add parent",
-          sibling: "Add sibling",
+          spouse:  "Link existing spouse",
+          child:   "Link existing child",
+          parent:  "Link existing parent",
+          sibling: "Link existing sibling",
         };
-        const subtitle = "Pick an existing person or create a new one";
+        const subtitle = "Pick an existing person to link";
         const excludeIds = [person.id];
         const handlePick = async (otherId: string) => {
           const other = peopleById.get(otherId);
@@ -1030,7 +1077,6 @@ export function Inspector({
             lang={lang}
             excludeIds={excludeIds}
             onPick={handlePick}
-            createHref={createHrefs[picker]}
           />
         );
       })()}
