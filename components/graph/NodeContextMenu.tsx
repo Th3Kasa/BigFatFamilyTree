@@ -72,21 +72,22 @@ export function NodeContextMenu({
     >
       {target.kind === "node" ? (
         <>
-          <button type="button" onClick={onAddChild} className={item}>
+          <button type="button" role="menuitem" autoFocus onClick={onAddChild} className={item}>
             {lang === "ar" ? "إضافة ابن/ابنة" : "Add child"}
           </button>
-          <button type="button" onClick={onAddSpouse} className={item}>
+          <button type="button" role="menuitem" onClick={onAddSpouse} className={item}>
             {lang === "ar" ? "إضافة زوج/زوجة" : "Add spouse"}
           </button>
-          <button type="button" onClick={onAddParent} className={item}>
+          <button type="button" role="menuitem" onClick={onAddParent} className={item}>
             {lang === "ar" ? "إضافة والد/والدة" : "Add parent"}
           </button>
           <hr className="border-[var(--border)]" />
-          <button type="button" onClick={onEdit} className={item}>
+          <button type="button" role="menuitem" onClick={onEdit} className={item}>
             {lang === "ar" ? "تعديل" : "Edit"}
           </button>
           <button
             type="button"
+            role="menuitem"
             onClick={onDelete}
             className={
               deleteConfirm
@@ -100,7 +101,7 @@ export function NodeContextMenu({
           </button>
         </>
       ) : (
-        <button type="button" onClick={onAddPerson} className={item}>
+        <button type="button" role="menuitem" autoFocus onClick={onAddPerson} className={item}>
           {lang === "ar" ? "＋ إضافة شخص" : "＋ Add person"}
         </button>
       )}

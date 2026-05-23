@@ -32,7 +32,7 @@ type Props = {
   people: PickablePerson[];
   lang: "ar" | "en";
   excludeIds?: string[];
-  onPick: (personId: string) => void | Promise<void>;
+  onPick: (personId: string) => boolean | void | Promise<boolean | void>;
 };
 
 function display(p: PickablePerson, lang: "ar" | "en") {
@@ -95,13 +95,16 @@ export function PersonPicker({
   async function handlePick(id: string) {
     setBusy(id);
     try {
-      await onPick(id);
+      const ok = await onPick(id);
+      // false return = operation failed (caller already toasted), keep picker open
+      if (ok !== false) {
+        onOpenChange(false);
+        setQuery("");
+      }
     } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {
       setBusy(null);
-      onOpenChange(false);
-      setQuery("");
     }
   }
 

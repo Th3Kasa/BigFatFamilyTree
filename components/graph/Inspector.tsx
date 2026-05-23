@@ -104,6 +104,11 @@ function InlineQuickAdd({
   const [formState, formAction] = useActionState<ActionState, FormData>(createPersonQuick, null);
   const givenRef = useRef<HTMLInputElement>(null);
 
+  // Stable ref so the success effect always reads the latest values without
+  // triggering extra re-runs (onSuccess is an inline closure, person changes on node switch).
+  const stableRef = useRef({ kind, person, onSuccess });
+  stableRef.current = { kind, person, onSuccess };
+
   // Autofocus when mounted
   useEffect(() => {
     const t = setTimeout(() => givenRef.current?.focus(), 50);
@@ -115,23 +120,19 @@ function InlineQuickAdd({
   // Call addSibling to establish the relationship via a placeholder parent.
   useEffect(() => {
     if (!formState?.success) return;
-    const needsSiblingLink =
-      kind === "sibling" &&
-      !person.father_id &&
-      !person.mother_id &&
-      formState.personId;
+    const { kind: k, person: p, onSuccess: onDone } = stableRef.current;
+    const needsSiblingLink = k === "sibling" && !p.father_id && !p.mother_id && formState.personId;
     if (needsSiblingLink) {
-      addSibling(person.id, formState.personId!)
+      addSibling(p.id, formState.personId!)
         .then((r) => {
           if (!r.success) toast.error(r.error ?? "Sibling link failed — check back to reconnect");
-          else onSuccess();
+          else onDone();
         })
         .catch(() => toast.error("Sibling link failed"));
     } else {
-      onSuccess();
+      onDone();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formState?.success]);
+  }, [formState?.success, formState?.personId]);
 
   // Derive hidden FK values
   const fatherId = kind === "child" && person.gender !== "f" ? person.id : "";
@@ -1062,7 +1063,7 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
         };
         const subtitle = "Pick an existing person to link";
         const excludeIds = [person.id];
-        const handlePick = async (otherId: string) => {
+        const handlePick = async (otherId: string): Promise<boolean> => {
           const other = peopleById.get(otherId);
           const otherLabel = personLabel(other, lang);
           const selfLabel = personLabel(
@@ -1087,9 +1088,12 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
           if (result?.success) {
             toast.success(successMsg);
             router.refresh();
+            return true;
           } else if (result) {
             toast.error(result.error ?? "Couldn't create the link");
+            return false; // keeps picker open so user can try another person
           }
+          return false;
         };
         return (
           <PersonPicker

@@ -526,22 +526,25 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         const rid = data.relationshipId;
         const pid = edge.source as string;
         startTransition(async () => {
-          await deleteRelationship(rid, pid);
-          router.refresh();
+          const r = await deleteRelationship(rid, pid);
+          if (r?.success) router.refresh();
+          else toast.error(r?.error ?? "Couldn't remove connection");
         });
       } else if ((data?.edgeKind === "adopted" || data?.edgeKind === "guardian") && data.relationshipId) {
         const rid = data.relationshipId;
         const pid = edge.source as string;
         startTransition(async () => {
-          await deleteRelationship(rid, pid);
-          router.refresh();
+          const r = await deleteRelationship(rid, pid);
+          if (r?.success) router.refresh();
+          else toast.error(r?.error ?? "Couldn't remove connection");
         });
       } else if (data?.edgeKind === "parent") {
         const childId = edge.target as string;
         const parentId = edge.source as string;
         startTransition(async () => {
-          await unlinkParent(parentId, childId);
-          router.refresh();
+          const r = await unlinkParent(parentId, childId);
+          if (r?.success) router.refresh();
+          else toast.error(r?.error ?? "Couldn't remove connection");
         });
       }
     }
@@ -715,7 +718,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             className="glass-2 fixed z-50 flex flex-col gap-1 rounded-xl border border-[var(--border)] p-2 shadow-[var(--shadow-deep)] min-w-[14rem]"
             style={{
               left: Math.min(edgeMenu.x, window.innerWidth - 240),
-              top: Math.min(edgeMenu.y, window.innerHeight - 148),
+              top: Math.min(edgeMenu.y, window.innerHeight - 200),
             }}
           >
             <div className="px-2 pt-1 pb-2 text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
@@ -723,6 +726,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             </div>
             <button
               type="button"
+              role="menuitem"
+              autoFocus
               onClick={handleChangeEdge}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
             >
@@ -731,6 +736,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={handleRemoveEdge}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/8"
             >
@@ -739,6 +745,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => setEdgeMenu(null)}
               className="rounded-lg px-2 py-1.5 text-left text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
             >
