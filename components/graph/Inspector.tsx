@@ -121,7 +121,12 @@ function InlineQuickAdd({
       !person.mother_id &&
       formState.personId;
     if (needsSiblingLink) {
-      addSibling(person.id, formState.personId!).then(() => onSuccess());
+      addSibling(person.id, formState.personId!)
+        .then((r) => {
+          if (!r.success) toast.error(r.error ?? "Sibling link failed — check back to reconnect");
+          else onSuccess();
+        })
+        .catch(() => toast.error("Sibling link failed"));
     } else {
       onSuccess();
     }
@@ -654,6 +659,7 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
   // Reset state when person changes; honour any pending quick-add from node button.
   useEffect(() => {
     setPicker(null);
+    setDeleteConfirm(false);
     const pending = pendingQuickAddRef.current;
     pendingQuickAddRef.current = null;
     setQuickAdd(pending ?? null);

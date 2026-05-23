@@ -521,7 +521,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const onEdgesDelete: OnEdgesDelete = useCallback((deletedEdges) => {
     for (const edge of deletedEdges) {
       const data = edge.data as { edgeKind?: string; relationshipId?: string } | undefined;
-      if (data?.edgeKind === "family-branch") return; // handled via Inspector
+      if (data?.edgeKind === "family-branch") continue; // handled via Inspector
       if (data?.edgeKind === "spouse" && data.relationshipId) {
         const rid = data.relationshipId;
         const pid = edge.source as string;
@@ -695,7 +695,10 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
           <div
             role="menu"
             className="glass-2 fixed z-50 flex flex-col gap-1 rounded-xl border border-[var(--border)] p-2 shadow-[var(--shadow-deep)] min-w-[14rem]"
-            style={{ left: edgeMenu.x, top: edgeMenu.y }}
+            style={{
+              left: Math.min(edgeMenu.x, window.innerWidth - 240),
+              top: Math.min(edgeMenu.y, window.innerHeight - 148),
+            }}
           >
             <div className="px-2 pt-1 pb-2 text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
               {edgeMenu.label}

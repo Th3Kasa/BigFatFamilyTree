@@ -122,6 +122,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
             <button
               type="button"
               onClick={handleDeletePlaceholder}
+              onKeyDown={(e) => e.stopPropagation()}
               onBlur={() => setDeleteConfirm(false)}
               aria-label={deleteConfirm
                 ? (lang === "ar" ? "تأكيد الحذف" : "Confirm removal")
