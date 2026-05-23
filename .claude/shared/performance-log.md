@@ -22,6 +22,18 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-05-23 — Task #6 (QA loop — QA Pass 6, all 10 defects resolved)
+**Task:** Fix all 10 QA6 findings: critical parent-slot overwrite in createPersonQuick, stale revalidation in deleteRelationship, invisible buttons keyboard-reachable, orphan on sibling link failure, missing aria-labels, dark-mode SpouseRow, startTransition for server action, dead code removal, spurious router.refresh on cancel
+**Agents used:** qa-guard (audit), Alfred (all fixes)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, TypeScript clean, zero rework
+**What worked:** Pre-flight guard approach for QA6-01 (check before insert, not after) is cleaner than rollback and avoids TOCTOU window. Rollback approach for QA6-04 is correct because the person is already committed before addSibling is called — you can't block it earlier. Both patterns needed in the same pass shows the audit is surfacing real layered bugs.
+**What didn't:** Nothing failed. All 10 fixes landed in one shot.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — all 10 real, well-scoped findings with precise file/line; Alfred ⭐⭐⭐⭐⭐ — clean implementation, correct approach selection per fix type
+**Improvement opportunity:** QA6-02 (both-party revalidation) is a systematic gap pattern — any function that mutates a relationship record should revalidate both parties. Worth adding to qa-guard scope as a standing check.
+
+---
+
 ### 2026-05-23 — Task #5 (QA loop — third audit + user UX requests)
 **Task:** Fix auto-layout hierarchy (extra rank issue), connector line gap when dragging, Add Child/Spouse/Parent → Inspector panel; fix QA5 defects (idempotency, onBlur resets, dark-mode dialog, aria, convertParentToSpouse guard)
 **Agents used:** Alfred (direct — all fixes), qa-guard (audit pass, background)

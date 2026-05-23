@@ -70,6 +70,9 @@ if (field) {
 ```
 This should be: early return with an error when `field` is null, not a silent skip.
 
+## Relationships Table — Both-Party Revalidation
+Any server action that **mutates a row in the `relationships` table** (insert, update, delete) must call `revalidatePath` for **both** `person_a_id` and `person_b_id` profile paths. Revalidating only one party leaves the other's cached page showing stale data. This is a **Medium** severity finding whenever a relationships mutation revalidates fewer than two person profile paths.
+
 ## Sign-off Decision
 **SHIP ✅ when**: all tests pass, TypeScript clean, manual checklist complete, no open security findings
 **HOLD 🚫 when**: critical/high security finding open, core flow E2E fails, TypeScript errors introduced
