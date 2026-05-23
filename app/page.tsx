@@ -21,7 +21,7 @@ export default async function HomePage() {
       )
       .is("deleted_at", null)
       .order("given_en"),
-    supabase.from("relationships").select("*"),
+    supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
   ]);
 
   const isEmpty = !people || people.length === 0;

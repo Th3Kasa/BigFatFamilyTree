@@ -36,6 +36,22 @@ export async function createRelationship(
   }
 
   const supabase = await createClient();
+
+  // Idempotency: return success if the relationship already exists (either direction).
+  const { data: dup } = await supabase
+    .from("relationships")
+    .select("id")
+    .eq("type", type as RelType)
+    .or(
+      `and(person_a_id.eq.${personId},person_b_id.eq.${otherPersonId}),and(person_a_id.eq.${otherPersonId},person_b_id.eq.${personId})`,
+    )
+    .maybeSingle();
+  if (dup) {
+    revalidatePath("/");
+    revalidatePath(`/person/${personId}`);
+    return { success: true, id: (dup as { id: string }).id };
+  }
+
   const { data, error } = await supabase.from("relationships").insert({
     person_a_id: personId,
     person_b_id: otherPersonId,

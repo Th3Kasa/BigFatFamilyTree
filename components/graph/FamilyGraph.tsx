@@ -19,10 +19,14 @@ import {
 import "@xyflow/react/dist/style.css";
 import { PersonNode } from "./PersonNode";
 import { FamilyBranchEdge } from "./FamilyBranchEdge";
+import { SpouseEdge } from "./SpouseEdge";
 import type { GraphNode, GraphEdge } from "@/lib/graph/transform";
 
 const nodeTypes: NodeTypes = { person: PersonNode };
-const edgeTypes: EdgeTypes = { "family-branch": FamilyBranchEdge };
+const edgeTypes: EdgeTypes = {
+  "family-branch": FamilyBranchEdge,
+  "spouse": SpouseEdge,
+};
 
 type Props = {
   nodes: GraphNode[];
@@ -82,7 +86,7 @@ export function FamilyGraph({
         onEdgesDelete={onEdgesDelete}
         panOnDrag={panOnDrag}
         selectionOnDrag={selectionMode}
-        deleteKeyCode="Delete"
+        deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
           style: { stroke: "oklch(0.38 0.06 18 / 0.45)", strokeWidth: 1.5 },

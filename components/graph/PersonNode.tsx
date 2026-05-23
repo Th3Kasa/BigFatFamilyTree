@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Eye, Plus, Heart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { deletePerson } from "@/lib/actions/people";
+import { deletePersonCanvas } from "@/lib/actions/people";
 import type { PersonNodeData } from "@/lib/graph/transform";
 
 type PersonNodeType = Node<PersonNodeData, "person">;
@@ -49,21 +49,21 @@ const STACKED_TARGET_STYLE: React.CSSProperties = {
 export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
   const { person, spouseId, lang } = data;
   const [hovered, setHovered] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const router = useRouter();
   const [, startTransition] = useTransition();
 
   async function handleDeletePlaceholder(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const ok = window.confirm(
-      lang === "ar"
-        ? "حذف هذا الوالد المؤقت؟ سيتم فصل أطفاله."
-        : "Remove this placeholder parent? Its children will be detached.",
-    );
-    if (!ok) return;
-    const r = await deletePerson(person.id);
-    if (r && !(r as { success?: boolean }).success) {
-      toast.error((r as { error?: string }).error ?? "Couldn't remove");
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      return;
+    }
+    setDeleteConfirm(false);
+    const r = await deletePersonCanvas(person.id);
+    if (!r.success) {
+      toast.error(r.error ?? "Couldn't remove");
       return;
     }
     toast.success(lang === "ar" ? "تمت الإزالة" : "Placeholder removed");
@@ -101,15 +101,15 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           style={PARENT_STYLE}
           title={tip.parentIn}
         />
-        <Link
-          href={`/person/${person.slug ?? person.id}/edit`}
+        {/* Use a div + onClick for navigation so the delete button is not nested inside an <a> */}
+        <div
+          role="link"
+          tabIndex={0}
+          onClick={() => router.push(`/person/${person.slug ?? person.id}/edit`)}
+          onKeyDown={(e) => e.key === "Enter" && router.push(`/person/${person.slug ?? person.id}/edit`)}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
-          className={cn(
-            // Sized to occupy the dagre slot (220×240) but only renders a small
-            // ghost token at the top so it feels like a junction, not a tile.
-            "relative flex w-[220px] h-[240px] cursor-pointer items-start justify-center pt-6",
-          )}
+          className="relative flex w-[220px] h-[240px] cursor-pointer items-start justify-center pt-6"
         >
           <div
             className={cn(
@@ -122,14 +122,21 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
             <button
               type="button"
               onClick={handleDeletePlaceholder}
-              aria-label={lang === "ar" ? "إزالة" : "Remove placeholder"}
-              title={lang === "ar" ? "إزالة" : "Remove placeholder"}
+              onKeyDown={(e) => e.stopPropagation()}
+              onBlur={() => setDeleteConfirm(false)}
+              aria-label={deleteConfirm
+                ? (lang === "ar" ? "تأكيد الحذف" : "Confirm removal")
+                : (lang === "ar" ? "إزالة" : "Remove placeholder")}
+              title={deleteConfirm
+                ? (lang === "ar" ? "تأكيد؟" : "Confirm?")
+                : (lang === "ar" ? "إزالة" : "Remove placeholder")}
               className={cn(
                 "absolute -right-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full",
-                "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
-                "shadow-sm transition-[transform,background-color,color,opacity] duration-200",
-                "hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
-                hovered ? "opacity-100" : "opacity-0 pointer-events-none",
+                "border shadow-sm transition-[transform,background-color,color,opacity,border-color] duration-200",
+                deleteConfirm
+                  ? "border-[var(--destructive)] bg-[var(--destructive)] text-white opacity-100"
+                  : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:-translate-y-px hover:bg-[var(--destructive)] hover:text-white",
+                !deleteConfirm && (hovered ? "opacity-100" : "opacity-0 pointer-events-none"),
               )}
             >
               <X className="h-3 w-3" />
@@ -146,7 +153,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
               </span>
             </div>
           </div>
-        </Link>
+        </div>
         <Handle
           type="source"
           position={Position.Bottom}
@@ -292,7 +299,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
                         : "bg-[var(--muted)] text-[var(--foreground)]",
                   )}
                 >
-                  {initials || (isFemale ? "♀" : "♂")}
+                  {initials || (isFemale ? "♀" : isMale ? "♂" : "?")}
                 </AvatarFallback>
               </Avatar>
             </div>
@@ -330,13 +337,9 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
               <Eye className="h-3.5 w-3.5" />
               <span>{lang === "ar" ? "عرض" : "View"}</span>
             </Link>
-            <Link
-              href={
-                spouseId
-                  ? `/person/new?father=${person.gender !== "f" ? person.id : spouseId}&mother=${person.gender === "f" ? person.id : spouseId}`
-                  : `/person/new?${person.gender === "f" ? "mother" : "father"}=${person.id}`
-              }
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); data.onQuickAdd?.("child"); }}
               className={cn(
                 "group/btn flex h-9 items-center justify-center gap-1.5 rounded-2xl",
                 "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]",
@@ -349,13 +352,13 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
             >
               <Plus className="h-3.5 w-3.5" />
               <span>{lang === "ar" ? "طفل" : "Child"}</span>
-            </Link>
+            </button>
           </div>
 
           {/* Heart-pill (Add spouse) sits above the action row, surfaces on hover */}
-          <Link
-            href={`/person/new?spouse=${person.id}`}
-            onClick={(e) => e.stopPropagation()}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); data.onQuickAdd?.("spouse"); }}
             className={cn(
               "absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full",
               "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
@@ -367,7 +370,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
             aria-label={lang === "ar" ? "إضافة زوج/ة" : "Add spouse"}
           >
             <Heart className="h-3.5 w-3.5" />
-          </Link>
+          </button>
 
           {/* Selected accent bar */}
           <div

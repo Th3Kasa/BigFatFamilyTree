@@ -27,15 +27,17 @@ async function uniqueSlug(
   base: string,
   excludeId?: string,
 ): Promise<string> {
-  let candidate = base;
+  const safeBase = base || Math.random().toString(36).slice(2, 10);
+  let candidate = safeBase;
   let n = 2;
-  while (true) {
-    const q = supabase.from("people").select("id").eq("slug", candidate);
-    if (excludeId) q.neq("id", excludeId);
+  while (n < 200) {
+    let q = supabase.from("people").select("id").eq("slug", candidate);
+    if (excludeId) q = q.neq("id", excludeId);
     const { data } = await q.maybeSingle();
     if (!data) return candidate;
-    candidate = `${base}-${n++}`;
+    candidate = `${safeBase}-${n++}`;
   }
+  return Math.random().toString(36).slice(2, 10);
 }
 
 // ── createPerson ──────────────────────────────────────────────────────────────
@@ -73,12 +75,17 @@ export async function createPerson(
 
   const spouseId = raw.spouse_id;
   if (spouseId && UUID_RE.test(spouseId)) {
-    await supabase.from("relationships").insert({
+    const { error: relErr } = await supabase.from("relationships").insert({
       person_a_id: data.id,
       person_b_id: spouseId,
       type: "spouse",
       status: "current",
     });
+    // Person is already committed; if link fails, redirect anyway — user can re-link from Inspector.
+    if (relErr) {
+      revalidatePath("/");
+      redirect(`/person/${data.slug ?? data.id}`);
+    }
   }
 
   revalidatePath("/");
@@ -181,18 +188,20 @@ export async function createPersonQuick(
 
   const spouseId = raw.spouse_id;
   if (spouseId && UUID_RE.test(spouseId)) {
-    await supabase.from("relationships").insert({
+    const { error: relErr } = await supabase.from("relationships").insert({
       person_a_id: newId,
       person_b_id: spouseId,
       type: "spouse",
       status: "current",
     });
+    if (relErr) return { success: false, error: `Person created but spouse link failed: ${relErr.message}` };
   }
 
   const childId = raw.child_id;
   if (childId && UUID_RE.test(childId)) {
     const field = parsed.data.gender === "f" ? "mother_id" : "father_id";
-    await supabase.from("people").update({ [field]: newId }).eq("id", childId).is("deleted_at", null);
+    const { error: childErr } = await supabase.from("people").update({ [field]: newId }).eq("id", childId).is("deleted_at", null);
+    if (childErr) return { success: false, error: `Person created but parent link failed: ${childErr.message}` };
   }
 
   revalidatePath("/");
@@ -215,6 +224,18 @@ export async function linkParentChild(parentId: string, childId: string): Promis
   if (!parent) return { success: false, error: "Parent not found." };
 
   const field = parent.gender === "f" ? "mother_id" : "father_id";
+
+  // Guard: don't silently overwrite an existing parent link
+  const { data: child } = await supabase
+    .from("people")
+    .select("father_id, mother_id")
+    .eq("id", childId)
+    .maybeSingle();
+  if (child && child[field] && child[field] !== parentId) {
+    const role = field === "father_id" ? "father" : "mother";
+    return { success: false, error: `This person already has a ${role}. Unlink the existing one first.` };
+  }
+
   const { error } = await supabase
     .from("people")
     .update({ [field]: parentId })
@@ -331,13 +352,13 @@ export async function convertParentToSpouse(
         ? "mother_id"
         : null;
 
-  if (field) {
-    const { error: unlinkErr } = await supabase
-      .from("people")
-      .update({ [field]: null })
-      .eq("id", childId);
-    if (unlinkErr) return { success: false, error: unlinkErr.message };
-  }
+  if (!field) return { success: false, error: "No parent link found between these two people." };
+
+  const { error: unlinkErr } = await supabase
+    .from("people")
+    .update({ [field]: null })
+    .eq("id", childId);
+  if (unlinkErr) return { success: false, error: unlinkErr.message };
 
   const { data: existing } = await supabase
     .from("relationships")
@@ -503,6 +524,18 @@ export async function linkChild(
   if (!parent) return { success: false, error: "Parent not found." };
 
   const field = (parent as { gender: string }).gender === "f" ? "mother_id" : "father_id";
+
+  const { data: child } = await supabase
+    .from("people")
+    .select("father_id, mother_id")
+    .eq("id", childId)
+    .maybeSingle();
+  const ch = child as { father_id: string | null; mother_id: string | null } | null;
+  if (ch && ch[field as "father_id" | "mother_id"] && ch[field as "father_id" | "mother_id"] !== parentId) {
+    const role = field === "father_id" ? "father" : "mother";
+    return { success: false, error: `This child already has a ${role}. Unlink the existing one first.` };
+  }
+
   const { error } = await supabase
     .from("people")
     .update({ [field]: parentId })
@@ -560,6 +593,14 @@ export async function addSibling(
     return { success: true };
   }
 
+  // Refuse if both already have different parents — merging them is destructive.
+  if (a.father_id && b.father_id && a.father_id !== b.father_id) {
+    return { success: false, error: "These two people have different fathers — unlink one first." };
+  }
+  if (a.mother_id && b.mother_id && a.mother_id !== b.mother_id) {
+    return { success: false, error: "These two people have different mothers — unlink one first." };
+  }
+
   // Case 2: a has a parent → copy to b
   if (a.father_id && !b.father_id) {
     const { error } = await supabase
@@ -600,15 +641,15 @@ export async function addSibling(
   return { success: true };
 }
 
-// ── deletePerson (soft delete) ────────────────────────────────────────────────
+// ── deletePerson (soft delete — redirects, for full-page flows) ──────────────
 export async function deletePerson(id: string) {
   const supabase = await createClient();
 
-  // Null out references from children so they don't point to a deleted person
-  await Promise.all([
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
     supabase.from("people").update({ father_id: null }).eq("father_id", id).is("deleted_at", null),
     supabase.from("people").update({ mother_id: null }).eq("mother_id", id).is("deleted_at", null),
   ]);
+  if (e1 || e2) return { success: false, error: "Failed to clear parent links before deleting." };
 
   const { error } = await supabase
     .from("people")
@@ -619,4 +660,25 @@ export async function deletePerson(id: string) {
 
   revalidatePath("/");
   redirect("/");
+}
+
+// ── deletePersonCanvas (soft delete — no redirect, for in-canvas use) ────────
+export async function deletePersonCanvas(id: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    supabase.from("people").update({ father_id: null }).eq("father_id", id).is("deleted_at", null),
+    supabase.from("people").update({ mother_id: null }).eq("mother_id", id).is("deleted_at", null),
+  ]);
+  if (e1 || e2) return { success: false, error: "Failed to clear parent links before deleting." };
+
+  const { error } = await supabase
+    .from("people")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/");
+  return { success: true };
 }

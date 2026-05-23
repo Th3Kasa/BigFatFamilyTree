@@ -41,6 +41,16 @@ Alfred logs successful multi-agent combinations here. Patterns graduate from `ca
 
 ---
 
+### QA Audit Loop
+**Stage:** candidate
+**Task type:** Periodic QA sweep — find and fix all sub-standard code across a feature area (canvas, server actions, etc.)
+**Agent sequence:** qa-guard (full audit pass) → Alfred (implement all fixes in a single commit)
+**Handoff notes:** qa-guard receives: list of files in scope, brief on the feature area, instruction to produce a numbered issue list with severity/file/line/fix; Alfred implements every issue from the report, TypeScript-checks, commits, pushes
+**Uses:** 2 — 2026-05-23 (Task #3), 2026-05-23 (Task #4)
+**Outcome:** SHIP first-pass (both uses); qa-guard found 10 real issues in Pass 4 with zero false positives
+
+---
+
 ## Promoted to Skills
 
 | Pattern | Command | Created | Uses |

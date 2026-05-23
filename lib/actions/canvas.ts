@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { autoLayoutPositions, type PersonInput } from "@/lib/graph/transform";
+import { autoLayoutPositions, type PersonInput, type RelationshipInput } from "@/lib/graph/transform";
 
 export async function updateNodePosition(id: string, x: number, y: number) {
   const supabase = await createClient();
@@ -29,13 +29,21 @@ export async function saveViewport(viewport: { x: number; y: number; zoom: numbe
 
 export async function autoLayoutAll() {
   const supabase = await createClient();
-  const { data: people, error: readErr } = await supabase
-    .from("people")
-    .select("id, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y")
-    .is("deleted_at", null);
+  const [{ data: people, error: readErr }, { data: rels }] = await Promise.all([
+    supabase
+      .from("people")
+      .select("id, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y")
+      .is("deleted_at", null),
+    supabase
+      .from("relationships")
+      .select("id, person_a_id, person_b_id, type, status, order_index"),
+  ]);
   if (readErr || !people) return { success: false, error: readErr?.message ?? "Read failed." };
 
-  const layout = autoLayoutPositions(people as PersonInput[]);
+  const layout = autoLayoutPositions(
+    people as PersonInput[],
+    (rels ?? []) as RelationshipInput[],
+  );
   const updates = [...layout.entries()].map(([id, { x, y }]) =>
     supabase.from("people").update({ pos_x: x, pos_y: y }).eq("id", id),
   );

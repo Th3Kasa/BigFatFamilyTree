@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback, useEffect } from "react";
+import { useState, useTransition, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useReactFlow, ReactFlowProvider, useNodesState, useEdgesState } from "@xyflow/react";
 import type { Connection, NodeMouseHandler, EdgeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
@@ -13,7 +13,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { FamilyGraph } from "./FamilyGraph";
-import { Inspector } from "./Inspector";
+import { Inspector, type InspectorHandle } from "./Inspector";
 import { NodeContextMenu, type ContextMenuTarget } from "./NodeContextMenu";
 import { QuickAddDialog, type QuickAddRelation } from "./QuickAddDialog";
 import {
@@ -25,7 +25,7 @@ import { updateNodePosition, autoLayoutAll } from "@/lib/actions/canvas";
 import { deleteRelationship } from "@/lib/actions/relationships";
 import {
   addSibling,
-  deletePerson,
+  deletePersonCanvas,
   linkAdopted,
   linkChild,
   linkGuardian,
@@ -176,11 +176,26 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const [toolMode, setToolMode] = useState<ToolMode>("select");
 
   const { fitView } = useReactFlow() as { fitView: (opts?: { padding?: number; duration?: number }) => void };
+  const inspectorRef = useRef<InspectorHandle>(null);
+  const selectedPersonRef = useRef(selectedPerson);
+  selectedPersonRef.current = selectedPerson;
+
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges as any[]);
 
-  useEffect(() => { setNodes(initialNodes as any[]); }, [initialNodes, setNodes]);
-  useEffect(() => { setEdges(initialEdges as any[]); }, [initialEdges, setEdges]);
+  // Sync from server — skip while a mutation is in-flight to avoid snapping
+  // dragged nodes back to their pre-drag positions mid-transition.
+  useEffect(() => { if (!isPending) setNodes(initialNodes as any[]); }, [initialNodes, setNodes, isPending]);
+  useEffect(() => { if (!isPending) setEdges(initialEdges as any[]); }, [initialEdges, setEdges, isPending]);
+
+  // Re-sync selectedPerson when people list refreshes so Inspector stays current.
+  useEffect(() => {
+    if (selectedPerson) {
+      const updated = people.find((p) => p.id === selectedPerson.id) ?? null;
+      setSelectedPerson(updated);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [people]);
 
   // Fit view once after initial mount
   useEffect(() => {
@@ -188,6 +203,30 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Inject onQuickAdd callbacks so node card buttons open the Inspector quick-add
+  // panel instead of navigating to the full /person/new form.
+  const nodesWithCallbacks = useMemo(() =>
+    (nodes as import("@/lib/graph/transform").GraphNode[]).map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        onQuickAdd: (kind: "child" | "spouse") => {
+          const person = people.find((p) => p.id === n.id) ?? null;
+          if (selectedPersonRef.current?.id === n.id) {
+            inspectorRef.current?.openWithQuickAdd(kind);
+          } else {
+            setSelectedPerson(person);
+            // setTimeout fires after React effects flush, including the Inspector's
+            // person-change reset effect, so openWithQuickAdd wins.
+            setTimeout(() => inspectorRef.current?.openWithQuickAdd(kind), 0);
+          }
+        },
+      },
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nodes, people],
+  );
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
     startTransition(async () => {
@@ -248,13 +287,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     } else if (choice === "sibling") {
       const sibRes = await addSibling(source, target);
       result = sibRes;
-      if (sibRes.success && sibRes.placeholderId) {
-        okMsg = lang === "ar"
-          ? `تم ربطهما كأشقاء وأضفت والداً مؤقتاً — افتحه لتعبئة الاسم`
-          : `Linked as siblings — added a placeholder parent. Click it to fill in their real parent.`;
-      } else {
-        okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
-      }
+      okMsg = lang === "ar" ? `${srcName} و ${tgtName} أشقاء` : `${srcName} and ${tgtName} are siblings`;
     } else if (choice === "adopted") {
       result = await linkAdopted(source, target);
       okMsg = lang === "ar" ? `${srcName} تبنى ${tgtName}` : `${srcName} adopted ${tgtName}`;
@@ -288,7 +321,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     edgeId: string;
     source: string;
     target: string;
-    edgeKind: "parent" | "spouse";
+    edgeKind: "parent" | "spouse" | "adopted" | "guardian";
     relationshipId?: string;
     label: string;
   } | null>(null);
@@ -296,7 +329,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const onEdgeContextMenu: EdgeMouseHandler = (e, edge) => {
     e.preventDefault();
     const data = edge.data as
-      | { edgeKind?: "parent" | "spouse" | "family-branch"; relationshipId?: string }
+      | { edgeKind?: "parent" | "spouse" | "family-branch" | "adopted" | "guardian"; relationshipId?: string }
       | undefined;
     if (!data?.edgeKind || data.edgeKind === "family-branch") return;
     const srcName = people.find((p) => p.id === edge.source);
@@ -320,12 +353,15 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   };
 
   async function removeCurrentEdgeRelationship(
-    edgeKind: "parent" | "spouse",
+    edgeKind: "parent" | "spouse" | "adopted" | "guardian",
     relationshipId: string | undefined,
     source: string,
     target: string,
   ): Promise<{ success: boolean; error?: string } | null> {
     if (edgeKind === "spouse" && relationshipId) {
+      return await deleteRelationship(relationshipId, source);
+    }
+    if ((edgeKind === "adopted" || edgeKind === "guardian") && relationshipId) {
       return await deleteRelationship(relationshipId, source);
     }
     if (edgeKind === "parent") {
@@ -372,7 +408,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   const [replaceConn, setReplaceConn] = useState<{
     source: string;
     target: string;
-    currentKind: "parent" | "spouse";
+    currentKind: "parent" | "spouse" | "adopted" | "guardian";
     currentRelationshipId?: string;
   } | null>(null);
 
@@ -388,8 +424,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       source,
       target,
     );
-    if (removed && !removed.success) {
-      toast.error(removed.error ?? "Couldn't change");
+    if (!removed || !removed.success) {
+      toast.error(removed?.error ?? "Couldn't remove existing connection");
       return;
     }
 
@@ -461,85 +497,88 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     router.push(`/person/${menu.personId}/edit`);
   }
 
+  const [deleteNodeConfirm, setDeleteNodeConfirm] = useState<string | null>(null);
+
   function handleDelete() {
     if (menu?.kind !== "node") return;
-    const confirmed = window.confirm(lang === "ar" ? "حذف هذا الشخص؟" : "Delete this person?");
-    if (!confirmed) return;
     const id = menu.personId;
+    if (deleteNodeConfirm !== id) {
+      setDeleteNodeConfirm(id);
+      return;
+    }
+    setDeleteNodeConfirm(null);
     setMenu(null);
     startTransition(async () => {
-      await deletePerson(id);
-      router.refresh();
+      const r = await deletePersonCanvas(id);
+      if (r.success) {
+        router.refresh();
+      } else {
+        toast.error(r.error ?? "Delete failed");
+      }
     });
   }
 
   const onEdgesDelete: OnEdgesDelete = useCallback((deletedEdges) => {
     for (const edge of deletedEdges) {
       const data = edge.data as { edgeKind?: string; relationshipId?: string } | undefined;
-      if (data?.edgeKind === "family-branch") return; // handled via Inspector
+      if (data?.edgeKind === "family-branch") continue; // handled via Inspector
       if (data?.edgeKind === "spouse" && data.relationshipId) {
         const rid = data.relationshipId;
         const pid = edge.source as string;
         startTransition(async () => {
-          await deleteRelationship(rid, pid);
-          router.refresh();
+          const r = await deleteRelationship(rid, pid);
+          if (r?.success) router.refresh();
+          else toast.error(r?.error ?? "Couldn't remove connection");
+        });
+      } else if ((data?.edgeKind === "adopted" || data?.edgeKind === "guardian") && data.relationshipId) {
+        const rid = data.relationshipId;
+        const pid = edge.source as string;
+        startTransition(async () => {
+          const r = await deleteRelationship(rid, pid);
+          if (r?.success) router.refresh();
+          else toast.error(r?.error ?? "Couldn't remove connection");
         });
       } else if (data?.edgeKind === "parent") {
-        // Determine which FK to clear: edge.id is "f-{childId}" or "m-{childId}"
         const childId = edge.target as string;
         const parentId = edge.source as string;
         startTransition(async () => {
-          const supabase = (await import("@/lib/supabase/client")).createClient();
-          const { data: child } = await supabase
-            .from("people")
-            .select("father_id, mother_id")
-            .eq("id", childId)
-            .maybeSingle();
-          if (!child) return;
-          const field = child.father_id === parentId ? "father_id" : "mother_id";
-          await supabase.from("people").update({ [field]: null }).eq("id", childId);
-          router.refresh();
+          const r = await unlinkParent(parentId, childId);
+          if (r?.success) router.refresh();
+          else toast.error(r?.error ?? "Couldn't remove connection");
         });
       }
     }
   }, [router, startTransition]);
 
+  function openInspectorQuickAdd(personId: string, kind: "child" | "spouse" | "parent" | "sibling") {
+    const person = people.find((p) => p.id === personId) ?? null;
+    if (selectedPersonRef.current?.id === personId) {
+      inspectorRef.current?.openWithQuickAdd(kind);
+    } else {
+      setSelectedPerson(person);
+      setTimeout(() => inspectorRef.current?.openWithQuickAdd(kind), 0);
+    }
+  }
+
   function handleAddChild() {
     if (menu?.kind !== "node") return;
-    const parent = personById(menu.personId);
-    if (!parent) return;
+    const id = menu.personId;
     setMenu(null);
-
-    // Find spouse to link both parents
-    const spouseEdge = edges.find(
-      (e) =>
-        e.data?.edgeKind === "spouse" &&
-        (e.source === parent.id || e.target === parent.id)
-    );
-    if (spouseEdge) {
-      const spouseId = spouseEdge.source === parent.id ? spouseEdge.target : spouseEdge.source;
-      const spouse = personById(spouseId);
-      const fatherId = parent.gender !== "f" ? parent.id : (spouse?.gender !== "f" ? spouseId : undefined);
-      const motherId = parent.gender === "f" ? parent.id : (spouse?.gender === "f" ? spouseId : undefined);
-      const params = new URLSearchParams();
-      if (fatherId) params.set("father", fatherId);
-      if (motherId) params.set("mother", motherId);
-      router.push(`/person/new?${params.toString()}`);
-    } else {
-      setQuickAdd({ kind: "child", parentId: parent.id, parentGender: parent.gender });
-    }
+    openInspectorQuickAdd(id, "child");
   }
 
   function handleAddSpouse() {
     if (menu?.kind !== "node") return;
+    const id = menu.personId;
     setMenu(null);
-    setQuickAdd({ kind: "spouse", otherId: menu.personId });
+    openInspectorQuickAdd(id, "spouse");
   }
 
   function handleAddParent() {
     if (menu?.kind !== "node") return;
+    const id = menu.personId;
     setMenu(null);
-    setQuickAdd({ kind: "parent", childId: menu.personId, parentGender: "unknown" });
+    openInspectorQuickAdd(id, "parent");
   }
 
   function handleAddStandalone() {
@@ -558,12 +597,12 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     fitView({ padding: 0.15, duration: 400 });
   }
 
-  const panOnDrag: number[] = toolMode === "pan" ? [0, 1, 2] : [1, 2];
+  const panOnDrag: number[] = toolMode === "pan" ? [0, 1] : [1, 2];
 
   return (
     <div className="relative w-full h-full">
       <FamilyGraph
-        nodes={nodes}
+        nodes={nodesWithCallbacks}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -591,6 +630,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       <CanvasOverlay lang={lang} />
 
       <Inspector
+        ref={inspectorRef}
         person={selectedPerson}
         lang={lang}
         onClose={() => setSelectedPerson(null)}
@@ -618,13 +658,14 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         <NodeContextMenu
           target={menu}
           lang={lang}
-          onClose={() => setMenu(null)}
+          onClose={() => { setMenu(null); setDeleteNodeConfirm(null); }}
           onAddChild={handleAddChild}
           onAddSpouse={handleAddSpouse}
           onAddParent={handleAddParent}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onAddPerson={handleAddStandalone}
+          deleteConfirm={menu?.kind === "node" && deleteNodeConfirm === menu.personId}
         />
       )}
 
@@ -643,20 +684,27 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         <>
           {/* Backdrop to dismiss on outside click */}
           <div
+            aria-hidden="true"
             className="fixed inset-0 z-40"
             onClick={() => setEdgeMenu(null)}
             onContextMenu={(e) => { e.preventDefault(); setEdgeMenu(null); }}
           />
           <div
             role="menu"
+            aria-label={lang === "ar" ? `خيارات: ${edgeMenu.label}` : `Options: ${edgeMenu.label}`}
             className="glass-2 fixed z-50 flex flex-col gap-1 rounded-xl border border-[var(--border)] p-2 shadow-[var(--shadow-deep)] min-w-[14rem]"
-            style={{ left: edgeMenu.x, top: edgeMenu.y }}
+            style={{
+              left: Math.min(edgeMenu.x, window.innerWidth - 240),
+              top: Math.min(edgeMenu.y, window.innerHeight - 200),
+            }}
           >
             <div className="px-2 pt-1 pb-2 text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
               {edgeMenu.label}
             </div>
             <button
               type="button"
+              role="menuitem"
+              autoFocus
               onClick={handleChangeEdge}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
             >
@@ -665,6 +713,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={handleRemoveEdge}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/8"
             >
@@ -673,6 +722,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => setEdgeMenu(null)}
               className="rounded-lg px-2 py-1.5 text-left text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
             >

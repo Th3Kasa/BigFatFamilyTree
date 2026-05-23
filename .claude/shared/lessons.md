@@ -14,7 +14,21 @@ Mistakes and patterns logged here. tech-curator reviews and updates agent prompt
 ```
 
 ## Active Lessons
-_No entries yet._
+
+### 2026-05-23 — Minor (QA5-06)
+**Agent:** Alfred / qa-guard
+**What happened:** `convertParentToSpouse` had `if (field) { unlink }` with no else guard — when `field` was null (no parent link existed), it silently skipped the unlink and still created a spouse relationship. This is a "conditional action without else guard" anti-pattern.
+**Root cause:** The else branch was omitted on a conditional action block; the function continued executing regardless of whether the precondition was met.
+**Fix applied:** Early return added: `if (!field) return { success: false, error: "No parent link found..." }` — QA5-06 in Task #5 commit.
+**Prevention:** Any conditional action block (`if (x) { await doSomething() }`) must have an early return or explicit else. Silent no-ops in server actions are bugs.
+**Prompt update needed:** Yes — added "conditional action blocks missing else/early-return guard" pattern to qa-guard audit scope. Fix applied 2026-05-23.
 
 ## Incorporated Lessons
-_Lessons already incorporated into agent prompts are archived here._
+
+### 2026-05-23 — Minor (Task #4)
+**Agent:** qa-guard
+**What happened:** `linkChild` was missing the same duplicate-parent guard that existed in `linkParentChild`. When the guard was added to `linkParentChild` in Task #3, `linkChild` (a symmetric function) was not updated. qa-guard caught it in Task #4.
+**Root cause:** Alfred applied a point fix to one function without checking for symmetric functions with the same responsibility.
+**Fix applied:** Guard added to `linkChild` in Task #4 commit.
+**Prevention:** When fixing a guard/validation in a function, always search for symmetric counterpart functions (same signature, same responsibility, different entry point) and apply the same fix.
+**Prompt update needed:** Yes — added symmetric function check to qa-guard audit scope. Fix applied 2026-05-23.
