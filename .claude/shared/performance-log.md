@@ -22,6 +22,18 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-05-23 — Task #7 (QA loop — QA Pass 7, all 10 defects resolved)
+**Task:** Fix QA7 findings: createRelationship missing other-party revalidation, linkParentChild/linkChild missing child profile revalidation, linkAdopted/linkGuardian revalidate-only-root gap, QuickAddDialog aria-hidden WCAG blocker, amber hardcoded colors, unassociated label, SpouseRow ring, gender badge dark-mode, missing startTransition on relationship handlers, stale-closure in selectedPerson re-sync
+**Agents used:** qa-guard (audit), Alfred (all fixes)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, TypeScript clean
+**What worked:** Systematic both-party revalidation pattern now applied to all relationship mutations — createRelationship, linkAdopted, linkGuardian, linkParentChild, linkChild all now follow the same pattern as deleteRelationship. The QA7-04 aria-hidden blocker was a direct consequence of the QA5-03 fix (we added aria-hidden to the backdrop to mark it as decorative, not realising it was wrapping the dialog).
+**What didn't:** QA7-04 was introduced by a previous fix (QA5-03). Lesson: when adding aria-hidden to a container, always verify no interactive/landmark descendants are hidden.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — caught the aria-hidden regression and all 10 issues were real; Alfred ⭐⭐⭐⭐⭐ — all fixes in one shot
+**Improvement opportunity:** qa-guard should explicitly check that `aria-hidden` is never set on an ancestor of a `role="dialog"` element.
+
+---
+
 ### 2026-05-23 — Task #6 (QA loop — QA Pass 6, all 10 defects resolved)
 **Task:** Fix all 10 QA6 findings: critical parent-slot overwrite in createPersonQuick, stale revalidation in deleteRelationship, invisible buttons keyboard-reachable, orphan on sibling link failure, missing aria-labels, dark-mode SpouseRow, startTransition for server action, dead code removal, spurious router.refresh on cancel
 **Agents used:** qa-guard (audit), Alfred (all fixes)

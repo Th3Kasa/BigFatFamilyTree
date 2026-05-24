@@ -73,6 +73,9 @@ This should be: early return with an error when `field` is null, not a silent sk
 ## Relationships Table — Both-Party Revalidation
 Any server action that **mutates a row in the `relationships` table** (insert, update, delete) must call `revalidatePath` for **both** `person_a_id` and `person_b_id` profile paths. Revalidating only one party leaves the other's cached page showing stale data. This is a **Medium** severity finding whenever a relationships mutation revalidates fewer than two person profile paths.
 
+## Accessibility — aria-hidden Must Never Wrap Interactive Content
+Flag any `aria-hidden="true"` attribute on an element that **contains** a `role="dialog"`, `role="alertdialog"`, form controls, or any interactive element. `aria-hidden` on a parent suppresses all descendants from the accessibility tree unconditionally — this is a **Critical** finding when it hides a dialog, and a **High** finding when it hides form controls or buttons.
+
 ## Sign-off Decision
 **SHIP ✅ when**: all tests pass, TypeScript clean, manual checklist complete, no open security findings
 **HOLD 🚫 when**: critical/high security finding open, core flow E2E fails, TypeScript errors introduced
