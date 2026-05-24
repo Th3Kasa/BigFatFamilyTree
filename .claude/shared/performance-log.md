@@ -22,6 +22,18 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-05-24 — Task #8 (QA Pass 8 — 10 defects resolved)
+**Task:** Fix QA8 findings: linkSpouse missing both-party revalidation, createPersonQuick missing spouseId/childId revalidation, addSibling slug-only revalidation gap, handleRemoveEdge sync mutation error, handlePick missing startTransition, ring-rose-200/ring-sky-200 color tokens in Inspector, female AvatarFallback hardcoded color in PersonNode, ring-rose-200 in PersonPicker, bare border class in QuickAddDialog
+**Agents used:** qa-guard (audit, background), Alfred (all fixes)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, TypeScript clean, zero rework
+**What worked:** The standing both-party revalidation pattern caught linkSpouse and createPersonQuick in the same sweep. startTransition wrapping is now applied consistently across all async client handlers. CSS var token sweep is now complete across all canvas components — no more hardcoded rose/sky palette classes.
+**What didn't:** Nothing failed. All 10 fixes landed in one shot.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — systematic sweep caught every remaining hardcoded color token and revalidation gap; Alfred ⭐⭐⭐⭐⭐ — clean implementation, committed and pushed first-pass
+**Improvement opportunity:** CSS var token audit (no raw rose/sky/amber palette classes in canvas components) should be a standing qa-guard check going forward.
+
+---
+
 ### 2026-05-23 — Task #7 (QA loop — QA Pass 7, all 10 defects resolved)
 **Task:** Fix QA7 findings: createRelationship missing other-party revalidation, linkParentChild/linkChild missing child profile revalidation, linkAdopted/linkGuardian revalidate-only-root gap, QuickAddDialog aria-hidden WCAG blocker, amber hardcoded colors, unassociated label, SpouseRow ring, gender badge dark-mode, missing startTransition on relationship handlers, stale-closure in selectedPerson re-sync
 **Agents used:** qa-guard (audit), Alfred (all fixes)
