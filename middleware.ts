@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { checkLimit } from "@/lib/ratelimit";
 
-const PUBLIC_PREFIXES = ["/login", "/auth/callback", "/_next", "/favicon.ico"];
+const PUBLIC_PREFIXES = ["/login", "/update-password", "/auth/callback", "/_next", "/favicon.ico"];
 
 // File extensions that should bypass auth (static assets under /public).
 // Includes images, fonts, icons, and OG/manifest files.
