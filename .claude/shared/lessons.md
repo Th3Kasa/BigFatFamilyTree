@@ -15,6 +15,22 @@ Mistakes and patterns logged here. tech-curator reviews and updates agent prompt
 
 ## Active Lessons
 
+### 2026-05-23 — Critical (QA7-04)
+**Agent:** Alfred
+**What happened:** QA5-03 added `aria-hidden="true"` to the outer backdrop div of `QuickAddDialog` to mark it as decorative. The `role="dialog"` element is a child of that div, so `aria-hidden` on the parent hid the entire dialog from the accessibility tree — a complete WCAG 2.1 SC 4.1.3 regression introduced by the fix itself.
+**Root cause:** When adding `aria-hidden` to a container, the effect on descendants was not checked. `aria-hidden` on a parent suppresses all descendants unconditionally.
+**Fix applied:** Removed `aria-hidden="true"` from the outer backdrop div — Task #7.
+**Prevention:** Never set `aria-hidden="true"` on any element that contains or is an ancestor of a `role="dialog"`, `role="alertdialog"`, or any interactive landmark. If backdrop isolation is needed, use `inert` on sibling content outside the dialog.
+**Prompt update needed:** Yes — add to qa-guard audit scope: "Flag any `aria-hidden` attribute on an element that contains a `role=dialog`, `role=alertdialog`, or interactive form controls."
+
+### 2026-05-23 — Minor (QA6-02)
+**Agent:** Alfred
+**What happened:** `deleteRelationship` and `updateRelationshipStatus` only revalidated the calling person's profile, not the second party's. After removing a spouse link, person B's page served stale cached data showing person A as still married.
+**Root cause:** Relationship mutations affect two people but only one path was revalidated. This is a systematic gap: any function that mutates a relationship row must revalidate both `person_a_id` and `person_b_id` profile paths.
+**Fix applied:** Both functions now fetch the relationship row before mutation to get both IDs, then revalidate both profile paths — Task #6.
+**Prevention:** When writing or reviewing any server action that touches the `relationships` table, always revalidate both parties' paths.
+**Prompt update needed:** Yes — add to qa-guard audit scope: "Any mutation of the relationships table must revalidate both person_a_id and person_b_id profile paths."
+
 ### 2026-05-23 — Minor (QA5-06)
 **Agent:** Alfred / qa-guard
 **What happened:** `convertParentToSpouse` had `if (field) { unlink }` with no else guard — when `field` was null (no parent link existed), it silently skipped the unlink and still created a spouse relationship. This is a "conditional action without else guard" anti-pattern.

@@ -49,6 +49,7 @@ export async function createRelationship(
   if (dup) {
     revalidatePath("/");
     revalidatePath(`/person/${personId}`);
+    revalidatePath(`/person/${otherPersonId}`);
     return { success: true, id: (dup as { id: string }).id };
   }
 
@@ -63,6 +64,7 @@ export async function createRelationship(
 
   revalidatePath("/");
   revalidatePath(`/person/${personId}`);
+  revalidatePath(`/person/${otherPersonId}`);
   return { success: true, id: data.id };
 }
 
@@ -71,6 +73,14 @@ export async function deleteRelationship(
   personId: string,
 ): Promise<ActionState> {
   const supabase = await createClient();
+
+  // Fetch both parties before deleting so we can revalidate both profiles.
+  const { data: rel } = await supabase
+    .from("relationships")
+    .select("person_a_id, person_b_id")
+    .eq("id", relationshipId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("relationships")
     .delete()
@@ -79,7 +89,12 @@ export async function deleteRelationship(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
-  revalidatePath(`/person/${personId}`);
+  if (rel) {
+    revalidatePath(`/person/${(rel as { person_a_id: string }).person_a_id}`);
+    revalidatePath(`/person/${(rel as { person_b_id: string }).person_b_id}`);
+  } else {
+    revalidatePath(`/person/${personId}`);
+  }
   return { success: true };
 }
 
@@ -92,6 +107,13 @@ export async function updateRelationshipStatus(
   }
 
   const supabase = await createClient();
+
+  const { data: rel } = await supabase
+    .from("relationships")
+    .select("person_a_id, person_b_id")
+    .eq("id", relationshipId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("relationships")
     .update({ status })
@@ -100,5 +122,9 @@ export async function updateRelationshipStatus(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
+  if (rel) {
+    revalidatePath(`/person/${(rel as { person_a_id: string }).person_a_id}`);
+    revalidatePath(`/person/${(rel as { person_b_id: string }).person_b_id}`);
+  }
   return { success: true };
 }

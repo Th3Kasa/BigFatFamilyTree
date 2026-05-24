@@ -14,7 +14,7 @@ export type QuickAddRelation =
 type Props = {
   relation: QuickAddRelation;
   lang: "ar" | "en";
-  onClose: () => void;
+  onClose: (didSave?: boolean) => void;
 };
 
 function SubmitButton() {
@@ -23,7 +23,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+      className="px-4 py-2 rounded-lg bg-[var(--primary)] hover:bg-[var(--primary)]/90 disabled:opacity-50 text-[var(--primary-foreground)] text-sm font-semibold transition-colors"
     >
       {pending ? "Saving…" : "Save"}
     </button>
@@ -37,15 +37,15 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
   useEffect(() => {
     firstInput.current?.focus();
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onClose(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Close dialog after successful save (no redirect in createPersonQuick)
+  // Close dialog after successful save and signal that data changed.
   useEffect(() => {
-    if (state?.success) onClose();
+    if (state?.success) onClose(true);
   }, [state?.success, onClose]);
 
   const fatherId = relation.kind === "child" && relation.parentGender !== "f" ? relation.parentId : null;
@@ -60,7 +60,8 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
     : "Add person";
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40" onClick={onClose} aria-hidden="true">
+    // Backdrop — not aria-hidden so that the dialog inside is accessible
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40" onClick={() => onClose(false)}>
       <div
         role="dialog"
         aria-modal="true"
@@ -75,12 +76,13 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
           )}
 
           <div>
-            <label className="block text-xs text-[var(--muted-foreground)] mb-1">Given name</label>
+            <label htmlFor="qdialog-given" className="block text-xs text-[var(--muted-foreground)] mb-1">Given name</label>
             <input
+              id="qdialog-given"
               ref={firstInput}
               name="given_en"
               required
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-[var(--card)] text-[var(--foreground)]"
+              className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40 bg-[var(--card)] text-[var(--foreground)]"
             />
             {state && !state.success && state.fieldErrors?.given_en && (
               <p className="text-xs text-[var(--destructive)] mt-1">{state.fieldErrors.given_en}</p>
@@ -92,7 +94,7 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
             <div className="flex gap-3">
               {(["m", "f"] as const).map((g) => (
                 <label key={g} className="flex items-center gap-1 text-sm cursor-pointer text-[var(--foreground)]">
-                  <input type="radio" name="gender" value={g} defaultChecked={g === "m"} className="accent-amber-500" />
+                  <input type="radio" name="gender" value={g} defaultChecked={g === "m"} className="accent-[var(--primary)]" />
                   {g === "f" ? "Female" : "Male"}
                 </label>
               ))}
@@ -117,7 +119,7 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
           <input type="hidden" name="notes_ar" value="" />
 
           <div className="flex gap-2 justify-end pt-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] rounded-lg transition-colors">
+            <button type="button" onClick={() => onClose(false)} className="px-4 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] rounded-lg transition-colors">
               Cancel
             </button>
             <SubmitButton />

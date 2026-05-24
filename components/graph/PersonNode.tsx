@@ -53,7 +53,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  async function handleDeletePlaceholder(e: React.MouseEvent) {
+  function handleDeletePlaceholder(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (!deleteConfirm) {
@@ -61,13 +61,15 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
       return;
     }
     setDeleteConfirm(false);
-    const r = await deletePersonCanvas(person.id);
-    if (!r.success) {
-      toast.error(r.error ?? "Couldn't remove");
-      return;
-    }
-    toast.success(lang === "ar" ? "تمت الإزالة" : "Placeholder removed");
-    startTransition(() => router.refresh());
+    startTransition(async () => {
+      const r = await deletePersonCanvas(person.id);
+      if (!r.success) {
+        toast.error(r.error ?? "Couldn't remove");
+        return;
+      }
+      toast.success(lang === "ar" ? "تمت الإزالة" : "Placeholder removed");
+      router.refresh();
+    });
   }
 
   const givenName =
@@ -121,6 +123,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           >
             <button
               type="button"
+              tabIndex={deleteConfirm || hovered ? 0 : -1}
               onClick={handleDeletePlaceholder}
               onKeyDown={(e) => e.stopPropagation()}
               onBlur={() => setDeleteConfirm(false)}
@@ -293,7 +296,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
                   className={cn(
                     "rounded-[18px] text-lg font-semibold",
                     isFemale
-                      ? "bg-rose-50 text-rose-500"
+                      ? "bg-[var(--highlight)]/10 text-[var(--highlight)]"
                       : isMale
                         ? "bg-[oklch(0.97_0.03_60)] text-[var(--primary)]"
                         : "bg-[var(--muted)] text-[var(--foreground)]",
@@ -358,6 +361,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           {/* Heart-pill (Add spouse) sits above the action row, surfaces on hover */}
           <button
             type="button"
+            tabIndex={hovered ? 0 : -1}
             onClick={(e) => { e.stopPropagation(); data.onQuickAdd?.("spouse"); }}
             className={cn(
               "absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full",

@@ -22,6 +22,42 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-05-24 — Task #8 (QA Pass 8 — 10 defects resolved)
+**Task:** Fix QA8 findings: linkSpouse missing both-party revalidation, createPersonQuick missing spouseId/childId revalidation, addSibling slug-only revalidation gap, handleRemoveEdge sync mutation error, handlePick missing startTransition, ring-rose-200/ring-sky-200 color tokens in Inspector, female AvatarFallback hardcoded color in PersonNode, ring-rose-200 in PersonPicker, bare border class in QuickAddDialog
+**Agents used:** qa-guard (audit, background), Alfred (all fixes)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, TypeScript clean, zero rework
+**What worked:** The standing both-party revalidation pattern caught linkSpouse and createPersonQuick in the same sweep. startTransition wrapping is now applied consistently across all async client handlers. CSS var token sweep is now complete across all canvas components — no more hardcoded rose/sky palette classes.
+**What didn't:** Nothing failed. All 10 fixes landed in one shot.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — systematic sweep caught every remaining hardcoded color token and revalidation gap; Alfred ⭐⭐⭐⭐⭐ — clean implementation, committed and pushed first-pass
+**Improvement opportunity:** CSS var token audit (no raw rose/sky/amber palette classes in canvas components) should be a standing qa-guard check going forward.
+
+---
+
+### 2026-05-23 — Task #7 (QA loop — QA Pass 7, all 10 defects resolved)
+**Task:** Fix QA7 findings: createRelationship missing other-party revalidation, linkParentChild/linkChild missing child profile revalidation, linkAdopted/linkGuardian revalidate-only-root gap, QuickAddDialog aria-hidden WCAG blocker, amber hardcoded colors, unassociated label, SpouseRow ring, gender badge dark-mode, missing startTransition on relationship handlers, stale-closure in selectedPerson re-sync
+**Agents used:** qa-guard (audit), Alfred (all fixes)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, TypeScript clean
+**What worked:** Systematic both-party revalidation pattern now applied to all relationship mutations — createRelationship, linkAdopted, linkGuardian, linkParentChild, linkChild all now follow the same pattern as deleteRelationship. The QA7-04 aria-hidden blocker was a direct consequence of the QA5-03 fix (we added aria-hidden to the backdrop to mark it as decorative, not realising it was wrapping the dialog).
+**What didn't:** QA7-04 was introduced by a previous fix (QA5-03). Lesson: when adding aria-hidden to a container, always verify no interactive/landmark descendants are hidden.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — caught the aria-hidden regression and all 10 issues were real; Alfred ⭐⭐⭐⭐⭐ — all fixes in one shot
+**Improvement opportunity:** qa-guard should explicitly check that `aria-hidden` is never set on an ancestor of a `role="dialog"` element.
+
+---
+
+### 2026-05-23 — Task #6 (QA loop — QA Pass 6, all 10 defects resolved)
+**Task:** Fix all 10 QA6 findings: critical parent-slot overwrite in createPersonQuick, stale revalidation in deleteRelationship, invisible buttons keyboard-reachable, orphan on sibling link failure, missing aria-labels, dark-mode SpouseRow, startTransition for server action, dead code removal, spurious router.refresh on cancel
+**Agents used:** qa-guard (audit), Alfred (all fixes)
+**Outcome:** ✅ Shipped
+**Quality gate result:** SHIP — 1 round, TypeScript clean, zero rework
+**What worked:** Pre-flight guard approach for QA6-01 (check before insert, not after) is cleaner than rollback and avoids TOCTOU window. Rollback approach for QA6-04 is correct because the person is already committed before addSibling is called — you can't block it earlier. Both patterns needed in the same pass shows the audit is surfacing real layered bugs.
+**What didn't:** Nothing failed. All 10 fixes landed in one shot.
+**Agent ratings this task:** qa-guard ⭐⭐⭐⭐⭐ — all 10 real, well-scoped findings with precise file/line; Alfred ⭐⭐⭐⭐⭐ — clean implementation, correct approach selection per fix type
+**Improvement opportunity:** QA6-02 (both-party revalidation) is a systematic gap pattern — any function that mutates a relationship record should revalidate both parties. Worth adding to qa-guard scope as a standing check.
+
+---
+
 ### 2026-05-23 — Task #5 (QA loop — third audit + user UX requests)
 **Task:** Fix auto-layout hierarchy (extra rank issue), connector line gap when dragging, Add Child/Spouse/Parent → Inspector panel; fix QA5 defects (idempotency, onBlur resets, dark-mode dialog, aria, convertParentToSpouse guard)
 **Agents used:** Alfred (direct — all fixes), qa-guard (audit pass, background)

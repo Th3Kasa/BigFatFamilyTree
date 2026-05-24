@@ -125,8 +125,13 @@ function InlineQuickAdd({
     if (needsSiblingLink) {
       addSibling(p.id, formState.personId!)
         .then((r) => {
-          if (!r.success) toast.error(r.error ?? "Sibling link failed — check back to reconnect");
-          else onDone();
+          if (!r.success) {
+            // Roll back the orphaned person before surfacing the error.
+            deletePersonCanvas(formState.personId!).catch(() => {});
+            toast.error(r.error ?? "Sibling link failed");
+          } else {
+            onDone();
+          }
         })
         .catch(() => toast.error("Sibling link failed"));
     } else {
@@ -390,11 +395,11 @@ function SpouseRow({
 
   return (
     <div className="group flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-sm">
-      <Avatar className="h-9 w-9 ring-2 ring-rose-200/80">
+      <Avatar className="h-9 w-9 ring-2 ring-[var(--border)]">
         {spouse?.photo_url && (
           <AvatarImage src={spouse.photo_url} alt={name} className="object-cover" />
         )}
-        <AvatarFallback className="text-[10px] font-semibold bg-rose-50 text-rose-500">
+        <AvatarFallback className="text-[10px] font-semibold">
           {personInitials(spouse, lang)}
         </AvatarFallback>
       </Avatar>
@@ -475,7 +480,7 @@ function KinRow({
 }) {
   const ringClass =
     accent === "rose"
-      ? "ring-rose-200/80"
+      ? "ring-[var(--highlight)]/40"
       : accent === "coral"
         ? "ring-[oklch(0.86_0.07_38)]/70"
         : "ring-[var(--border)]";
@@ -760,10 +765,10 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
 
   const avatarRingColor =
     person?.gender === "f"
-      ? "ring-rose-200"
+      ? "ring-[var(--highlight)]/40"
       : person?.gender === "m"
-        ? "ring-sky-200"
-        : "ring-border";
+        ? "ring-[var(--primary)]/40"
+        : "ring-[var(--border)]";
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { setQuickAdd(null); setPicker(null); onClose(); } }}>
@@ -808,8 +813,8 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
                 variant="outline"
                 className={cn(
                   "mt-2 rounded-full px-2.5 text-[10px] uppercase tracking-wider",
-                  person?.gender === "f" && "border-rose-200/80 bg-rose-50/80 text-rose-600",
-                  person?.gender === "m" && "border-sky-200/80 bg-sky-50/80 text-sky-600",
+                  person?.gender === "f" && "border-[var(--highlight)]/40 bg-[var(--highlight)]/10 text-[var(--highlight)]",
+                  person?.gender === "m" && "border-[var(--primary)]/30 bg-[var(--primary)]/10 text-[var(--primary)]",
                 )}
               >
                 {genderLabel}
@@ -1059,37 +1064,42 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
         };
         const subtitle = "Pick an existing person to link";
         const excludeIds = [person.id];
-        const handlePick = async (otherId: string): Promise<boolean> => {
+        const handlePick = (otherId: string): Promise<boolean> => {
           const other = peopleById.get(otherId);
           const otherLabel = personLabel(other, lang);
           const selfLabel = personLabel(
             { id: person.id, given_en: person.given_en, given_ar: person.given_ar, family_name_en: person.family_name_en, family_name_ar: person.family_name_ar } as PickablePerson,
             lang,
           );
-          let result: { success: boolean; error?: string } | null = null;
-          let successMsg = "";
-          if (picker === "spouse") {
-            result = await linkSpouse(person.id, otherId);
-            successMsg = `${otherLabel} linked as ${selfLabel}'s spouse`;
-          } else if (picker === "child") {
-            result = await linkChild(person.id, otherId);
-            successMsg = `${otherLabel} linked as ${selfLabel}'s child`;
-          } else if (picker === "parent") {
-            result = await linkParentChild(otherId, person.id);
-            successMsg = `${otherLabel} linked as ${selfLabel}'s parent`;
-          } else if (picker === "sibling") {
-            result = await addSibling(person.id, otherId);
-            successMsg = `${otherLabel} linked as ${selfLabel}'s sibling`;
-          }
-          if (result?.success) {
-            toast.success(successMsg);
-            router.refresh();
-            return true;
-          } else if (result) {
-            toast.error(result.error ?? "Couldn't create the link");
-            return false; // keeps picker open so user can try another person
-          }
-          return false;
+          return new Promise((resolve) => {
+            startTransition(async () => {
+              let result: { success: boolean; error?: string } | null = null;
+              let successMsg = "";
+              if (picker === "spouse") {
+                result = await linkSpouse(person.id, otherId);
+                successMsg = `${otherLabel} linked as ${selfLabel}'s spouse`;
+              } else if (picker === "child") {
+                result = await linkChild(person.id, otherId);
+                successMsg = `${otherLabel} linked as ${selfLabel}'s child`;
+              } else if (picker === "parent") {
+                result = await linkParentChild(otherId, person.id);
+                successMsg = `${otherLabel} linked as ${selfLabel}'s parent`;
+              } else if (picker === "sibling") {
+                result = await addSibling(person.id, otherId);
+                successMsg = `${otherLabel} linked as ${selfLabel}'s sibling`;
+              }
+              if (result?.success) {
+                toast.success(successMsg);
+                router.refresh();
+                resolve(true);
+              } else if (result) {
+                toast.error(result.error ?? "Couldn't create the link");
+                resolve(false); // keeps picker open so user can try another person
+              } else {
+                resolve(false);
+              }
+            });
+          });
         };
         return (
           <PersonPicker
