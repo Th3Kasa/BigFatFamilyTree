@@ -182,7 +182,7 @@ export function PersonPicker({
                         className={cn(
                           "h-8 w-8 ring-2 ring-offset-1 ring-offset-[var(--card)]",
                           p.gender === "f"
-                            ? "ring-rose-200"
+                            ? "ring-[var(--highlight)]/40"
                             : p.gender === "m"
                               ? "ring-[oklch(0.86_0.07_38)]/70"
                               : "ring-[var(--border)]",

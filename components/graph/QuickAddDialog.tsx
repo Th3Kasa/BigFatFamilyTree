@@ -82,7 +82,7 @@ export function QuickAddDialog({ relation, lang, onClose }: Props) {
               ref={firstInput}
               name="given_en"
               required
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40 bg-[var(--card)] text-[var(--foreground)]"
+              className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40 bg-[var(--card)] text-[var(--foreground)]"
             />
             {state && !state.success && state.fieldErrors?.given_en && (
               <p className="text-xs text-[var(--destructive)] mt-1">{state.fieldErrors.given_en}</p>

@@ -375,26 +375,26 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
     return null;
   }
 
-  async function handleRemoveEdge() {
+  function handleRemoveEdge() {
     if (!edgeMenu) return;
     const { edgeKind, relationshipId, source, target, label } = edgeMenu;
     setEdgeMenu(null);
-
-    const result = await removeCurrentEdgeRelationship(
-      edgeKind,
-      relationshipId,
-      source,
-      target,
-    );
-
-    if (result?.success) {
-      toast.success(
-        lang === "ar" ? `تمت إزالة العلاقة بين ${label}` : `Removed: ${label}`,
+    startTransition(async () => {
+      const result = await removeCurrentEdgeRelationship(
+        edgeKind,
+        relationshipId,
+        source,
+        target,
       );
-      router.refresh();
-    } else if (result) {
-      toast.error(result.error ?? "Couldn't remove");
-    }
+      if (result?.success) {
+        toast.success(
+          lang === "ar" ? `تمت إزالة العلاقة بين ${label}` : `Removed: ${label}`,
+        );
+        router.refresh();
+      } else if (result) {
+        toast.error(result.error ?? "Couldn't remove");
+      }
+    });
   }
 
   function handleChangeEdge() {

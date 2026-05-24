@@ -223,6 +223,8 @@ export async function createPersonQuick(
   }
 
   revalidatePath("/");
+  if (spouseId && UUID_RE.test(spouseId)) revalidatePath(`/person/${spouseId}`);
+  if (childId  && UUID_RE.test(childId))  revalidatePath(`/person/${childId}`);
   return { success: true, personId: newId };
 }
 
@@ -440,6 +442,8 @@ export async function linkSpouse(
       if (upErr) return { success: false, error: upErr.message };
     }
     revalidatePath("/");
+    revalidatePath(`/person/${personAId}`);
+    revalidatePath(`/person/${personBId}`);
     return { success: true, relationshipId: cur.id };
   }
 
@@ -457,6 +461,8 @@ export async function linkSpouse(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/");
+  revalidatePath(`/person/${personAId}`);
+  revalidatePath(`/person/${personBId}`);
   return { success: true, relationshipId: (data as { id: string }).id };
 }
 
@@ -667,7 +673,9 @@ export async function addSibling(
   }
 
   revalidatePath("/");
+  revalidatePath(`/person/${personAId}`);
   if (a.slug) revalidatePath(`/person/${a.slug}`);
+  revalidatePath(`/person/${personBId}`);
   if (b.slug) revalidatePath(`/person/${b.slug}`);
   return { success: true };
 }

@@ -296,7 +296,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
                   className={cn(
                     "rounded-[18px] text-lg font-semibold",
                     isFemale
-                      ? "bg-rose-50 text-rose-500"
+                      ? "bg-[var(--highlight)]/10 text-[var(--highlight)]"
                       : isMale
                         ? "bg-[oklch(0.97_0.03_60)] text-[var(--primary)]"
                         : "bg-[var(--muted)] text-[var(--foreground)]",
