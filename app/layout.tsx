@@ -31,7 +31,8 @@ const fontArabic = IBM_Plex_Sans_Arabic({
 
 export const metadata: Metadata = {
   title: "Big Fat Family Tree",
-  description: "Preserving the El Zawaty family history",
+  description:
+    "A spatial family history archive built for multiple generations — family stories and future histories to be stored.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
