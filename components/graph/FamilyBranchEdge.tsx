@@ -1,7 +1,7 @@
 "use client";
 
-import { useEdges, useInternalNode, useStore, type EdgeProps } from "@xyflow/react";
-import type { Edge } from "@xyflow/react";
+import { useInternalNode, useStore, type EdgeProps } from "@xyflow/react";
+import { EDGE_STYLES } from "@/lib/graph/edge-styles";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 240;
@@ -12,21 +12,6 @@ type FamilyBranchData = {
   motherId: string | null;
   childIds: string[];
 };
-
-// Structural lookup — no node positions involved.
-function getSpouseId(parentId: string, edges: Edge[]): string | null {
-  const spouseEdges = edges.filter(
-    (e) =>
-      (e.data as { edgeKind?: string } | undefined)?.edgeKind === "spouse" &&
-      (e.source === parentId || e.target === parentId),
-  );
-  const preferred =
-    spouseEdges.find(
-      (e) => (e.data as { status?: string } | undefined)?.status === "current",
-    ) ?? spouseEdges[0];
-  if (!preferred) return null;
-  return preferred.source === parentId ? preferred.target : preferred.source;
-}
 
 function posEq(
   a: Record<string, { x: number; y: number }>,
@@ -41,22 +26,13 @@ function posEq(
 }
 
 export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: EdgeProps) {
-  // useEdges is structural (relationship graph), not position-sensitive.
-  // It only re-renders this component when edges are added/removed, not on drag.
-  const edges = useEdges();
   const { fatherId = null, motherId = null, childIds = [] } = (data ?? {}) as Partial<FamilyBranchData>;
 
-  // Derive spouse IDs structurally before calling hooks.
-  const fatherSpouseId = fatherId ? getSpouseId(fatherId, edges) : null;
-  const motherSpouseId = motherId ? getSpouseId(motherId, edges) : null;
-
-  // Subscribe to exactly 4 individual node positions.
+  // Subscribe to the two recorded-parent positions individually.
   // Each useInternalNode re-renders only when THAT specific node moves,
   // rather than the entire node array (which is what useNodes() would do).
   const fatherNode = useInternalNode(fatherId ?? "");
   const motherNode = useInternalNode(motherId ?? "");
-  const fatherSpouseNode = useInternalNode(fatherSpouseId ?? "");
-  const motherSpouseNode = useInternalNode(motherSpouseId ?? "");
 
   // For sibling children (beyond childIds[0] which uses lag-free EdgeProps),
   // subscribe to only those specific positions via a narrow store selector.
@@ -86,24 +62,12 @@ export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: E
   if (fatherNode && motherNode) {
     startX = (srcCentreX + motherNode.position.x + NODE_WIDTH / 2) / 2;
     startY = Math.max(srcMidY, motherNode.position.y + MID_Y);
-  } else if (fatherNode) {
-    const spouse = fatherSpouseNode;
-    if (spouse) {
-      startX = (srcCentreX + spouse.position.x + NODE_WIDTH / 2) / 2;
-      startY = Math.max(srcMidY, spouse.position.y + MID_Y);
-    } else {
-      startX = srcCentreX;
-      startY = sourceY;
-    }
-  } else if (motherNode) {
-    const spouse = motherSpouseNode;
-    if (spouse) {
-      startX = (srcCentreX + spouse.position.x + NODE_WIDTH / 2) / 2;
-      startY = Math.max(srcMidY, spouse.position.y + MID_Y);
-    } else {
-      startX = srcCentreX;
-      startY = sourceY;
-    }
+  } else if (fatherNode || motherNode) {
+    // Only one parent is RECORDED. Hang the line from that parent's own
+    // handle — never from the midpoint with their current spouse, which
+    // would falsely imply the spouse is the other parent.
+    startX = srcCentreX;
+    startY = sourceY;
   } else {
     return null;
   }
@@ -157,7 +121,7 @@ export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: E
   return (
     <path
       d={parts.join(" ")}
-      style={{ stroke: "oklch(0.62 0.20 18 / 0.70)", strokeWidth: 2, fill: "none" }}
+      style={{ stroke: EDGE_STYLES.parentChild.stroke, strokeWidth: 2, fill: "none" }}
       strokeLinejoin="round"
     />
   );

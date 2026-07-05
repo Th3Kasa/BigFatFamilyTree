@@ -1,11 +1,18 @@
 "use client";
 
 import type { EdgeProps } from "@xyflow/react";
+import { EDGE_STYLES, GHOST_OPACITY, WIDOWED_GLYPH } from "@/lib/graph/edge-styles";
 
 type SpouseData = {
   edgeKind: "spouse";
   relationshipId?: string;
   status?: "current" | "divorced" | "widowed";
+  /** True when this is a past relationship of a remarried person. */
+  ghost?: boolean;
+  /** Marriage order (1st, 2nd, …). */
+  orderIndex?: number;
+  /** True when either spouse has more than one marriage. */
+  showOrder?: boolean;
 };
 
 // Renders the marriage line as a guaranteed-horizontal segment.
@@ -18,7 +25,12 @@ type SpouseData = {
 // FamilyBranchEdge uses the same Math.max formula for its startY, so the
 // T-junction bracket always hangs from exactly this line.
 export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data }: EdgeProps) {
-  const { status = "current" } = (data ?? {}) as SpouseData;
+  const {
+    status = "current",
+    ghost = false,
+    orderIndex,
+    showOrder = false,
+  } = (data ?? {}) as SpouseData;
 
   // Horizontal marriage bar at the LOWER of the two handle Y coordinates
   const lineY = Math.max(sourceY, targetY);
@@ -33,25 +45,22 @@ export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data 
 
   const d = parts.join(" ");
 
-  const strokeColor =
-    status === "divorced" ? "oklch(0.62 0.20 18 / 0.55)" :
-    status === "widowed"  ? "oklch(0.48 0.03 25 / 0.60)" :
-    "oklch(0.62 0.20 18 / 0.70)";
+  const style =
+    status === "divorced" ? EDGE_STYLES.coupleDivorced :
+    status === "widowed"  ? EDGE_STYLES.coupleWidowed :
+    EDGE_STYLES.coupleCurrent;
 
-  const strokeDash =
-    status === "divorced" ? "6 5" :
-    status === "widowed"  ? "2 4" :
-    undefined;
+  const midX = (sourceX + targetX) / 2;
 
   return (
-    <>
+    <g opacity={ghost ? GHOST_OPACITY : 1}>
       <path
         d={d}
         style={{
-          stroke: strokeColor,
+          stroke: style.stroke,
           strokeWidth: selected ? 3 : 2,
           fill: "none",
-          strokeDasharray: strokeDash,
+          strokeDasharray: style.dash,
         }}
       />
       {/* Wider invisible path for easier clicking on a thin line */}
@@ -59,6 +68,43 @@ export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data 
         d={d}
         style={{ stroke: "transparent", strokeWidth: 14, fill: "none", cursor: "pointer" }}
       />
-    </>
+      {status === "widowed" ? (
+        <text
+          x={midX}
+          y={lineY - 5}
+          textAnchor="middle"
+          style={{
+            fill: style.stroke,
+            fontSize: 12,
+            fontWeight: 600,
+            userSelect: "none",
+            pointerEvents: "none",
+          }}
+        >
+          {WIDOWED_GLYPH}
+        </text>
+      ) : null}
+      {/* Marriage-order badge — only shown when a spouse has >1 marriage,
+          so polygamy / remarriage order is readable on the canvas. */}
+      {showOrder && orderIndex != null ? (
+        <g pointerEvents="none">
+          <circle
+            cx={midX}
+            cy={lineY + 12}
+            r={8}
+            style={{ fill: "var(--background, white)", stroke: style.stroke, strokeWidth: 1.5 }}
+          />
+          <text
+            x={midX}
+            y={lineY + 12}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ fill: style.stroke, fontSize: 10, fontWeight: 700, userSelect: "none" }}
+          >
+            {orderIndex}
+          </text>
+        </g>
+      ) : null}
+    </g>
   );
 }

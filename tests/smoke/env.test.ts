@@ -14,7 +14,7 @@ describe("env validation", () => {
       SUPABASE_SERVICE_ROLE_KEY: "service-key",
       UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
       UPSTASH_REDIS_REST_TOKEN: "redis-token",
-      ANTHROPIC_API_KEY: "sk-ant-xxx",
+      BOOTSTRAP_ADMIN_CREDENTIALS: "owner@example.com:hunter2",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     });
     expect(result.success).toBe(true);

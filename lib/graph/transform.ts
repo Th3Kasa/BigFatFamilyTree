@@ -2,6 +2,7 @@ import type React from "react";
 import * as dagre from "@dagrejs/dagre";
 import type { Lang } from "@/lib/lang/server";
 import { autoLayoutV2 } from "./layout-v2";
+import { EDGE_STYLES } from "./edge-styles";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 240;
@@ -68,6 +69,10 @@ export type GraphEdge = {
     childIds?: string[];
     /** True when this spouse edge is a past relationship of a remarried person. */
     ghost?: boolean;
+    /** Marriage order (relationships.order_index) — 1st, 2nd, … */
+    orderIndex?: number;
+    /** True when either spouse has more than one marriage, so the order badge is meaningful. */
+    showOrder?: boolean;
   };
   style?: React.CSSProperties;
   animated?: boolean;
@@ -161,12 +166,20 @@ export function buildGraphElements(
   // past (divorced/widowed) relationship. Past edges are flagged ghost so the
   // CoupleEdge renders them at reduced opacity.
   const hasCurrentSpouse = new Set<string>();
+  const spouseCounts = new Map<string, number>();
   for (const r of relationships) {
-    if (r.type === "spouse" && r.status === "current") {
+    if (r.type !== "spouse") continue;
+    if (r.status === "current") {
       hasCurrentSpouse.add(r.person_a_id);
       hasCurrentSpouse.add(r.person_b_id);
     }
+    spouseCounts.set(r.person_a_id, (spouseCounts.get(r.person_a_id) ?? 0) + 1);
+    spouseCounts.set(r.person_b_id, (spouseCounts.get(r.person_b_id) ?? 0) + 1);
   }
+  // Show the marriage-order badge only when it disambiguates something.
+  const showOrderFor = (r: RelationshipInput) =>
+    (spouseCounts.get(r.person_a_id) ?? 0) > 1 ||
+    (spouseCounts.get(r.person_b_id) ?? 0) > 1;
 
   // ---- v2 layout branch ---------------------------------------------------
   // v2 is render-only: ignore pos_x/pos_y entirely, run autoLayoutV2,
@@ -191,13 +204,20 @@ export function buildGraphElements(
         (hasCurrentSpouse.has(r.person_a_id) ||
           hasCurrentSpouse.has(r.person_b_id));
       edges.push({
-        id: `s-${r.person_a_id}-${r.person_b_id}`,
+        id: `s-${r.id}`,
         source: aIsLeft ? r.person_a_id : r.person_b_id,
         target: aIsLeft ? r.person_b_id : r.person_a_id,
         sourceHandle: "right",
         targetHandle: "left-target",
         type: "spouse",
-        data: { edgeKind: "spouse", relationshipId: r.id, status, ghost },
+        data: {
+          edgeKind: "spouse",
+          relationshipId: r.id,
+          status,
+          ghost,
+          orderIndex: r.order_index,
+          showOrder: showOrderFor(r),
+        },
       });
     }
     return { nodes, edges, midpoints };
@@ -250,13 +270,20 @@ export function buildGraphElements(
         (hasCurrentSpouse.has(r.person_a_id) ||
           hasCurrentSpouse.has(r.person_b_id));
       edges.push({
-        id: `s-${r.person_a_id}-${r.person_b_id}`,
+        id: `s-${r.id}`,
         source: aIsLeft ? r.person_a_id : r.person_b_id,
         target: aIsLeft ? r.person_b_id : r.person_a_id,
         sourceHandle: "right",
         targetHandle: "left-target",
         type: "spouse",
-        data: { edgeKind: "spouse", relationshipId: r.id, status, ghost },
+        data: {
+          edgeKind: "spouse",
+          relationshipId: r.id,
+          status,
+          ghost,
+          orderIndex: r.order_index,
+          showOrder: showOrderFor(r),
+        },
       });
     } else if (r.type === "adopted_by") {
       // person_a = adopted child, person_b = adoptive parent
@@ -273,9 +300,9 @@ export function buildGraphElements(
         deletable: true,
         data: { edgeKind: "adopted", relationshipId: r.id },
         style: {
-          stroke: "oklch(0.52 0.18 280 / 0.65)",
+          stroke: EDGE_STYLES.adopted.stroke,
           strokeWidth: 2,
-          strokeDasharray: "7 4",
+          strokeDasharray: EDGE_STYLES.adopted.dash,
         },
       } as GraphEdge);
     } else if (r.type === "raised_by") {
@@ -293,9 +320,9 @@ export function buildGraphElements(
         deletable: true,
         data: { edgeKind: "guardian", relationshipId: r.id },
         style: {
-          stroke: "oklch(0.52 0.14 150 / 0.65)",
+          stroke: EDGE_STYLES.guardian.stroke,
           strokeWidth: 2,
-          strokeDasharray: "3 3",
+          strokeDasharray: EDGE_STYLES.guardian.dash,
         },
       } as GraphEdge);
     }
