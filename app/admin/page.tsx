@@ -162,8 +162,8 @@ export default async function AdminDashboardPage() {
           <CardContent>
             <ul className="space-y-2">
               <li>
-                <Link href="/people" className="text-sm text-amber-600 hover:underline">
-                  → People
+                <Link href="/" className="text-sm text-amber-600 hover:underline">
+                  → Family canvas
                 </Link>
               </li>
               <li>

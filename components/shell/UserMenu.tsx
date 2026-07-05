@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, User } from "lucide-react";
+import { LogOut, Shield } from "lucide-react";
 import Link from "next/link";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
@@ -45,13 +45,17 @@ export function UserMenu({ user, role }: UserMenuProps) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/admin">
-            <User />
-            Profile
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        {role === "admin" && (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href="/admin">
+                <Shield />
+                Admin
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem asChild className="text-[var(--destructive)] focus:text-[var(--destructive)]">
           <form action="/auth/signout" method="post">
             <button type="submit" className="flex w-full items-center gap-2">

@@ -76,7 +76,25 @@ export function TranscriptForm({ action, people }: Props) {
         </select>
       </div>
 
-      <input type="hidden" name="raw_text_ar" value="" />
+      <div>
+        <label htmlFor="raw_text_ar" className="block text-sm font-medium text-gray-700 mb-1">
+          Transcript text (Arabic)
+        </label>
+        <textarea
+          id="raw_text_ar"
+          name="raw_text_ar"
+          dir="rtl"
+          rows={8}
+          placeholder="الصق نص التفريغ هنا…"
+          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 w-full leading-relaxed"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Paste the Whisper output (or type the transcript). Optional — you can add it later.
+        </p>
+        {state?.fieldErrors?.["raw_text_ar"] && (
+          <p className="text-xs text-red-500 mt-1">{state.fieldErrors["raw_text_ar"]}</p>
+        )}
+      </div>
 
       <SubmitButton />
     </form>

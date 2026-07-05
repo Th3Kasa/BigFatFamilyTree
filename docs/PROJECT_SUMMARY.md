@@ -13,7 +13,7 @@
 - Nodes represent family members, edges represent relationships
 - Auto-layout via **Dagre** (hierarchical graph layout) when position data is missing
 - Responsive: desktop shows full canvas + side panels, mobile uses a bottom sheet
-- Supports two layout modes (v1/v2)
+- Optional 3D "constellation" view (lazy-loaded, view-only)
 
 ### 2. Family Member Management
 - Add, edit, and manage people with bilingual metadata (English + Arabic)
@@ -40,9 +40,9 @@
 - Separate auth flow: `/login` and `/(auth)` routes
 
 ### 6. Transcripts Module
-- Companion feature for recording family narratives
-- Likely stores audio/video interviews or text transcriptions
-- Indexed and accessible via command palette
+- Records family narratives: audio recordings + pasted Arabic transcript text
+- In-app audio playback via signed URLs (private storage bucket)
+- Extraction proposals (LLM-assisted structured data) planned — schema exists, pipeline not built yet
 
 ### 7. Command Palette (⌘K)
 - Universal search + action runner
@@ -50,9 +50,13 @@
 - Acts as the "everything bar"
 
 ### 8. Dark Mode + Custom Theming
-- Three theme modes: light, dark, and "archive" (high-contrast warm parchment)
+- Light / dark / system themes with a switcher in the top bar (an "archive" parchment palette exists in CSS but is not yet exposed in the UI)
 - Design tokens as CSS variables (oklch color space for perceptual uniformity)
 - Fraunces Variable font for display (names, titles) + Inter for UI
+
+### 9. Events Timeline
+- Per-person life events (birth, marriage, migration, stories, custom) with fuzzy dates (year/decade/around)
+- Editors and admins add and delete events from the person profile; viewers see a read-only timeline
 
 ---
 
@@ -68,13 +72,12 @@
 | **Motion** | framer-motion | Drawer slide-ins, transitions, animations |
 | **Forms** | react-hook-form + zod | Type-safe form state without re-render storms |
 | **Command Palette** | cmdk | Accessible command/search interface |
-| **Drawers** | vaul (mobile) + Radix Dialog | Responsive sheet/modal with same component contract |
+| **Drawers/Sheets** | Radix Dialog | Responsive sheet/modal surfaces |
 | **Notifications** | sonner | Non-blocking toast notifications |
-| **Database** | Supabase (PostgreSQL) | Auth, real-time, Row-Level Security (RLS) policies |
+| **Database** | Supabase (PostgreSQL) | Auth, storage, Row-Level Security (RLS) policies |
 | **3D Graphics** | Three.js + @react-three/fiber | Optional 3D visualization layer |
 | **Language Support** | IBM Plex Sans Arabic + Inter | Native bilingual typography |
-| **API** | Anthropic SDK (@anthropic-ai/sdk) | LLM integration (likely for smart forms, suggestions) |
-| **Rate Limiting** | Upstash Redis + Ratelimit | Prevent abuse on API routes |
+| **Rate Limiting** | Upstash Redis + Ratelimit | Login rate limiting |
 | **Type Safety** | TypeScript strict | Full type coverage |
 | **Testing** | Vitest | Unit/integration tests with Vitest UI |
 
@@ -138,20 +141,22 @@ lib/
 ## Current State
 
 ### ✅ Implemented
-- Login & authentication
-- Canvas + node/edge rendering
-- Person creation/editing drawer
-- Mobile bottom sheet for people list
-- Top bar + nav rail
-- Bilingual UI (English/Arabic toggle)
-- Theme system (light/dark/archive)
-- Server Components + Server Actions
+- Login & authentication (password, magic link, reset)
+- Canvas + node/edge rendering, drag-to-link with relationship chooser, canvas legend
+- Person profiles, editing, quick-add, Inspector drawer
+- Events timeline with add/delete (editor/admin)
+- Transcripts: upload audio, paste Arabic text, in-app playback
+- Admin: user role management, audit log
+- Mobile bottom sheet for people list + mobile nav with palette search
+- Bilingual UI (English/Arabic toggle via ⌘K palette)
+- Theme system (light/dark/system switcher)
+- Server Components + Server Actions, RLS on all tables
 
 ### 🚧 In Progress / Remaining
-- Admin dashboard (follows same patterns)
-- Transcripts surface (recording/editing family narratives)
-- Full RLS policies on all tables
-- Advanced relationship editing (UI complete, likely backend)
+- LLM extraction pipeline (transcripts → structured proposals → review inbox)
+- Radial focus mode (from the original design spec)
+- Live multi-user canvas sync (planned: push-based updates)
+- Free-tier stack migration (see the zero-cost stack plan)
 
 ---
 
@@ -163,8 +168,7 @@ The project was recently redesigned from a traditional CRUD app to a **Miro-insp
 
 ## What Makes This Special
 
-- **Genealogy-native date handling**: react-day-picker supports imprecise dates (year-only, decade-only) — critical for family history
+- **Genealogy-native date handling**: events carry a date-precision field (exact, year, decade, before/after/around) — critical for family history
 - **Bilingual from the ground up**: Not a bolt-on translation layer; Arabic and English are first-class citizens
-- **Claude AI integration**: Likely uses the Anthropic SDK for smart suggestions or narrative generation
-- **Archival-grade design**: Custom "archive" theme for reading historical documents with comfort
+- **Human-reviewed AI (planned)**: transcript extraction will propose structured data that family editors approve before it enters the tree
 - **Built for the long haul**: Designed as a living archive for multiple generations — past family stories and future histories are both first-class citizens, not an afterthought

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { deletePerson } from "@/lib/actions/people";
 import { createRelationship } from "@/lib/actions/relationships";
+import { deleteEvent } from "@/lib/actions/events";
 import { RelationshipForm } from "@/components/forms/RelationshipForm";
 import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
 import {
@@ -20,6 +21,7 @@ import {
   Calendar,
   Edit2,
   Plus,
+  Trash2,
   User,
   Users,
 } from "lucide-react";
@@ -67,6 +69,14 @@ export default async function PersonPage({ params }: Props) {
   if (!person) notFound();
 
   const personId = person.id as string;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: viewerProfile } = user
+    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    : { data: null };
+  const canEdit = ["admin", "editor"].includes(
+    (viewerProfile as { role?: string } | null)?.role ?? "",
+  );
 
   const [
     { data: events },
@@ -376,23 +386,44 @@ export default async function PersonPage({ params }: Props) {
                       lang === "ar"
                         ? (e.story_ar ?? e.story_en)
                         : (e.story_en ?? e.story_ar);
+                    const removeEvent = async () => {
+                      "use server";
+                      await deleteEvent(e.id as string, personId);
+                    };
                     return (
-                      <li key={e.id} className="ms-5 pb-8 last:pb-0">
+                      <li key={e.id} className="group ms-5 pb-8 last:pb-0">
                         <span className="absolute -start-[9px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] border-2 border-[var(--primary)]" />
-                        <time className="text-xs text-[var(--muted-foreground)]">
-                          {e.date_value ??
-                            (lang === "ar" ? "تاريخ غير معروف" : "Date unknown")}
-                          {(e.date_precision as string) !== "exact" &&
-                            ` (${e.date_precision})`}
-                        </time>
-                        <p className="text-sm font-semibold text-[var(--foreground)] mt-0.5">
-                          {label}
-                        </p>
-                        {story && (
-                          <p className="text-sm text-[var(--muted-foreground)] mt-1 leading-relaxed">
-                            {story}
-                          </p>
-                        )}
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <time className="text-xs text-[var(--muted-foreground)]">
+                              {e.date_value ??
+                                (lang === "ar" ? "تاريخ غير معروف" : "Date unknown")}
+                              {(e.date_precision as string) !== "exact" &&
+                                ` (${e.date_precision})`}
+                            </time>
+                            <p className="text-sm font-semibold text-[var(--foreground)] mt-0.5">
+                              {e.type === "custom" && e.custom_label ? e.custom_label : label}
+                            </p>
+                            {story && (
+                              <p className="text-sm text-[var(--muted-foreground)] mt-1 leading-relaxed">
+                                {story}
+                              </p>
+                            )}
+                          </div>
+                          {canEdit && (
+                            <form action={removeEvent}>
+                              <Button
+                                type="submit"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-[var(--muted-foreground)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--destructive)]"
+                                aria-label={lang === "ar" ? "حذف الحدث" : "Delete event"}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </form>
+                          )}
+                        </div>
                       </li>
                     );
                   })}
@@ -405,15 +436,16 @@ export default async function PersonPage({ params }: Props) {
                 </p>
               )}
 
-              {/* Placeholder add event button */}
-              <div className="mt-6 pt-4 border-t border-[var(--border)]">
-                <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/event/new`}>
-                  <Button variant="outline" size="sm" className="gap-1.5">
-                    <Plus className="h-4 w-4" />
-                    {lang === "ar" ? "إضافة حدث" : "Add event"}
-                  </Button>
-                </Link>
-              </div>
+              {canEdit && (
+                <div className="mt-6 pt-4 border-t border-[var(--border)]">
+                  <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/event/new`}>
+                    <Button variant="outline" size="sm" className="gap-1.5">
+                      <Plus className="h-4 w-4" />
+                      {lang === "ar" ? "إضافة حدث" : "Add event"}
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </TabsContent>
 
             {/* ─── Relations Tab ─── */}

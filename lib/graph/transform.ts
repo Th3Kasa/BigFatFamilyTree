@@ -1,7 +1,6 @@
 import type React from "react";
 import * as dagre from "@dagrejs/dagre";
 import type { Lang } from "@/lib/lang/server";
-import { autoLayoutV2 } from "./layout-v2";
 import { EDGE_STYLES } from "./edge-styles";
 
 const NODE_WIDTH = 220;
@@ -78,17 +77,11 @@ export type GraphEdge = {
   animated?: boolean;
 };
 
-export type BuildGraphOptions = {
-  layout?: "v1" | "v2";
-};
-
 export function buildGraphElements(
   people: PersonInput[],
   relationships: RelationshipInput[],
   lang: Lang,
-  options: BuildGraphOptions = {},
-): { nodes: GraphNode[]; edges: GraphEdge[]; midpoints?: Map<string, { x: number; y: number }> } {
-  const layoutMode = options.layout ?? "v1";
+): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const idSet = new Set(people.map((p) => p.id));
 
   // Build spouse map for "add child" links. Prefer a current spouse;
@@ -180,48 +173,6 @@ export function buildGraphElements(
   const showOrderFor = (r: RelationshipInput) =>
     (spouseCounts.get(r.person_a_id) ?? 0) > 1 ||
     (spouseCounts.get(r.person_b_id) ?? 0) > 1;
-
-  // ---- v2 layout branch ---------------------------------------------------
-  // v2 is render-only: ignore pos_x/pos_y entirely, run autoLayoutV2,
-  // overwrite all node positions, and return midpoints for edge routing.
-  if (layoutMode === "v2") {
-    const { positions, midpoints } = autoLayoutV2(people, relationships, {
-      lang,
-    });
-    for (const n of nodes) {
-      const pos = positions.get(n.id);
-      if (pos) n.position = { x: pos.x, y: pos.y };
-    }
-    const posMapV2 = new Map(nodes.map((n) => [n.id, n.position]));
-    for (const r of relationships) {
-      if (r.type !== "spouse") continue;
-      const posA = posMapV2.get(r.person_a_id);
-      const posB = posMapV2.get(r.person_b_id);
-      const aIsLeft = !posA || !posB || posA.x <= posB.x;
-      const status = (r.status ?? "current") as SpouseStatus;
-      const ghost =
-        status !== "current" &&
-        (hasCurrentSpouse.has(r.person_a_id) ||
-          hasCurrentSpouse.has(r.person_b_id));
-      edges.push({
-        id: `s-${r.id}`,
-        source: aIsLeft ? r.person_a_id : r.person_b_id,
-        target: aIsLeft ? r.person_b_id : r.person_a_id,
-        sourceHandle: "right",
-        targetHandle: "left-target",
-        type: "spouse",
-        data: {
-          edgeKind: "spouse",
-          relationshipId: r.id,
-          status,
-          ghost,
-          orderIndex: r.order_index,
-          showOrder: showOrderFor(r),
-        },
-      });
-    }
-    return { nodes, edges, midpoints };
-  }
 
   // Only nodes WITHOUT stored positions go through dagre
   const unpositioned = nodes.filter((n) => {

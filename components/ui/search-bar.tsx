@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Search, User as UserIcon, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
+import { cn, getNameParts } from "@/lib/utils";
 
 type Person = {
   id: string;
@@ -42,15 +42,10 @@ const GooeyFilter = () => (
 );
 
 function displayLabel(p: Person, lang: "ar" | "en") {
-  const given =
-    lang === "ar" ? p.given_ar ?? p.given_en : p.given_en ?? p.given_ar;
-  const family =
-    lang === "ar"
-      ? p.family_name_ar ?? p.family_name_en
-      : p.family_name_en ?? p.family_name_ar;
+  const parts = getNameParts(p, lang);
   return {
-    given: given ?? (lang === "ar" ? "بدون اسم" : "Unnamed"),
-    family: family ?? "",
+    given: parts.given || (lang === "ar" ? "بدون اسم" : "Unnamed"),
+    family: parts.family,
   };
 }
 
@@ -77,15 +72,6 @@ export function SearchBar({
   const [query, setQuery] = useState("");
   const [people, setPeople] = useState<Person[] | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const isUnsupportedBrowser = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    const ua = navigator.userAgent.toLowerCase();
-    const isSafari =
-      ua.includes("safari") && !ua.includes("chrome") && !ua.includes("chromium");
-    const isChromeOniOS = ua.includes("crios");
-    return isSafari || isChromeOniOS;
-  }, []);
 
   // Fetch people once when the user first focuses the search.
   // NOTE: do NOT include `loading` in deps — setting it to true would
@@ -124,7 +110,6 @@ export function SearchBar({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFocused, people]);
 
   // Filtered matches

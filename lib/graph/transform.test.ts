@@ -142,22 +142,3 @@ describe("family branch groups", () => {
     expect(soloBranch?.data?.motherId).toBeNull();
   });
 });
-
-// ---------------------------------------------------------------------------
-// v2 layout parity — same guarantees hold on the v2 branch
-// ---------------------------------------------------------------------------
-describe("v2 layout parity", () => {
-  test("unique spouse edge ids and ghost flag survive the v2 branch", () => {
-    const people = [person("a"), person("b"), person("c")];
-    const relationships = [
-      spouse("r1", "a", "c", "divorced", 1),
-      spouse("r2", "a", "b", "current", 2),
-    ];
-    const { edges } = buildGraphElements(people, relationships, "en", { layout: "v2" });
-    const sEdges = spouseEdges(edges);
-    expect(new Set(sEdges.map((e) => e.id)).size).toBe(2);
-    const byId = new Map(sEdges.map((e) => [e.data?.relationshipId, e]));
-    expect(byId.get("r1")?.data?.ghost).toBe(true);
-    expect(byId.get("r1")?.data?.showOrder).toBe(true);
-  });
-});

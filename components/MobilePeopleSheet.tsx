@@ -29,7 +29,7 @@ export function MobilePeopleSheet({ people, lang }: Props) {
       {/* FABs — only visible on mobile */}
       <div className="fixed bottom-20 end-6 z-50 flex flex-col items-end gap-3 md:hidden">
         {/* Add person */}
-        <a
+        <Link
           href="/person/new"
           className={cn(
             "w-12 h-12 rounded-full flex items-center justify-center",
@@ -40,7 +40,7 @@ export function MobilePeopleSheet({ people, lang }: Props) {
           aria-label="Add person"
         >
           <Plus className="w-5 h-5" />
-        </a>
+        </Link>
 
         {/* People list trigger */}
         <button

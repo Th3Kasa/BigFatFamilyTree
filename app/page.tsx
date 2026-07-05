@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
@@ -7,17 +8,8 @@ import { MobilePeopleSheet } from "@/components/MobilePeopleSheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ layout?: string }>;
-}) {
-  const [supabase, lang, sp] = await Promise.all([
-    createClient(),
-    getLang(),
-    searchParams ?? Promise.resolve({} as { layout?: string }),
-  ]);
-  const layout: "v1" | "v2" = sp.layout === "v2" ? "v2" : "v1";
+export default async function HomePage() {
+  const [supabase, lang] = await Promise.all([createClient(), getLang()]);
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -43,12 +35,12 @@ export default async function HomePage({
           title="Start your family tree"
           description="No family members added yet. Add the first person to get started."
           action={
-            <a
+            <Link
               href="/person/new"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-[var(--primary-foreground)] font-semibold text-sm transition-colors"
             >
               ＋ Add person
-            </a>
+            </Link>
           }
         />
       </div>
@@ -56,7 +48,7 @@ export default async function HomePage({
   }
 
   const typedPeople = people as PersonInput[];
-  const { nodes, edges } = buildGraphElements(typedPeople, relationships ?? [], lang, { layout });
+  const { nodes, edges } = buildGraphElements(typedPeople, relationships ?? [], lang);
 
   return (
     <>
