@@ -10,6 +10,9 @@ const PUBLIC_FILE_EXT =
   /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|css|js|map|webmanifest|txt|xml)$/i;
 
 export function isPublicPath(pathname: string): boolean {
+  // The home route is public: signed-out visitors see the landing page
+  // (rendered by app/page.tsx); family data itself stays behind auth + RLS.
+  if (pathname === "/") return true;
   if (PUBLIC_FILE_EXT.test(pathname)) return true;
   return PUBLIC_PREFIXES.some(
     (p) =>
