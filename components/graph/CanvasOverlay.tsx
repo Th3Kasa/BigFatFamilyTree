@@ -17,12 +17,15 @@ const HINT_KEY = "bft.canvas.hint.dismissed";
 
 type Props = {
   lang: "ar" | "en";
+  /** Guest view: hide the editing hint and the Add-person button; keep the legend. */
+  readOnly?: boolean;
 };
 
-export function CanvasOverlay({ lang }: Props) {
+export function CanvasOverlay({ lang, readOnly = false }: Props) {
   const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
+    if (readOnly) return;
     try {
       if (typeof window === "undefined") return;
       const dismissed = localStorage.getItem(HINT_KEY);
@@ -31,7 +34,7 @@ export function CanvasOverlay({ lang }: Props) {
       // localStorage blocked — show once per session
       setShowHint(true);
     }
-  }, []);
+  }, [readOnly]);
 
   function dismissHint() {
     setShowHint(false);
@@ -135,7 +138,8 @@ export function CanvasOverlay({ lang }: Props) {
         </div>
       </div>
 
-      {/* Bottom-right floating Add Person FAB */}
+      {/* Bottom-right floating Add Person FAB — editors only */}
+      {!readOnly && (
       <TooltipProvider delayDuration={250}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -159,6 +163,7 @@ export function CanvasOverlay({ lang }: Props) {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+      )}
     </>
   );
 }

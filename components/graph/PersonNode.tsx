@@ -47,7 +47,7 @@ const STACKED_TARGET_STYLE: React.CSSProperties = {
 };
 
 export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
-  const { person, spouseId, lang } = data;
+  const { person, spouseId, lang, readOnly } = data;
   const [hovered, setHovered] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const router = useRouter();
@@ -105,13 +105,16 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
         />
         {/* Use a div + onClick for navigation so the delete button is not nested inside an <a> */}
         <div
-          role="link"
-          tabIndex={0}
-          onClick={() => router.push(`/person/${person.slug ?? person.id}/edit`)}
-          onKeyDown={(e) => e.key === "Enter" && router.push(`/person/${person.slug ?? person.id}/edit`)}
+          role={readOnly ? undefined : "link"}
+          tabIndex={readOnly ? undefined : 0}
+          onClick={readOnly ? undefined : () => router.push(`/person/${person.slug ?? person.id}/edit`)}
+          onKeyDown={readOnly ? undefined : (e) => e.key === "Enter" && router.push(`/person/${person.slug ?? person.id}/edit`)}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
-          className="relative flex w-[220px] h-[240px] cursor-pointer items-start justify-center pt-6"
+          className={cn(
+            "relative flex w-[220px] h-[240px] items-start justify-center pt-6",
+            readOnly ? "cursor-default" : "cursor-pointer",
+          )}
         >
           <div
             className={cn(
@@ -121,7 +124,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
               hovered && "-translate-y-px border-[var(--accent)]/70",
             )}
           >
-            <button
+            {!readOnly && <button
               type="button"
               tabIndex={deleteConfirm || hovered ? 0 : -1}
               onClick={handleDeletePlaceholder}
@@ -143,7 +146,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
               )}
             >
               <X className="h-3 w-3" />
-            </button>
+            </button>}
             <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-[var(--muted-foreground)]/50 bg-[var(--muted)]/40 text-[var(--muted-foreground)]">
               <span className="text-base">?</span>
             </div>
@@ -151,9 +154,11 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
               <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
                 {lang === "ar" ? "والد غير معروف" : "Unknown parent"}
               </span>
-              <span className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
-                {lang === "ar" ? "انقر لتعبئة الاسم" : "Click to fill in"}
-              </span>
+              {!readOnly && (
+                <span className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
+                  {lang === "ar" ? "انقر لتعبئة الاسم" : "Click to fill in"}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -322,7 +327,8 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
             </h3>
           </div>
 
-          {/* Action pills */}
+          {/* Action pills — hidden for guests (view-only) */}
+          {!readOnly && (
           <div className="absolute inset-x-3 bottom-3 grid grid-cols-2 gap-2">
             <Link
               href={`/person/${person.slug ?? person.id}`}
@@ -357,8 +363,10 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
               <span>{lang === "ar" ? "طفل" : "Child"}</span>
             </button>
           </div>
+          )}
 
           {/* Heart-pill (Add spouse) sits above the action row, surfaces on hover */}
+          {!readOnly && (
           <button
             type="button"
             tabIndex={hovered ? 0 : -1}
@@ -375,6 +383,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           >
             <Heart className="h-3.5 w-3.5" />
           </button>
+          )}
 
           {/* Selected accent bar */}
           <div

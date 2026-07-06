@@ -44,6 +44,8 @@ type Props = {
   onEdgesDelete?: OnEdgesDelete;
   panOnDrag?: boolean | number[];
   selectionMode?: boolean;
+  nodesDraggable?: boolean;
+  nodesConnectable?: boolean;
 };
 
 export function FamilyGraph({
@@ -62,6 +64,8 @@ export function FamilyGraph({
   onEdgesDelete,
   panOnDrag = [1, 2],
   selectionMode = true,
+  nodesDraggable = true,
+  nodesConnectable = true,
 }: Props) {
   return (
     <div style={{ width: "100%", height: "100%" }}>
@@ -75,6 +79,8 @@ export function FamilyGraph({
 
         minZoom={0.1}
         maxZoom={2.5}
+        nodesDraggable={nodesDraggable}
+        nodesConnectable={nodesConnectable}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onNodeContextMenu={onNodeContextMenu}

@@ -44,11 +44,20 @@ export function TopBar({ user, lang, role }: TopBarProps) {
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-2">
-        <SearchBar lang={lang} />
+        {user && <SearchBar lang={lang} />}
         <ThemeSwitcher />
       </div>
 
-      {user && <UserMenu user={user} role={role} />}
+      {user ? (
+        <UserMenu user={user} role={role} />
+      ) : (
+        <Link
+          href="/login"
+          className="rounded-full bg-[var(--primary)] px-4 py-1.5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:opacity-90"
+        >
+          {lang === "ar" ? "تسجيل الدخول" : "Sign in"}
+        </Link>
+      )}
     </header>
   );
 }
