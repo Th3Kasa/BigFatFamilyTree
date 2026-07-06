@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { CanvasView } from "@/components/graph/CanvasView";
+import { Landing } from "@/components/Landing";
 import { MobilePeopleSheet } from "@/components/MobilePeopleSheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
@@ -12,7 +12,9 @@ export default async function HomePage() {
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // Signed-out visitors get the public landing page — sign-in happens from
+  // inside the site, not as a wall in front of it. Family data stays private.
+  if (!user) return <Landing lang={lang} />;
 
   const [{ data: people }, { data: relationships }] = await Promise.all([
     supabase
