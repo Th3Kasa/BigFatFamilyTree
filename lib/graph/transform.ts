@@ -36,6 +36,8 @@ export type PersonNodeData = {
   spouseId?: string;
   lang: Lang;
   onQuickAdd?: (kind: "child" | "spouse") => void;
+  /** Guest (signed-out) view: hide edit/quick-add affordances and profile links. */
+  readOnly?: boolean;
 };
 
 export type GraphNode = {

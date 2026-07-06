@@ -33,6 +33,8 @@ type Props = {
   people: PersonInput[];
   relationships: RelationshipInput[];
   lang: "ar" | "en";
+  /** Guest (signed-out) view: explore the tree but no editing or details. */
+  readOnly?: boolean;
 };
 
 export function CanvasView(props: Props) {
@@ -78,6 +80,7 @@ export function CanvasView(props: Props) {
           initialEdges={props.initialEdges}
           people={props.people}
           lang={props.lang}
+          readOnly={props.readOnly}
         />
       ) : (
         <Suspense

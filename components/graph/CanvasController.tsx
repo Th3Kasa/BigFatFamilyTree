@@ -47,6 +47,8 @@ type Props = {
   initialEdges: GraphEdge[];
   people: PersonInput[];
   lang: "ar" | "en";
+  /** Guest (signed-out) view: pan/zoom only, no editing, no detail drawer. */
+  readOnly?: boolean;
 };
 
 type ToolMode = "select" | "pan";
@@ -167,7 +169,7 @@ function FloatingToolbar({
   );
 }
 
-function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Props) {
+function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readOnly = false }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [menu, setMenu] = useState<ContextMenuTarget | null>(null);
@@ -211,23 +213,27 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       ...n,
       data: {
         ...n.data,
-        onQuickAdd: (kind: "child" | "spouse") => {
-          const person = people.find((p) => p.id === n.id) ?? null;
-          if (selectedPersonRef.current?.id === n.id) {
-            inspectorRef.current?.openWithQuickAdd(kind);
-          } else {
-            setSelectedPerson(person);
-            // setTimeout fires after React effects flush, including the Inspector's
-            // person-change reset effect, so openWithQuickAdd wins.
-            setTimeout(() => inspectorRef.current?.openWithQuickAdd(kind), 0);
-          }
-        },
+        readOnly,
+        onQuickAdd: readOnly
+          ? undefined
+          : (kind: "child" | "spouse") => {
+              const person = people.find((p) => p.id === n.id) ?? null;
+              if (selectedPersonRef.current?.id === n.id) {
+                inspectorRef.current?.openWithQuickAdd(kind);
+              } else {
+                setSelectedPerson(person);
+                // setTimeout fires after React effects flush, including the Inspector's
+                // person-change reset effect, so openWithQuickAdd wins.
+                setTimeout(() => inspectorRef.current?.openWithQuickAdd(kind), 0);
+              }
+            },
       },
     })),
-    [nodes, people],
+    [nodes, people, readOnly],
   );
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
+    if (readOnly) return;
     startTransition(async () => {
       await updateNodePosition(node.id, node.position.x, node.position.y);
     });
@@ -243,6 +249,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
   } | null>(null);
 
   const onConnect = (c: Connection) => {
+    if (readOnly) return;
     if (!c.source || !c.target) return;
     if (c.source === c.target) return;
     setPendingConn({ source: c.source, target: c.target, handle: c.sourceHandle });
@@ -313,6 +320,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
 
   const onNodeContextMenu: NodeMouseHandler = (e, node) => {
     e.preventDefault();
+    if (readOnly) return;
     setMenu({ kind: "node", personId: node.id, x: e.clientX, y: e.clientY });
   };
 
@@ -330,6 +338,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
 
   const onEdgeContextMenu: EdgeMouseHandler = (e, edge) => {
     e.preventDefault();
+    if (readOnly) return;
     const data = edge.data as
       | { edgeKind?: "parent" | "spouse" | "family-branch" | "adopted" | "guardian"; relationshipId?: string }
       | undefined;
@@ -477,15 +486,34 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
 
   const onPaneContextMenu = (e: React.MouseEvent | MouseEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     setMenu({ kind: "pane", x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY });
   };
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_e: React.MouseEvent, node: { id: string }) => {
       const person = people.find((p) => p.id === node.id) ?? null;
+      // Guests can see the tree but not per-person details — nudge them to sign in.
+      if (readOnly) {
+        const name = person
+          ? (lang === "ar" ? person.given_ar ?? person.given_en : person.given_en ?? person.given_ar)
+          : null;
+        toast(
+          lang === "ar"
+            ? `سجّل الدخول لعرض تفاصيل ${name ?? "هذا الشخص"}`
+            : `Sign in to see ${name ?? "this person"}'s details`,
+          {
+            action: {
+              label: lang === "ar" ? "تسجيل الدخول" : "Sign in",
+              onClick: () => router.push("/login"),
+            },
+          },
+        );
+        return;
+      }
       setSelectedPerson(person);
     },
-    [people]
+    [people, readOnly, lang, router]
   );
 
   const onPaneClick = useCallback(() => {
@@ -612,22 +640,28 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         onPaneContextMenu={onPaneContextMenu}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
-        onEdgesDelete={onEdgesDelete}
+        onEdgesDelete={readOnly ? undefined : onEdgesDelete}
         panOnDrag={panOnDrag}
-        selectionMode={toolMode === "select"}
+        selectionMode={!readOnly && toolMode === "select"}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
       />
 
-      <FloatingToolbar
-        lang={lang}
-        mode={toolMode}
-        onMode={setToolMode}
-        onAutoLayout={handleAutoLayout}
-        onFitView={handleFitView}
-        isPending={isPending}
-      />
+      {!readOnly && (
+        <FloatingToolbar
+          lang={lang}
+          mode={toolMode}
+          onMode={setToolMode}
+          onAutoLayout={handleAutoLayout}
+          onFitView={handleFitView}
+          isPending={isPending}
+        />
+      )}
 
-      <CanvasOverlay lang={lang} />
+      <CanvasOverlay lang={lang} readOnly={readOnly} />
 
+      {!readOnly && (
+      <>
       <Inspector
         ref={inspectorRef}
         person={selectedPerson}
@@ -759,6 +793,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
           onChoose={handleReplaceRelationshipChoice}
           onCancel={() => setReplaceConn(null)}
         />
+      )}
+      </>
       )}
     </div>
   );
