@@ -1,10 +1,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/service";
-import {
-  BOOTSTRAP_ADMIN_EMAILS,
-  bootstrapPasswordFor,
-} from "@/lib/auth/bootstrap";
+import { isBootstrapAdmin, bootstrapPasswordFor } from "@/lib/auth/bootstrap";
 
 export type EnsureBootstrapResult =
   | { ok: true; details?: string }
@@ -33,7 +30,7 @@ export async function ensureBootstrapUser(
   rawEmail: string,
 ): Promise<EnsureBootstrapResult> {
   const email = (rawEmail ?? "").toLowerCase().trim();
-  if (!email || !BOOTSTRAP_ADMIN_EMAILS.has(email)) {
+  if (!isBootstrapAdmin(email)) {
     return { ok: false, reason: "not_bootstrap" };
   }
 
@@ -109,7 +106,7 @@ export async function ensureBootstrapUser(
 // Workaround for Supabase projects with email/password login disabled.
 //
 // 1. Verify the email is a known bootstrap admin and the password matches the
-//    one baked into BOOTSTRAP_ADMIN_PASSWORDS.
+//    one configured in BOOTSTRAP_ADMIN_CREDENTIALS.
 // 2. Ensure the user exists in auth.users (idempotent).
 // 3. Use the admin API to mint a magic-link token bound to that email and
 //    return its `token_hash`.
@@ -124,7 +121,7 @@ export async function signInBootstrapAdmin(
   | { ok: false; error: string }
 > {
   const email = (rawEmail ?? "").toLowerCase().trim();
-  if (!email || !BOOTSTRAP_ADMIN_EMAILS.has(email)) {
+  if (!isBootstrapAdmin(email)) {
     return { ok: false, error: "Email not in admin allowlist" };
   }
   const expected = bootstrapPasswordFor(email);

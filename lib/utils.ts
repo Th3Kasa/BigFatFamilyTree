@@ -27,16 +27,30 @@ export function getDisplayName(
   p: NameablePerson | null | undefined,
   lang: "ar" | "en" = "en",
 ): string {
-  if (!p) return lang === "ar" ? "بدون اسم" : "Unnamed";
-  const given =
-    lang === "ar"
-      ? (p.given_ar ?? p.given_en)
-      : (p.given_en ?? p.given_ar);
-  const family =
-    lang === "ar"
-      ? (p.family_name_ar ?? p.family_name_en)
-      : (p.family_name_en ?? p.family_name_ar);
+  const { given, family } = getNameParts(p, lang);
   const full = [given, family].filter(Boolean).join(" ").trim();
   if (full) return full;
   return lang === "ar" ? "بدون اسم" : "Unnamed";
+}
+
+/**
+ * Same language-fallback rules as getDisplayName, but keeps given and family
+ * separate (empty string when missing) for UIs that render them on different
+ * lines and apply their own placeholders.
+ */
+export function getNameParts(
+  p: NameablePerson | null | undefined,
+  lang: "ar" | "en" = "en",
+): { given: string; family: string } {
+  const given = p
+    ? lang === "ar"
+      ? (p.given_ar ?? p.given_en)
+      : (p.given_en ?? p.given_ar)
+    : null;
+  const family = p
+    ? lang === "ar"
+      ? (p.family_name_ar ?? p.family_name_en)
+      : (p.family_name_en ?? p.family_name_ar)
+    : null;
+  return { given: given ?? "", family: family ?? "" };
 }

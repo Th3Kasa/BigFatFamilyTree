@@ -23,9 +23,16 @@ type Props = {
   transcripts: Transcript[];
   lang?: string;
   selectedId: string | null;
+  audioUrl?: string | null;
 };
 
-function TranscriptDetail({ transcript }: { transcript: Transcript }) {
+function TranscriptDetail({
+  transcript,
+  audioUrl,
+}: {
+  transcript: Transcript;
+  audioUrl?: string | null;
+}) {
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 sm:p-6 border-b border-border">
@@ -48,25 +55,27 @@ function TranscriptDetail({ transcript }: { transcript: Transcript }) {
         )}
       </div>
 
-      {/* Audio player placeholder */}
+      {/* Audio player */}
       <div className="p-4 sm:p-6 border-b border-border">
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 border border-border">
-          <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-            <Mic className="h-5 w-5 text-amber-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full w-1/3 bg-amber-400 rounded-full" />
+        {audioUrl ? (
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border">
+            <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <Mic className="h-5 w-5 text-amber-600" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Audio player</p>
+            <audio controls preload="metadata" src={audioUrl} className="w-full min-w-0" />
           </div>
-          <Link
-            href={`/transcripts/${transcript.id}`}
-            className="text-xs text-amber-600 hover:underline flex-shrink-0"
-          >
-            Open full
-          </Link>
-        </div>
+        ) : (
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 border border-border">
+            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+              <Mic className="h-5 w-5 text-muted-foreground/50" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {transcript.audio_url
+                ? "Audio unavailable (could not sign playback URL)."
+                : "No audio recording attached."}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Transcript text / segments */}
@@ -115,7 +124,7 @@ function TranscriptDetail({ transcript }: { transcript: Transcript }) {
   );
 }
 
-export function TranscriptsSplitView({ transcripts, selectedId }: Props) {
+export function TranscriptsSplitView({ transcripts, selectedId, audioUrl }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
 
@@ -259,7 +268,7 @@ export function TranscriptsSplitView({ transcripts, selectedId }: Props) {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <TranscriptDetail transcript={selectedTranscript} />
+              <TranscriptDetail transcript={selectedTranscript} audioUrl={audioUrl} />
             </div>
           </>
         ) : (

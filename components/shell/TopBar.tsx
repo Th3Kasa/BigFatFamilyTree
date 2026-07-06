@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Breadcrumb } from "@/components/shell/Breadcrumb";
+import { ThemeSwitcher } from "@/components/shell/ThemeSwitcher";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { SearchBar } from "@/components/ui/search-bar";
 import type { Lang } from "@/lib/lang/server";
@@ -42,8 +43,9 @@ export function TopBar({ user, lang, role }: TopBarProps) {
         <Breadcrumb />
       </div>
 
-      <div className="flex flex-1 items-center justify-end">
+      <div className="flex flex-1 items-center justify-end gap-2">
         <SearchBar lang={lang} />
+        <ThemeSwitcher />
       </div>
 
       {user && <UserMenu user={user} role={role} />}

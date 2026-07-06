@@ -55,9 +55,9 @@ describe("buildGraphElements", () => {
     expect(fb).toBeDefined();
   });
 
-  it("creates spouse edge from relationships", () => {
+  it("creates spouse edge from relationships, keyed by relationship id", () => {
     const { edges } = buildGraphElements(people, relationships, "en");
-    expect(edges.find((e) => e.id === "s-p1-p2")).toBeDefined();
+    expect(edges.find((e) => e.id === "s-r1")).toBeDefined();
   });
 
   it("dagre assigns numeric positions to all nodes", () => {

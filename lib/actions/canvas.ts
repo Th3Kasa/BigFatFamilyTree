@@ -15,18 +15,6 @@ export async function updateNodePosition(id: string, x: number, y: number) {
   return { success: true };
 }
 
-export async function saveViewport(viewport: { x: number; y: number; zoom: number }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not signed in." };
-  const { error } = await supabase
-    .from("profiles")
-    .update({ canvas_viewport: viewport })
-    .eq("id", user.id);
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-}
-
 export async function autoLayoutAll() {
   const supabase = await createClient();
   const [{ data: people, error: readErr }, { data: rels }] = await Promise.all([

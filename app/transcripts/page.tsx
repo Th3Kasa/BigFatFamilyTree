@@ -53,11 +53,29 @@ export default async function TranscriptsPage({ searchParams }: Props) {
     };
   });
 
+  // Signed playback URL for the selected transcript's audio (private bucket).
+  // Older rows may store a full URL; new uploads store the object path.
+  let audioUrl: string | null = null;
+  const selected = selectedId
+    ? (transcripts ?? []).find((t) => t.id === selectedId)
+    : null;
+  if (selected?.audio_url) {
+    if (/^https?:\/\//.test(selected.audio_url)) {
+      audioUrl = selected.audio_url;
+    } else {
+      const { data: signed } = await supabase.storage
+        .from("audio")
+        .createSignedUrl(selected.audio_url, 3600);
+      audioUrl = signed?.signedUrl ?? null;
+    }
+  }
+
   return (
     <main className="h-[calc(100vh-3.5rem-4rem)] md:h-[calc(100vh-3.5rem)] overflow-hidden">
       <TranscriptsSplitView
         transcripts={enriched}
         selectedId={selectedId ?? null}
+        audioUrl={audioUrl}
       />
     </main>
   );

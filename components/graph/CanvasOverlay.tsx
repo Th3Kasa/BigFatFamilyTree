@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, MousePointer2, Heart, UserPlus, Users, Sparkles } from "lucide-react";
+import { Plus, X, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EDGE_STYLES, GHOST_OPACITY, WIDOWED_GLYPH } from "@/lib/graph/edge-styles";
 import {
   Tooltip,
   TooltipContent,
@@ -97,37 +98,37 @@ export function CanvasOverlay({ lang }: Props) {
           </span>
           <Sep />
           <LegendItem
-            color="oklch(0.62 0.20 18)"
+            color={EDGE_STYLES.coupleCurrent.stroke}
             label={lang === "ar" ? "زواج حالي" : "Current couple"}
-            enclosure
           />
           <LegendItem
-            color="oklch(0.55 0.02 25 / 0.75)"
+            color={EDGE_STYLES.coupleWidowed.stroke}
             label={lang === "ar" ? "ترمل" : "Widowed"}
-            glyph="†"
+            dashed
+            glyph={WIDOWED_GLYPH}
           />
           <LegendItem
-            color="oklch(0.62 0.20 18 / 0.40)"
+            color={EDGE_STYLES.coupleDivorced.stroke}
             label={lang === "ar" ? "طلاق" : "Divorced"}
             dashed
           />
           <LegendItem
-            color="oklch(0.62 0.20 18 / 0.40)"
+            color={EDGE_STYLES.coupleDivorced.stroke}
             label={lang === "ar" ? "زواج سابق" : "Remarried (past)"}
             dashed
             ghost
           />
           <LegendItem
-            color="oklch(0.55 0.10 200)"
+            color={EDGE_STYLES.parentChild.stroke}
             label={lang === "ar" ? "نسب" : "Parent-child"}
           />
           <LegendItem
-            color="oklch(0.52 0.18 280 / 0.65)"
+            color={EDGE_STYLES.adopted.stroke}
             label={lang === "ar" ? "تبني" : "Adoptive"}
             dashed
           />
           <LegendItem
-            color="oklch(0.52 0.14 150 / 0.65)"
+            color={EDGE_STYLES.guardian.stroke}
             label={lang === "ar" ? "ولي أمر" : "Guardian"}
             dashed
           />
@@ -169,60 +170,39 @@ function Sep() {
 function LegendItem({
   color,
   label,
-  icon: Icon,
   dashed,
-  enclosure,
   glyph,
   ghost,
 }: {
   color: string;
   label: string;
-  icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   dashed?: boolean;
-  enclosure?: boolean;
   glyph?: string;
   ghost?: boolean;
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      {Icon ? (
-        <Icon className="h-3 w-3" style={{ color }} />
-      ) : (
+      <span
+        aria-hidden
+        className="relative inline-flex h-3.5 w-6 items-center justify-center"
+        style={{ opacity: ghost ? GHOST_OPACITY : 1 }}
+      >
         <span
-          aria-hidden
-          className="relative inline-flex h-3.5 w-6 items-center justify-center"
-          style={{ opacity: ghost ? 0.5 : 1 }}
-        >
-          {enclosure ? (
-            <span
-              className="absolute inset-0 rounded-md"
-              style={{
-                background: "oklch(0.62 0.20 18 / 0.12)",
-                border: "1px solid oklch(0.62 0.20 18 / 0.28)",
-              }}
-            />
-          ) : null}
+          className="relative inline-block h-0 w-5"
+          style={{
+            borderTop: `2px ${dashed ? "dashed" : "solid"} ${color}`,
+          }}
+        />
+        {glyph ? (
           <span
-            className="relative inline-block h-0 w-5"
-            style={{
-              borderTop: `2px ${dashed ? "dashed" : "solid"} ${color}`,
-            }}
-          />
-          {glyph ? (
-            <span
-              className="relative -ml-2 px-0.5 text-[10px] font-semibold leading-none"
-              style={{ color, background: "var(--background)" }}
-            >
-              {glyph}
-            </span>
-          ) : null}
-        </span>
-      )}
+            className="relative -ml-2 px-0.5 text-[10px] font-semibold leading-none"
+            style={{ color, background: "var(--background)" }}
+          >
+            {glyph}
+          </span>
+        ) : null}
+      </span>
       <span>{label}</span>
     </div>
   );
 }
-
-// Convenient re-export of useless reference to satisfy build picking up Users icon
-// (so future code can reference siblings legend easily without re-import)
-export { Users as _CanvasOverlay_Users };

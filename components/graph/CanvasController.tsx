@@ -196,14 +196,12 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
       const updated = people.find((p) => p.id === current.id) ?? null;
       setSelectedPerson(updated);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [people]);
 
   // Fit view once after initial mount
   useEffect(() => {
     const t = setTimeout(() => fitView({ padding: 0.15, duration: 400 }), 100);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Inject onQuickAdd callbacks so node card buttons open the Inspector quick-add
@@ -226,7 +224,6 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang }: Pro
         },
       },
     })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [nodes, people],
   );
 
