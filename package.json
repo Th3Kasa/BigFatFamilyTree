@@ -52,7 +52,7 @@
     "@vitest/ui": "^4.1.10",
     "autoprefixer": "^10.5.4",
     "eslint": "^10.8.0",
-    "eslint-config-next": "^16.3.0",
+    "eslint-config-next": "^16.3.1",
     "happy-dom": "^20.11.1",
     "postcss": "^8.5.26",
     "prettier": "^3.9.6",
