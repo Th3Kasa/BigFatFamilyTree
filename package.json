@@ -57,6 +57,6 @@
     "postcss": "^8.5.26",
     "prettier": "^3.9.6",
     "tailwindcss": "^4.3.2",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.11"
   }
 }
