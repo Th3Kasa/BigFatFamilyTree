@@ -5,6 +5,8 @@ import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { CanvasView } from "@/components/graph/CanvasView";
 import { MobilePeopleSheet } from "@/components/MobilePeopleSheet";
+import { RelationshipBanner } from "@/components/relationships/RelationshipBanner";
+import { makeKinContext, relate } from "@/lib/kinship/view";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TopBar } from "@/components/shell/TopBar";
 import { NavRail } from "@/components/shell/NavRail";
@@ -13,8 +15,26 @@ import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 const TREE_COLUMNS =
   "id, slug, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y";
 
-export default async function HomePage() {
-  const [supabase, lang] = await Promise.all([createClient(), getLang()]);
+type SearchParams = Promise<{ from?: string | string[]; to?: string | string[] }>;
+
+/**
+ * `/?from=<id>&to=<id>` lights up how two people are related. Ids that don't
+ * match a person (or pairs with no connection) simply show the plain tree.
+ */
+function pathFromQuery(
+  params: Awaited<SearchParams>,
+  people: PersonInput[],
+  relationships: RelationshipInput[],
+) {
+  const from = typeof params.from === "string" ? params.from : null;
+  const to = typeof params.to === "string" ? params.to : null;
+  if (!from || !to) return null;
+  const outcome = relate(makeKinContext(people, relationships), from, to);
+  return outcome.status === "found" ? { view: outcome.view, from, to } : null;
+}
+
+export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
+  const [supabase, lang, params] = await Promise.all([createClient(), getLang(), searchParams]);
 
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -31,6 +51,7 @@ export default async function HomePage() {
     ]);
 
     const guestPeople = (gPeople ?? []) as PersonInput[];
+    const guestPath = pathFromQuery(params, guestPeople, (gRels ?? []) as RelationshipInput[]);
     const guestTree =
       guestPeople.length > 0
         ? buildGraphElements(guestPeople, (gRels ?? []) as RelationshipInput[], lang)
@@ -52,7 +73,9 @@ export default async function HomePage() {
                 people={guestPeople}
                 lang={lang}
                 readOnly
+                highlight={guestPath?.view.highlight}
               />
+              {guestPath && <RelationshipBanner lang={lang} answer={guestPath.view.oneLine} />}
             </div>
           ) : (
             <div className="flex h-[calc(100svh-57px)] items-center justify-center px-4">
@@ -112,6 +135,7 @@ export default async function HomePage() {
 
   const typedPeople = people as PersonInput[];
   const { nodes, edges } = buildGraphElements(typedPeople, relationships ?? [], lang);
+  const path = pathFromQuery(params, typedPeople, (relationships ?? []) as RelationshipInput[]);
 
   return (
     <>
@@ -125,7 +149,15 @@ export default async function HomePage() {
           initialEdges={edges}
           people={typedPeople}
           lang={lang}
+          highlight={path?.view.highlight}
         />
+        {path && (
+          <RelationshipBanner
+            lang={lang}
+            answer={path.view.oneLine}
+            finderHref={`/relationships?${new URLSearchParams({ a: path.from, b: path.to }).toString()}`}
+          />
+        )}
       </div>
 
       {/* Mobile: bottom-sheet people list, triggered by FAB */}

@@ -24,6 +24,7 @@ import {
   Trash2,
   User,
   Users,
+  Waypoints,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeletePersonButton } from "@/components/person/DeletePersonButton";
@@ -186,7 +187,13 @@ export default async function PersonPage({ params }: Props) {
           />
 
           {/* Top bar with edit button */}
-          <div className="relative flex justify-end px-4 sm:px-6 pt-4 sm:pt-5 gap-2">
+          <div className="relative flex flex-wrap justify-end px-4 sm:px-6 pt-4 sm:pt-5 gap-2">
+            <Link href={`/relationships?b=${personId}`}>
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
+                <Waypoints className="h-3.5 w-3.5" />
+                {lang === "ar" ? "ما صلة القرابة بيننا؟" : "How are we related?"}
+              </Button>
+            </Link>
             <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/edit`}>
               <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
                 <Edit2 className="h-3.5 w-3.5" />
