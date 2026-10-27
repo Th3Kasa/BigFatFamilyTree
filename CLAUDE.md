@@ -206,6 +206,11 @@ Alfred can improve:
 | `/evolve` | Implement approved improvements from the backlog |
 | `/maintain` | tech-curator system health audit |
 | `/approve-plugin [name]` | Plugin vetting and approval process |
+| `/playwright-task <url> [task]` | Text-only browser automation, scraping and UI checks |
+
+## Browser Automation
+
+For any browser automation, scraping, page check or UI test, use the text-only runner `node scripts/pw.mjs` (full usage in `.claude/commands/playwright-task.md`). Batch the steps into a single run, read the stdout report, and don't take screenshots unless visual debugging requires one. Don't use a Playwright or browser MCP server for this.
 
 ## graphify
 
