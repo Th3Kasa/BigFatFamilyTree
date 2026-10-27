@@ -19,9 +19,11 @@ type Props = {
   lang: "ar" | "en";
   /** Guest view: hide the editing hint and the Add-person button; keep the legend. */
   readOnly?: boolean;
+  /** A relationship path is highlighted: add it to the legend. */
+  pathLegend?: boolean;
 };
 
-export function CanvasOverlay({ lang, readOnly = false }: Props) {
+export function CanvasOverlay({ lang, readOnly = false, pathLegend = false }: Props) {
   const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
@@ -100,6 +102,9 @@ export function CanvasOverlay({ lang, readOnly = false }: Props) {
             {lang === "ar" ? "المفتاح" : "Legend"}
           </span>
           <Sep />
+          {pathLegend && (
+            <LegendItem color="var(--path)" label={lang === "ar" ? "مسار القرابة" : "Relationship path"} />
+          )}
           <LegendItem
             color={EDGE_STYLES.coupleCurrent.stroke}
             label={lang === "ar" ? "زواج حالي" : "Current couple"}

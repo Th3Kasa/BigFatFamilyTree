@@ -2,6 +2,7 @@
 
 import { useInternalNode, useStore, type EdgeProps } from "@xyflow/react";
 import { EDGE_STYLES } from "@/lib/graph/edge-styles";
+import { DIM_OPACITY, type EdgeHighlight } from "@/lib/graph/highlight";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 240;
@@ -11,6 +12,8 @@ type FamilyBranchData = {
   fatherId: string | null;
   motherId: string | null;
   childIds: string[];
+  /** Relationship-finder highlight; present only while a path is active. */
+  highlight?: EdgeHighlight;
 };
 
 function posEq(
@@ -26,7 +29,7 @@ function posEq(
 }
 
 export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: EdgeProps) {
-  const { fatherId = null, motherId = null, childIds = [] } = (data ?? {}) as Partial<FamilyBranchData>;
+  const { fatherId = null, motherId = null, childIds = [], highlight } = (data ?? {}) as Partial<FamilyBranchData>;
 
   // Subscribe to the two recorded-parent positions individually.
   // Each useInternalNode re-renders only when THAT specific node moves,
@@ -76,16 +79,19 @@ export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: E
   const targetChildId = childIds[0];
   const childCenterXs: number[] = [];
   const childTopYs: number[] = [];
+  const placedChildIds: string[] = [];
 
   for (const id of childIds) {
     if (id === targetChildId) {
       childCenterXs.push(targetX);
       childTopYs.push(targetY);
+      placedChildIds.push(id);
     } else {
       const pos = siblingPositions[id];
       if (pos) {
         childCenterXs.push(pos.x + NODE_WIDTH / 2);
         childTopYs.push(pos.y);
+        placedChildIds.push(id);
       }
     }
   }
@@ -118,11 +124,37 @@ export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: E
     parts.push(`M ${childCenterXs[i]} ${junctionY} L ${childCenterXs[i]} ${childTopYs[i]}`);
   }
 
-  return (
+  const base = (
     <path
       d={parts.join(" ")}
-      style={{ stroke: EDGE_STYLES.parentChild.stroke, strokeWidth: 2, fill: "none" }}
+      style={{
+        stroke: EDGE_STYLES.parentChild.stroke,
+        strokeWidth: 2,
+        fill: "none",
+        opacity: highlight ? DIM_OPACITY : 1,
+      }}
       strokeLinejoin="round"
     />
+  );
+
+  // Relationship finder: redraw ONLY the route — parent drop, then the bar out
+  // to each lit child, then that child's drop — never the whole bracket.
+  const lit = new Set(highlight?.childIds ?? []);
+  if (!highlight?.on || lit.size === 0) return base;
+
+  const route: string[] = [`M ${startX} ${startY} L ${startX} ${junctionY}`];
+  placedChildIds.forEach((id, i) => {
+    if (!lit.has(id)) return;
+    route.push(`M ${startX} ${junctionY} L ${childCenterXs[i]} ${junctionY}`);
+    route.push(`M ${childCenterXs[i]} ${junctionY} L ${childCenterXs[i]} ${childTopYs[i]}`);
+  });
+  const routeD = route.join(" ");
+
+  return (
+    <g>
+      {base}
+      <path d={routeD} style={{ stroke: "var(--path-soft)", strokeWidth: 10, fill: "none" }} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={routeD} style={{ stroke: "var(--path)", strokeWidth: 4, fill: "none" }} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
   );
 }
