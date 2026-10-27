@@ -2,6 +2,7 @@ import type React from "react";
 import * as dagre from "@dagrejs/dagre";
 import type { Lang } from "@/lib/lang/server";
 import { EDGE_STYLES } from "./edge-styles";
+import type { EdgeHighlight, NodeHighlight } from "./highlight";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 240;
@@ -38,6 +39,8 @@ export type PersonNodeData = {
   onQuickAdd?: (kind: "child" | "spouse") => void;
   /** Guest (signed-out) view: hide edit/quick-add affordances and profile links. */
   readOnly?: boolean;
+  /** Relationship-finder highlight: set only while a path is active. */
+  highlight?: NodeHighlight;
 };
 
 export type GraphNode = {
@@ -74,9 +77,12 @@ export type GraphEdge = {
     orderIndex?: number;
     /** True when either spouse has more than one marriage, so the order badge is meaningful. */
     showOrder?: boolean;
+    /** Relationship-finder highlight: set only while a path is active. */
+    highlight?: EdgeHighlight;
   };
   style?: React.CSSProperties;
   animated?: boolean;
+  zIndex?: number;
 };
 
 export function buildGraphElements(
