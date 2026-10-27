@@ -15,6 +15,13 @@ type Props = {
   guest?: boolean;
   /** Relationship path to light up; everyone else fades back. */
   highlight?: PathHighlight | null;
+  /** Open centred on this person and select them (`/?focus=<id>`). */
+  focusId?: string | null;
+  /**
+   * The signed-in member's own person id. When set, their card shows a "You"
+   * badge and the view controls gain "Center on me".
+   */
+  meId?: string | null;
 };
 
 export function CanvasView(props: Props) {
@@ -28,6 +35,8 @@ export function CanvasView(props: Props) {
         readOnly={props.readOnly}
         guest={props.guest}
         highlight={props.highlight}
+        focusId={props.focusId}
+        meId={props.meId}
       />
     </div>
   );

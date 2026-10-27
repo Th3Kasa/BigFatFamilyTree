@@ -6,12 +6,14 @@ import { useReactFlow, ReactFlowProvider, useNodesState, useEdgesState } from "@
 import type { Connection, NodeMouseHandler, EdgeMouseHandler, OnNodeDrag, OnEdgesDelete } from "@xyflow/react";
 import { toast } from "sonner";
 import {
-  MousePointer2,
-  Plus,
   Hand,
-  Maximize2,
   LayoutGrid,
   LocateFixed,
+  Maximize2,
+  Minus,
+  MousePointer2,
+  Plus,
+  Route,
 } from "lucide-react";
 import { FamilyGraph } from "./FamilyGraph";
 import { Inspector, type InspectorHandle } from "./Inspector";
@@ -41,6 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn, getDisplayName } from "@/lib/utils";
+import { shell } from "@/lib/client/shell-store";
 import {
   applyEdgeHighlight,
   buildHighlightIndex,
@@ -63,118 +66,132 @@ type Props = {
   guest?: boolean;
   /** Relationship-finder path to light up; everything else fades back. */
   highlight?: PathHighlight | null;
+  /** Pan/zoom to this person on load and select them (`/?focus=<id>`). */
+  focusId?: string | null;
+  /** The signed-in member's own person: "You" badge + "Center on me". */
+  meId?: string | null;
 };
 
 type ToolMode = "select" | "pan";
 
-function FloatingToolbar({
+const pillButton =
+  "flex h-11 min-w-11 items-center justify-center gap-1.5 px-3 text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] disabled:pointer-events-none disabled:opacity-40";
+
+/** Zoom −/+ and Fit, plus "Center on me" / "Focus on the path" when they apply. */
+function ViewControls({
+  lang,
+  onZoomOut,
+  onZoomIn,
+  onFit,
+  onFocusPath,
+  onCenterMe,
+}: {
+  lang: "ar" | "en";
+  onZoomOut: () => void;
+  onZoomIn: () => void;
+  onFit: () => void;
+  onFocusPath?: () => void;
+  onCenterMe?: () => void;
+}) {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  return (
+    <div
+      role="group"
+      aria-label={t("Zoom and view", "التكبير والعرض")}
+      className="absolute bottom-3 end-3 z-20 flex items-center divide-x divide-[var(--border)] overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--card)] shadow-[var(--shadow-floating)] rtl:divide-x-reverse md:bottom-4 md:end-4"
+    >
+      {onCenterMe && (
+        <button type="button" onClick={onCenterMe} className={cn(pillButton, "ps-4")}>
+          <LocateFixed className="h-4 w-4" aria-hidden />
+          <span className="hidden sm:inline">{t("Center on me", "مركّز عليّ")}</span>
+          <span className="sr-only sm:hidden">{t("Center on me", "مركّز عليّ")}</span>
+        </button>
+      )}
+      {onFocusPath && (
+        <button
+          type="button"
+          onClick={onFocusPath}
+          aria-label={t("Focus on the path", "تركيز على المسار")}
+          title={t("Focus on the path", "تركيز على المسار")}
+          className={cn(pillButton, "text-[var(--path)]")}
+        >
+          <Route className="h-4 w-4" aria-hidden />
+        </button>
+      )}
+      <button type="button" onClick={onZoomOut} aria-label={t("Zoom out", "تصغير")} title={t("Zoom out", "تصغير")} className={pillButton}>
+        <Minus className="h-4 w-4" aria-hidden />
+      </button>
+      <button type="button" onClick={onZoomIn} aria-label={t("Zoom in", "تكبير")} title={t("Zoom in", "تكبير")} className={pillButton}>
+        <Plus className="h-4 w-4" aria-hidden />
+      </button>
+      <button
+        type="button"
+        onClick={onFit}
+        aria-label={t("Fit the whole tree", "عرض الشجرة كاملة")}
+        title={t("Fit the whole tree", "عرض الشجرة كاملة")}
+        className={cn(pillButton, "pe-4")}
+      >
+        <Maximize2 className="h-4 w-4" aria-hidden />
+        <span aria-hidden>{t("Fit", "ملاءمة")}</span>
+      </button>
+    </div>
+  );
+}
+
+/** Editor tools: pointer vs. hand mode and auto-layout. */
+function EditTools({
   lang,
   mode,
   onMode,
   onAutoLayout,
-  onFitView,
   isPending,
 }: {
   lang: "ar" | "en";
   mode: ToolMode;
   onMode: (m: ToolMode) => void;
   onAutoLayout: () => void;
-  onFitView: () => void;
   isPending: boolean;
 }) {
   const tools = [
-    {
-      id: "select" as const,
-      icon: MousePointer2,
-      label: lang === "ar" ? "تحديد" : "Select",
-      onClick: () => onMode("select"),
-      isMode: true,
-    },
-    {
-      id: "add",
-      icon: Plus,
-      label: lang === "ar" ? "إضافة شخص" : "Add person",
-      href: "/person/new",
-      isMode: false,
-    },
-    {
-      id: "pan" as const,
-      icon: Hand,
-      label: lang === "ar" ? "تحريك" : "Pan",
-      onClick: () => onMode("pan"),
-      isMode: true,
-    },
-    {
-      id: "fitview",
-      icon: Maximize2,
-      label: lang === "ar" ? "ملاءمة العرض" : "Fit view",
-      onClick: onFitView,
-      isMode: false,
-    },
-    {
-      id: "autolayout",
-      icon: LayoutGrid,
-      label: lang === "ar" ? "ترتيب تلقائي" : "Auto-layout",
-      onClick: onAutoLayout,
-      isMode: false,
-    },
+    { id: "select" as const, icon: MousePointer2, label: lang === "ar" ? "تحديد" : "Select", onClick: () => onMode("select") },
+    { id: "pan" as const, icon: Hand, label: lang === "ar" ? "تحريك" : "Move around", onClick: () => onMode("pan") },
+    { id: "autolayout" as const, icon: LayoutGrid, label: lang === "ar" ? "ترتيب تلقائي" : "Tidy up the layout", onClick: onAutoLayout },
   ];
 
   return (
     <TooltipProvider delayDuration={300}>
       <div
-        className={cn(
-          "absolute bottom-6 left-6 z-20",
-          "flex items-center gap-1 px-2.5 py-1.5 rounded-full",
-          "glass-2 border border-[var(--border)]",
-          "shadow-[var(--shadow-floating)]",
-        )}
+        role="toolbar"
+        aria-orientation="vertical"
+        aria-label={lang === "ar" ? "أدوات التحرير" : "Editing tools"}
+        className="absolute end-3 top-3 z-20 flex flex-col gap-1 rounded-full border border-[var(--border-strong)] bg-[var(--card)] p-1 shadow-[var(--shadow-floating)] md:end-4 md:top-4"
       >
         {tools.map((tool) => {
           const Icon = tool.icon;
-          const isActive = tool.isMode && (tool.id as ToolMode) === mode;
-
-          if ("href" in tool && tool.href) {
-            return (
-              <Tooltip key={tool.id}>
-                <TooltipTrigger asChild>
-                  <a
-                    href={tool.href}
-                    className={cn(
-                      "flex items-center justify-center w-9 h-9 rounded-full",
-                      "text-muted-foreground hover:text-foreground hover:bg-accent",
-                      "transition-all duration-150"
-                    )}
-                    aria-label={tool.label}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </a>
-                </TooltipTrigger>
-                <TooltipContent side="top">{tool.label}</TooltipContent>
-              </Tooltip>
-            );
-          }
-
+          const isMode = tool.id !== "autolayout";
+          const isActive = isMode && tool.id === mode;
+          const busy = tool.id === "autolayout" && isPending;
           return (
             <Tooltip key={tool.id}>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={tool.onClick}
-                  disabled={tool.id === "autolayout" && isPending}
-                  className={cn(
-                    "flex items-center justify-center w-9 h-9 rounded-full",
-                    "transition-all duration-150",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                    tool.id === "autolayout" && isPending && "opacity-50 cursor-not-allowed"
-                  )}
+                  disabled={busy}
                   aria-label={tool.label}
+                  aria-pressed={isMode ? isActive : undefined}
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+                    isActive
+                      ? "bg-[var(--primary-soft)] text-[var(--primary)]"
+                      : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+                    busy && "cursor-not-allowed opacity-50",
+                  )}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="h-4 w-4" aria-hidden />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top">{tool.label}</TooltipContent>
+              <TooltipContent side={lang === "ar" ? "right" : "left"}>{tool.label}</TooltipContent>
             </Tooltip>
           );
         })}
@@ -183,7 +200,7 @@ function FloatingToolbar({
   );
 }
 
-function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readOnly = false, guest, highlight }: Props) {
+function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readOnly = false, guest, highlight, focusId, meId }: Props) {
   const isGuest = guest ?? readOnly;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -192,14 +209,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
   const [selectedPerson, setSelectedPerson] = useState<PersonInput | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("select");
 
-  const { fitView } = useReactFlow() as {
-    fitView: (opts?: {
-      padding?: number;
-      duration?: number;
-      maxZoom?: number;
-      nodes?: { id: string }[];
-    }) => void;
-  };
+  const { fitView, zoomIn, zoomOut } = useReactFlow();
   const inspectorRef = useRef<InspectorHandle>(null);
   const selectedPersonRef = useRef(selectedPerson);
   selectedPersonRef.current = selectedPerson;
@@ -224,8 +234,22 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
 
   const highlightIndex = useMemo(() => buildHighlightIndex(highlight), [highlight]);
 
-  // Frame the whole tree on first mount, or just the path when one is active.
-  // Re-frames whenever the set of highlighted people changes (a new pick).
+  // Pan/zoom to one person and select them (search, `/?focus=`, "Center on me").
+  const focusOn = useCallback(
+    (personId: string) => {
+      const person = people.find((p) => p.id === personId);
+      if (!person) return false;
+      setNodes((ns) => ns.map((n) => (n.selected === (n.id === personId) ? n : { ...n, selected: n.id === personId })));
+      fitView({ nodes: [{ id: personId }], minZoom: 1, maxZoom: 1, duration: 500 });
+      if (!readOnly) setSelectedPerson(person);
+      return true;
+    },
+    [people, readOnly, fitView, setNodes],
+  );
+
+  // Frame on first mount: the focused person, else a readable zoom (≥0.8)
+  // centred on the tree rather than fit-all at a tiny scale. With a path
+  // active, frame the path; re-frame whenever the highlighted set changes.
   const highlightedIds = highlightIndex ? highlight!.nodeIds : null;
   const highlightKey = highlightedIds ? highlightedIds.join(",") : "";
   const framedOnce = useRef(false);
@@ -234,13 +258,39 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
       if (highlightKey) {
         fitView({ nodes: highlightKey.split(",").map((id) => ({ id })), padding: 0.3, duration: 500, maxZoom: 1.1 });
       } else if (!framedOnce.current) {
-        fitView({ padding: 0.15, duration: 400 });
+        if (!(focusId && focusOn(focusId))) {
+          fitView({ padding: 0.15, minZoom: 0.8, maxZoom: 1, duration: 300 });
+        }
       }
       framedOnce.current = true;
     }, 100);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fitView is stable; only re-frame when the highlighted set changes
   }, [highlightKey]);
+
+  // `?focus=` is a one-shot instruction: drop it from the address once handled
+  // so a refresh or a later "Back" doesn't jump again.
+  useEffect(() => {
+    if (!focusId) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("focus")) return;
+    url.searchParams.delete("focus");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search);
+  }, [focusId]);
+
+  // The top-bar search asks a mounted canvas to focus someone.
+  useEffect(() => shell.onFocusRequest((id) => void focusOn(id)), [focusOn]);
+
+  // Tell the Add menu who is selected ("Adding to Mariam").
+  useEffect(() => {
+    if (readOnly) return;
+    shell.setCanvasPerson(
+      selectedPerson
+        ? { id: selectedPerson.id, slug: selectedPerson.slug, name: getDisplayName(selectedPerson, lang) }
+        : null,
+    );
+  }, [selectedPerson, readOnly, lang]);
+  useEffect(() => () => shell.setCanvasPerson(null), []);
 
   // Edges carry their highlight state only while a path is active, so the
   // no-highlight path (normal editing/dragging) is untouched.
@@ -260,6 +310,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
       data: {
         ...n.data,
         readOnly,
+        isMe: meId ? n.id === meId : undefined,
         highlight: highlightIndex ? nodeHighlight(highlightIndex, n.id) : undefined,
         onQuickAdd: readOnly
           ? undefined
@@ -276,7 +327,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
             },
       },
     })),
-    [nodes, people, readOnly, highlightIndex],
+    [nodes, people, readOnly, highlightIndex, meId],
   );
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
@@ -683,6 +734,8 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
     fitView({ padding: 0.15, duration: 400 });
   }
 
+  const meOnTree = !!meId && people.some((p) => p.id === meId);
+
   const panOnDrag: number[] = toolMode === "pan" ? [0, 1] : [1, 2];
 
   return (
@@ -707,29 +760,27 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
       />
 
       {!readOnly && (
-        <FloatingToolbar
+        <EditTools
           lang={lang}
           mode={toolMode}
           onMode={setToolMode}
           onAutoLayout={handleAutoLayout}
-          onFitView={handleFitView}
           isPending={isPending}
         />
       )}
 
-      {highlightIndex && (
-        <button
-          type="button"
-          onClick={() =>
-            fitView({ nodes: highlight!.nodeIds.map((id) => ({ id })), padding: 0.3, duration: 500, maxZoom: 1.1 })
-          }
-          title={lang === "ar" ? "تركيز على المسار" : "Focus on the path"}
-          aria-label={lang === "ar" ? "تركيز على المسار" : "Focus on the path"}
-          className="glass-2 absolute end-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] text-[var(--path)] shadow-[var(--shadow-floating)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-        >
-          <LocateFixed className="h-5 w-5" />
-        </button>
-      )}
+      <ViewControls
+        lang={lang}
+        onZoomOut={() => zoomOut({ duration: 200 })}
+        onZoomIn={() => zoomIn({ duration: 200 })}
+        onFit={handleFitView}
+        onFocusPath={
+          highlightIndex
+            ? () => fitView({ nodes: highlight!.nodeIds.map((id) => ({ id })), padding: 0.3, duration: 500, maxZoom: 1.1 })
+            : undefined
+        }
+        onCenterMe={meOnTree ? () => focusOn(meId!) : undefined}
+      />
 
       <CanvasOverlay lang={lang} readOnly={readOnly} pathLegend={!!highlightIndex} />
 
@@ -802,7 +853,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
           <div
             role="menu"
             aria-label={lang === "ar" ? `خيارات: ${edgeMenu.label}` : `Options: ${edgeMenu.label}`}
-            className="glass-2 fixed z-50 flex flex-col gap-1 rounded-xl border border-[var(--border)] p-2 shadow-[var(--shadow-deep)] min-w-[14rem]"
+            className="fixed z-50 flex min-w-[14rem] flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-[var(--shadow-deep)]"
             style={{
               left: Math.min(edgeMenu.x, window.innerWidth - 240),
               top: Math.min(edgeMenu.y, window.innerHeight - 200),
