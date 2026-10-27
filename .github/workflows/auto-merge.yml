@@ -8,13 +8,15 @@ permissions:
   contents: write
   pull-requests: write
   checks: read
+  statuses: read
 
 jobs:
   automerge:
     name: Auto Merge
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
     steps:
-      - name: Wait for other checks, then merge if all passed
+      - name: Wait for checks and the Vercel build, then merge if all passed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ github.event.pull_request.head.sha }}
@@ -22,25 +24,38 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           set -e
-          for i in $(seq 1 60); do
+          # Vercel reports through commit *statuses*, not check-runs, so both
+          # must be inspected. A Vercel status is required: merging before it
+          # appears is how broken builds previously reached main.
+          for i in $(seq 1 80); do
             CHECKS=$(gh api "repos/$REPO/commits/$SHA/check-runs" --jq '[.check_runs[] | select(.name != "Auto Merge")]')
-            TOTAL=$(echo "$CHECKS" | jq 'length')
-            if [ "$TOTAL" -eq 0 ]; then
-              echo "No other checks configured on this commit. Merging now."
-              break
-            fi
-            PENDING=$(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length')
-            if [ "$PENDING" -gt 0 ]; then
-              echo "Waiting for $PENDING check(s) to finish..."
+            STATUSES=$(gh api "repos/$REPO/commits/$SHA/status" --jq '.statuses')
+            VERCEL=$(echo "$STATUSES" | jq '[.[] | select(.context | startswith("Vercel"))]')
+
+            if [ "$(echo "$VERCEL" | jq 'length')" -eq 0 ]; then
+              echo "Waiting for the Vercel build to report..."
               sleep 15
               continue
             fi
-            FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")] | length')
+
+            PENDING=$(( $(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length') \
+                      + $(echo "$STATUSES" | jq '[.[] | select(.state == "pending")] | length') ))
+            if [ "$PENDING" -gt 0 ]; then
+              echo "Waiting for $PENDING check(s)/status(es) to finish..."
+              sleep 15
+              continue
+            fi
+
+            FAILED=$(( $(echo "$CHECKS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")] | length') \
+                     + $(echo "$STATUSES" | jq '[.[] | select(.state != "success")] | length') ))
             if [ "$FAILED" -gt 0 ]; then
-              echo "One or more checks failed. Not merging."
+              echo "One or more checks or the Vercel build failed. Not merging."
               exit 1
             fi
-            echo "All checks passed. Merging."
-            break
+
+            echo "All checks and the Vercel build passed. Merging."
+            gh pr merge --squash --delete-branch "$PR_URL"
+            exit 0
           done
-          gh pr merge --squash --delete-branch "$PR_URL"
+          echo "Timed out waiting for checks (20 min). Not merging."
+          exit 1
