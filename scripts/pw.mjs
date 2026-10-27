@@ -218,13 +218,15 @@ async function runSteps(page, opts, report) {
   return out.join("\n");
 }
 
-// The module's default export receives { page, context, browser, log } and
-// may return a string/object, which is printed.
+// The module's default export receives { page, context, browser, log, fail,
+// extractText } and may return a string/object, which is printed. Calling
+// fail(msg) marks the run as FAIL without aborting it.
 async function runScript(page, opts, report, context, browser) {
   const mod = await import(pathToFileURL(resolve(opts.script)).href);
   if (typeof mod.default !== "function") fail("--script must `export default async ({ page, log }) => {...}`");
   const log = (...a) => report.log.push(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" "));
-  const result = await mod.default({ page, context, browser, log, extractText: (sel) => page.evaluate(extractText, sel ?? null) });
+  const fail = (msg) => { report.failed = true; log(`FAIL: ${msg}`); };
+  const result = await mod.default({ page, context, browser, log, fail, extractText: (sel) => page.evaluate(extractText, sel ?? null) });
   const out = [];
   if (report.log.length) out.push(report.log.join("\n"));
   if (result !== undefined) out.push(typeof result === "string" ? result : JSON.stringify(result, null, 2));
