@@ -15,6 +15,9 @@ export default async function AdminMembersPage() {
 
   const data = await loadMembersAdminData(ctx.supabase);
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  // Raw database errors are for developers only; production shows a plain message.
+  const showRawError = process.env.NODE_ENV === "development";
+  if (data.loadError) console.error("[admin/members] load failed:", data.loadError);
 
   return (
     <div className="flex flex-col gap-5 text-[#241517]">
@@ -33,13 +36,22 @@ export default async function AdminMembersPage() {
       {data.loadError ? (
         <div role="alert" className={`${cardClass} border-[#F6D3BC] bg-[#FFF4EC] p-4 text-sm text-[#9A3412]`}>
           <p className="font-bold">{t("Couldn't load the member lists.", "تعذّر تحميل قوائم الأعضاء.")}</p>
-          <p className="mt-1">
-            {t(
-              "The member-accounts database migrations may not be applied yet.",
-              "ربما لم يتم تطبيق ترحيلات قاعدة البيانات الخاصة بالأعضاء بعد.",
-            )}{" "}
-            <span className="font-mono text-xs">{data.loadError}</span>
-          </p>
+          {showRawError ? (
+            <p className="mt-1">
+              {t(
+                "The member-accounts database migrations may not be applied yet.",
+                "ربما لم يتم تطبيق ترحيلات قاعدة البيانات الخاصة بالأعضاء بعد.",
+              )}{" "}
+              <span className="font-mono text-xs">{data.loadError}</span>
+            </p>
+          ) : (
+            <p className="mt-1">
+              {t(
+                "Please refresh the page. If this keeps happening, contact the site maintainer.",
+                "يرجى تحديث الصفحة. إذا تكرر ذلك، تواصل مع مسؤول الموقع.",
+              )}
+            </p>
+          )}
         </div>
       ) : (
         <MembersAdmin

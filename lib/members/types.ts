@@ -46,6 +46,8 @@ export type MemberAccount = {
   id: string;
   fullName: string;
   email: string | null;
+  /** false = signed up but never confirmed the address; null = unknown (status unavailable). */
+  emailConfirmed: boolean | null;
   dateOfBirth: string | null;
   createdAt: string;
   role: MemberRole;

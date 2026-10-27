@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canTransitionRequest,
   guardProfileUpdate,
+  isLastAdminError,
   roleLabel,
   wouldRemoveLastAdmin,
 } from "./rules";
@@ -90,5 +91,21 @@ describe("roleLabel", () => {
     expect(roleLabel("editor", "en")).toBe("Edit the tree");
     expect(roleLabel("admin", "en")).toBe("Admin");
     expect(roleLabel("admin", "ar")).not.toBe("Admin");
+  });
+});
+
+describe("isLastAdminError (surfaces the profiles_guard trigger refusal)", () => {
+  it("recognises the trigger's hint", () => {
+    expect(isLastAdminError({ hint: "last_admin", message: "anything" })).toBe(true);
+  });
+
+  it("falls back to the message when the hint is missing", () => {
+    expect(isLastAdminError({ hint: null, message: "Cannot remove the last admin" })).toBe(true);
+  });
+
+  it("ignores other errors and no error", () => {
+    expect(isLastAdminError({ hint: null, message: "Only an admin can change role or person_id" })).toBe(false);
+    expect(isLastAdminError(null)).toBe(false);
+    expect(isLastAdminError(undefined)).toBe(false);
   });
 });

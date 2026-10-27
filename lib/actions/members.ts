@@ -6,7 +6,7 @@ import { checkLimit } from "@/lib/ratelimit";
 import { getAdminContext, getSignedInUserId, type AdminContext } from "@/lib/members/auth";
 import { dobToBirthDateText, hasArabic, splitFullName } from "@/lib/members/match";
 import { searchClaimCandidates } from "@/lib/members/search";
-import { canTransitionRequest, wouldRemoveLastAdmin } from "@/lib/members/rules";
+import { canTransitionRequest, isLastAdminError } from "@/lib/members/rules";
 import type { ClaimCandidate, MemberActionResult, MemberRole } from "@/lib/members/types";
 import {
   addFamilyMemberSchema,
@@ -441,9 +441,14 @@ export async function changeMemberRole(
   if (!parsed.success) return BAD_INPUT(t);
   const { profileId, role } = parsed.data;
 
-  const { data: all } = await ctx.supabase.from("profiles").select("id, role");
-  const profiles = (all ?? []) as Array<{ id: string; role: MemberRole }>;
-  if (wouldRemoveLastAdmin(profiles, profileId, role)) {
+  // No read-then-write pre-check: the profiles_guard trigger decides, under an
+  // advisory lock, so two admins demoting each other at once can't both win.
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .update({ role })
+    .eq("id", profileId)
+    .select("id");
+  if (isLastAdminError(error)) {
     return fail(
       t(
         "There must always be at least one admin. Make someone else an admin first.",
@@ -451,12 +456,6 @@ export async function changeMemberRole(
       ),
     );
   }
-
-  const { data, error } = await ctx.supabase
-    .from("profiles")
-    .update({ role })
-    .eq("id", profileId)
-    .select("id");
   if (error || !data || data.length === 0) {
     return fail(t("Couldn't change the role. Please try again.", "تعذّر تغيير الصلاحية. حاول مرة أخرى."));
   }

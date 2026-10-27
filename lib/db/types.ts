@@ -564,6 +564,15 @@ export type Database = {
       }
     }
     Functions: {
+      admin_member_auth_status: {
+        Args: never
+        Returns: {
+          id: string
+          email: string | null
+          email_confirmed_at: string | null
+          last_sign_in_at: string | null
+        }[]
+      }
       claimed_person_ids: { Args: never; Returns: string[] }
       is_admin: { Args: never; Returns: boolean }
     }

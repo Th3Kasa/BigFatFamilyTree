@@ -40,7 +40,8 @@ export type ProfileGuardResult = { ok: true } | { ok: false; reason: string };
  * Who may change profiles.role / profiles.person_id?
  *
  * `actor` is the caller as the database sees them:
- *  - "service" : service role key / sign-up trigger / migration (auth.uid() is null)
+ *  - "service" : a backend database role (service_role key, the sign-up trigger,
+ *                migrations); see public.is_backend_role()
  *  - "admin"   : a signed-in admin
  *  - "member"  : any other signed-in user (viewer / editor), including on their own row
  */
@@ -56,7 +57,11 @@ export function guardProfileUpdate(
   return { ok: true };
 }
 
-/** Would this role change leave the site without any admin? */
+/**
+ * Would this role change leave the site without any admin? UI hint only (it
+ * greys out the sole admin's role picker). The database trigger, serialised
+ * with an advisory lock, is the source of truth: see isLastAdminError().
+ */
 export function wouldRemoveLastAdmin(
   profiles: Array<{ id: string; role: MemberRole }>,
   targetId: string,
@@ -65,6 +70,18 @@ export function wouldRemoveLastAdmin(
   const target = profiles.find((p) => p.id === targetId);
   if (!target || target.role !== "admin" || newRole === "admin") return false;
   return !profiles.some((p) => p.id !== targetId && p.role === "admin");
+}
+
+/**
+ * Did the database refuse because this would remove the last admin? The
+ * profiles_guard trigger raises with hint 'last_admin'
+ * (supabase/migrations/20260521000018_member_hardening.sql).
+ */
+export function isLastAdminError(
+  error: { hint?: string | null; message?: string | null } | null | undefined,
+): boolean {
+  if (!error) return false;
+  return error.hint === "last_admin" || /cannot remove the last admin/i.test(error.message ?? "");
 }
 
 // ── friendly role labels ────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { useId, useState, useSyncExternalStore } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fieldClass, pill, Spinner } from "@/components/members/primitives";
+import { MIN_DOB } from "@/lib/validation/members";
 
 type Lang = "ar" | "en";
 
@@ -92,7 +93,7 @@ export function SignupForm({
           type="date"
           autoComplete="bday"
           required
-          min="1900-01-01"
+          min={MIN_DOB}
           max={todayLocal}
           value={dob}
           onChange={(e) => onDob(e.target.value)}

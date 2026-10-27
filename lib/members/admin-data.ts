@@ -23,11 +23,16 @@ type ProfileRow = {
   person_id: string | null;
 };
 
-function toAccount(p: ProfileRow): MemberAccount {
+type AuthStatus = { email: string | null; email_confirmed_at: string | null };
+
+function toAccount(p: ProfileRow, auth: AuthStatus | undefined): MemberAccount {
+  // auth.users is the live address; profiles.email is a sign-up-time copy.
+  const email = auth?.email ?? p.email;
   return {
     id: p.id,
-    fullName: p.full_name ?? p.display_name ?? p.email?.split("@")[0] ?? "—",
-    email: p.email,
+    fullName: p.full_name ?? p.display_name ?? email?.split("@")[0] ?? "—",
+    email,
+    emailConfirmed: auth ? auth.email_confirmed_at !== null : null,
     dateOfBirth: p.date_of_birth,
     createdAt: p.created_at,
     role: p.role,
@@ -37,7 +42,7 @@ function toAccount(p: ProfileRow): MemberAccount {
 
 /** Everything the /admin/members page renders. Caller must already be an admin. */
 export async function loadMembersAdminData(supabase: Client): Promise<MembersAdminData> {
-  const [profilesRes, requestsRes, peopleRes] = await Promise.all([
+  const [profilesRes, requestsRes, peopleRes, authRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, display_name, full_name, email, date_of_birth, created_at, role, person_id")
@@ -52,6 +57,9 @@ export async function loadMembersAdminData(supabase: Client): Promise<MembersAdm
       .select(PERSON_SUMMARY_COLUMNS)
       .is("deleted_at", null)
       .order("given_en", { ascending: true }),
+    // Admin-only SECURITY DEFINER RPC (20260521000018). If it is missing or
+    // fails, the page still works and simply shows no confirmation badges.
+    supabase.rpc("admin_member_auth_status"),
   ]);
 
   const loadError = profilesRes.error?.message ?? requestsRes.error?.message ?? peopleRes.error?.message;
@@ -61,10 +69,12 @@ export async function loadMembersAdminData(supabase: Client): Promise<MembersAdm
   const parents = new Map(peopleRows.map((p) => [p.id, { given_en: p.given_en, given_ar: p.given_ar }]));
   const people: PersonSummary[] = peopleRows.map((r) => buildPersonSummary(r, parents));
   const personById = new Map(people.map((p) => [p.id, p]));
-  const accountById = new Map(profiles.map((p) => [p.id, toAccount(p)]));
+  const authRows = (authRes.error ? [] : (authRes.data ?? [])) as Array<AuthStatus & { id: string }>;
+  const authById = new Map<string, AuthStatus>(authRows.map((a) => [a.id, a]));
+  const accountById = new Map(profiles.map((p) => [p.id, toAccount(p, authById.get(p.id))]));
 
   const members: MemberRow[] = profiles.map((p) => ({
-    ...toAccount(p),
+    ...toAccount(p, authById.get(p.id)),
     person: p.person_id ? (personById.get(p.person_id) ?? null) : null,
   }));
 

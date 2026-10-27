@@ -7,6 +7,7 @@ import { Mail, Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
 import { signUpProfileSchema } from "@/lib/validation/members";
+import { safeNextPath } from "@/lib/auth/safe-next";
 import { SignupForm, useDocumentLang } from "@/components/auth/SignupForm";
 import { ensureBootstrapUser, signInBootstrapAdmin } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -147,6 +148,14 @@ function friendlySignupError(error: { message: string; status?: number }, lang: 
   return friendlyAuthError(error);
 }
 
+// Where to land after signing in: the ?next= the middleware adds when it
+// bounces a signed-out visitor (e.g. /welcome). Only same-site paths survive
+// safeNextPath(); anything else becomes "/". Called from event handlers only,
+// so reading window is safe.
+function nextFromUrl(): string {
+  return safeNextPath(new URLSearchParams(window.location.search).get("next"));
+}
+
 export default function LoginPage() {
   const lang = useDocumentLang();
   const [email, setEmail] = useState("");
@@ -197,7 +206,7 @@ export default function LoginPage() {
         setErrorMsg(`Verify failed: ${verifyErr.message}`);
         return;
       }
-      window.location.href = "/";
+      window.location.href = nextFromUrl();
       return;
     }
 
@@ -219,7 +228,7 @@ export default function LoginPage() {
       setErrorMsg(`${error.message} ${tag}${adminTag}`);
       return;
     }
-    window.location.href = "/";
+    window.location.href = nextFromUrl();
   }
 
   async function handleMagicLink(e: React.FormEvent) {
@@ -230,11 +239,14 @@ export default function LoginPage() {
     setLoading(true);
     await ensureBootstrapUser(parsed.data.email);
     const supabase = createClient();
+    // A resend after a magic-link sign-up keeps going to /welcome; a normal
+    // sign-in returns to wherever the visitor was headed.
+    const next = afterAuth ?? nextFromUrl();
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback${
-          afterAuth ? `?next=${encodeURIComponent(afterAuth)}` : ""
+          next !== "/" ? `?next=${encodeURIComponent(next)}` : ""
         }`,
       },
     });

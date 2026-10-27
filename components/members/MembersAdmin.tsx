@@ -56,6 +56,23 @@ function formatDob(iso: string | null, lang: Lang): string | null {
   return d.toLocaleDateString(lang, { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 }
 
+/** Shown when the account never confirmed its email, so the address is unproven. */
+function UnconfirmedBadge({ confirmed, lang }: { confirmed: boolean | null; lang: Lang }) {
+  if (confirmed !== false) return null;
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  return (
+    <span
+      title={t(
+        "They haven't clicked the link in their confirmation email yet, so this address isn't verified.",
+        "لم يضغط بعد على رابط التأكيد في بريده، لذا هذا العنوان غير مؤكَّد.",
+      )}
+      className="ms-1.5 inline-flex items-center whitespace-nowrap rounded-full border border-[#F6D3BC] bg-[#FFF4EC] px-2 py-0.5 text-[11px] font-semibold text-[#9A3412]"
+    >
+      {t("Email not confirmed", "البريد غير مؤكَّد")}
+    </span>
+  );
+}
+
 export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const router = useRouter();
@@ -258,7 +275,10 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                                   </span>
                                 ) : null}
                               </div>
-                              <div className="truncate text-xs text-[var(--muted-foreground)]">{m.email ?? "—"}</div>
+                              <div className="flex min-w-0 items-center text-xs text-[var(--muted-foreground)]">
+                                <span className="truncate">{m.email ?? "—"}</span>
+                                <UnconfirmedBadge confirmed={m.emailConfirmed} lang={lang} />
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -427,7 +447,8 @@ function RequestCard({
         <div className="min-w-0">
           <div className="truncate text-[15px] font-bold">{who}</div>
           <div className="break-words text-[13px] text-[var(--muted-foreground)]">
-            {r.account.email ?? "—"} ·{" "}
+            {r.account.email ?? "—"}
+            <UnconfirmedBadge confirmed={r.account.emailConfirmed} lang={lang} /> ·{" "}
             <span suppressHydrationWarning>
               {t("joined", "انضم")} {relativeJoined(r.createdAt, lang)}
             </span>

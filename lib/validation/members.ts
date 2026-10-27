@@ -5,6 +5,7 @@ export function todayIso(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/** Earliest accepted date of birth. Also enforced by profiles_date_of_birth_min and handle_new_user(). */
 export const MIN_DOB = "1900-01-01";
 
 export function isRealIsoDate(value: string): boolean {
