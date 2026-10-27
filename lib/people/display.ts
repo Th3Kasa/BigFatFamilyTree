@@ -8,14 +8,18 @@ import { getNameParts, type NameablePerson } from "@/lib/utils";
 
 export type Lang = "ar" | "en";
 
-/** Soft background + readable ink. Every pair is at least 6:1 (WCAG AA). */
+/**
+ * Soft background + readable ink. Every pair is at least 6:1 (WCAG AA).
+ * `className` repeats the colours as literal Tailwind classes for components
+ * that only accept classes (Tailwind can only see literal strings).
+ */
 export const AVATAR_TONES = [
-  { bg: "#DDE7F1", fg: "#1F4467" },
-  { bg: "#F7E7EB", fg: "#7A1631" },
-  { bg: "#E3EEDF", fg: "#2F5A27" },
-  { bg: "#EFE3D3", fg: "#6A4A1F" },
-  { bg: "#E9D4C4", fg: "#5C3A21" },
-  { bg: "#E8E1F2", fg: "#4A3470" },
+  { bg: "#DDE7F1", fg: "#1F4467", className: "bg-[#DDE7F1] text-[#1F4467]" },
+  { bg: "#F7E7EB", fg: "#7A1631", className: "bg-[#F7E7EB] text-[#7A1631]" },
+  { bg: "#E3EEDF", fg: "#2F5A27", className: "bg-[#E3EEDF] text-[#2F5A27]" },
+  { bg: "#EFE3D3", fg: "#6A4A1F", className: "bg-[#EFE3D3] text-[#6A4A1F]" },
+  { bg: "#E9D4C4", fg: "#5C3A21", className: "bg-[#E9D4C4] text-[#5C3A21]" },
+  { bg: "#E8E1F2", fg: "#4A3470", className: "bg-[#E8E1F2] text-[#4A3470]" },
 ] as const;
 
 export type AvatarTone = (typeof AVATAR_TONES)[number];
