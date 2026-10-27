@@ -53,7 +53,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`${fontSans.variable} ${fontDisplay.variable} ${fontArabic.variable}`}
     >
       <body className="antialiased">
-        <CommandProvider>
+        <CommandProvider lang={lang}>
           {user ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
@@ -63,7 +63,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   {children}
                 </main>
               </div>
-              <MobileNav />
+              <MobileNav lang={lang} />
             </>
           ) : (
             children

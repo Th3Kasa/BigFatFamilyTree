@@ -14,6 +14,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-highlight: var(--highlight);
   --color-highlight-foreground: var(--highlight-foreground);
+  --color-path: var(--path);
+  --color-path-soft: var(--path-soft);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -61,6 +63,10 @@
 
   /* Focus ring lives in the accent family */
   --ring:              oklch(0.68 0.18 38);
+
+  /* Relationship finder — the highlighted path on the tree. #C2410C on white is 5.2:1 (AA). */
+  --path:              #C2410C;
+  --path-soft:         rgb(194 65 12 / 0.16);
 
   /* Semantic */
   --destructive:       oklch(0.55 0.22 22);

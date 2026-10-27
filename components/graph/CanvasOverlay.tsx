@@ -19,9 +19,11 @@ type Props = {
   lang: "ar" | "en";
   /** Guest view: hide the editing hint and the Add-person button; keep the legend. */
   readOnly?: boolean;
+  /** A relationship path is highlighted: add it to the legend. */
+  pathLegend?: boolean;
 };
 
-export function CanvasOverlay({ lang, readOnly = false }: Props) {
+export function CanvasOverlay({ lang, readOnly = false, pathLegend = false }: Props) {
   const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
@@ -90,8 +92,8 @@ export function CanvasOverlay({ lang, readOnly = false }: Props) {
       </AnimatePresence>
 
       {/* Bottom-center legend — informational only, not clickable */}
-      <div className="pointer-events-none absolute bottom-6 left-1/2 z-20 hidden -translate-x-1/2 md:block">
-        <div className="glass-2 flex items-center gap-3 rounded-full border border-[var(--border)] px-3.5 py-1.5 shadow-[var(--shadow-floating)] text-[10px] text-[var(--muted-foreground)]">
+      <div className="pointer-events-none absolute bottom-6 left-1/2 z-20 hidden w-max max-w-[calc(100%-2rem)] -translate-x-1/2 md:block">
+        <div className="glass-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 rounded-3xl border border-[var(--border)] px-3.5 py-1.5 shadow-[var(--shadow-floating)] text-[10px] text-[var(--muted-foreground)]">
           <span
             aria-hidden
             className="font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]/70"
@@ -100,6 +102,9 @@ export function CanvasOverlay({ lang, readOnly = false }: Props) {
             {lang === "ar" ? "المفتاح" : "Legend"}
           </span>
           <Sep />
+          {pathLegend && (
+            <LegendItem color="var(--path)" label={lang === "ar" ? "مسار القرابة" : "Relationship path"} />
+          )}
           <LegendItem
             color={EDGE_STYLES.coupleCurrent.stroke}
             label={lang === "ar" ? "زواج حالي" : "Current couple"}
@@ -186,7 +191,7 @@ function LegendItem({
   ghost?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 whitespace-nowrap">
       <span
         aria-hidden
         className="relative inline-flex h-3.5 w-6 items-center justify-center"

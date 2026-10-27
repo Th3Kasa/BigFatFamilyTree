@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { forwardRef, useActionState, useEffect, useImperativeHandle, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users } from "lucide-react";
+import { ArrowLeft, PlusCircle, ExternalLink, Pencil, Trash2, UserPlus, Heart, Link2Off, Users, Waypoints } from "lucide-react";
 import { toast } from "sonner";
 import { cn, getDisplayName } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1030,6 +1030,12 @@ export const Inspector = forwardRef<InspectorHandle, Props>(function Inspector({
                     <Link href={person ? `/person/${person.slug ?? person.id}` : "#"}>
                       <ExternalLink className="h-3.5 w-3.5" />
                       Full profile
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="w-full rounded-full">
+                    <Link href={person ? `/relationships?b=${person.id}` : "#"}>
+                      <Waypoints className="h-3.5 w-3.5" />
+                      {lang === "ar" ? "ما صلة القرابة بيننا؟" : "How are we related?"}
                     </Link>
                   </Button>
                   <Button
