@@ -490,7 +490,7 @@ export function stepLabel(link: PathLink, toGender: Gender): Term {
     case "guardian":
       return { en: "guardian", ar: g(toGender, "الوصيّ على {A}", "الوصيّة على {A}", "الوصيّ على {A}") };
     case "ward":
-      return { en: "child they raised", ar: g(toGender, "ربيب {A}", "ربيبة {A}", "ربيب {A}") };
+      return { en: g(toGender, "foster son", "foster daughter", "foster child"), ar: g(toGender, "ربيب {A}", "ربيبة {A}", "ربيب {A}") };
     case "godparent":
       return { en: g(toGender, "godfather", "godmother", "godparent"), ar: g(toGender, "عرّاب {A}", "عرّابة {A}", "عرّاب {A}") };
     case "godchild":

@@ -108,6 +108,15 @@ function useResendCountdown(active: boolean, seconds = 30) {
 type Screen = "signin" | "magic" | "signup" | "forgot" | "sent-magic" | "sent-signup" | "sent-reset";
 
 /* ─── main page ──────────────────────────────────────────────── */
+
+// Supabase's built-in mailer allows only a few emails per hour for the whole
+// project; turn its raw error into something a family member understands.
+function friendlyAuthError(error: { message: string; status?: number }): string {
+  if (error.status === 429 || /rate limit/i.test(error.message)) {
+    return "Too many emails were sent just now. Please wait a few minutes and try again.";
+  }
+  return error.message;
+}
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -191,7 +200,7 @@ export default function LoginPage() {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     setLoading(false);
-    if (error) { setErrorMsg(error.message); return; }
+    if (error) { setErrorMsg(friendlyAuthError(error)); return; }
     goTo("sent-magic");
   }
 
@@ -215,7 +224,7 @@ export default function LoginPage() {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     setLoading(false);
-    if (error) { setErrorMsg(error.message); return; }
+    if (error) { setErrorMsg(friendlyAuthError(error)); return; }
     goTo("sent-signup");
   }
 
@@ -230,7 +239,7 @@ export default function LoginPage() {
       redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
     });
     setLoading(false);
-    if (error) { setErrorMsg(error.message); return; }
+    if (error) { setErrorMsg(friendlyAuthError(error)); return; }
     goTo("sent-reset");
   }
 
