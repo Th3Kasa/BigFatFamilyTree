@@ -3,7 +3,6 @@ import { Inter, Fraunces, IBM_Plex_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { getLang } from "@/lib/lang/server";
 import { createClient } from "@/lib/supabase/server";
-import { ThemeProvider } from "@/components/providers/theme-provider";
 import { CommandProvider } from "@/components/providers/command-provider";
 import { TopBar } from "@/components/shell/TopBar";
 import { NavRail } from "@/components/shell/NavRail";
@@ -51,30 +50,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html
       lang={lang}
       dir={lang === "ar" ? "rtl" : "ltr"}
-      suppressHydrationWarning
       className={`${fontSans.variable} ${fontDisplay.variable} ${fontArabic.variable}`}
     >
       <body className="antialiased">
-        <ThemeProvider>
-          <CommandProvider>
-            {user ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
-                  <TopBar user={user} lang={lang} role={role} />
-                  <NavRail lang={lang} role={role} />
-                  <main className="overflow-auto pb-16 md:pb-0">
-                    {children}
-                  </main>
-                </div>
-                <MobileNav />
-              </>
-            ) : (
-              children
-            )}
+        <CommandProvider>
+          {user ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
+                <TopBar user={user} lang={lang} role={role} />
+                <NavRail lang={lang} role={role} />
+                <main className="overflow-auto pb-16 md:pb-0">
+                  {children}
+                </main>
+              </div>
+              <MobileNav />
+            </>
+          ) : (
+            children
+          )}
 
-            <Toaster position="bottom-right" />
-          </CommandProvider>
-        </ThemeProvider>
+          <Toaster position="bottom-right" />
+        </CommandProvider>
       </body>
     </html>
   );

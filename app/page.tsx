@@ -50,7 +50,6 @@ export default async function HomePage() {
                 initialNodes={guestTree.nodes}
                 initialEdges={guestTree.edges}
                 people={guestPeople}
-                relationships={(gRels ?? []) as RelationshipInput[]}
                 lang={lang}
                 readOnly
               />
@@ -125,7 +124,6 @@ export default async function HomePage() {
           initialNodes={nodes}
           initialEdges={edges}
           people={typedPeople}
-          relationships={(relationships ?? []) as RelationshipInput[]}
           lang={lang}
         />
       </div>

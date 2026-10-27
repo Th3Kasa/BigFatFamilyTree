@@ -85,7 +85,7 @@ function TranscriptDetail({
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
               Transcript
             </h3>
-            <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-100 dark:border-amber-900">
+            <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
               <p
                 className="text-sm text-foreground leading-relaxed whitespace-pre-wrap"
                 dir="rtl"
@@ -202,11 +202,11 @@ export function TranscriptsSplitView({ transcripts, selectedId, audioUrl }: Prop
                     onClick={() => selectTranscript(t.id)}
                     className={cn(
                       "w-full text-start px-4 py-3 transition-colors hover:bg-muted/50 group",
-                      selectedId === t.id && "bg-amber-50 dark:bg-amber-950/20 border-s-2 border-amber-500"
+                      selectedId === t.id && "bg-amber-50 border-s-2 border-amber-500"
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <div className="h-8 w-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                         <Mic className="h-4 w-4 text-amber-600" />
                       </div>
                       <div className="flex-1 min-w-0">

@@ -29,9 +29,9 @@ type Props = {
 };
 
 const OP_COLORS: Record<string, string> = {
-  insert: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
-  delete: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800",
-  update: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
+  insert: "bg-green-50 text-green-700 border-green-200",
+  delete: "bg-red-50 text-red-700 border-red-200",
+  update: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
 const ALL_OPS = ["INSERT", "UPDATE", "DELETE"];
@@ -70,10 +70,10 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
               "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border transition-colors",
               activeOps.has(op)
                 ? op === "INSERT"
-                  ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/40 dark:text-green-400 dark:border-green-700"
+                  ? "bg-green-100 text-green-700 border-green-300"
                   : op === "DELETE"
-                  ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-400 dark:border-red-700"
-                  : "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/40 dark:text-blue-400 dark:border-blue-700"
+                  ? "bg-red-100 text-red-700 border-red-300"
+                  : "bg-blue-100 text-blue-700 border-blue-300"
                 : "bg-muted text-muted-foreground border-border hover:bg-muted/70"
             )}
           >
@@ -119,7 +119,7 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
                   key={r.id}
                   onClick={() => setSelectedRow(r)}
                   className={cn(
-                    "cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-amber-50 dark:hover:bg-amber-950/10",
+                    "cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-amber-50",
                     i % 2 === 0 ? "bg-card" : "bg-muted/20"
                   )}
                 >
@@ -211,7 +211,7 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                     Before
                   </h4>
-                  <pre className="text-xs font-mono bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-xl p-4 overflow-x-auto whitespace-pre-wrap text-red-800 dark:text-red-300">
+                  <pre className="text-xs font-mono bg-red-50 border border-red-200 rounded-xl p-4 overflow-x-auto whitespace-pre-wrap text-red-800">
                     {JSON.stringify(selectedRow.before, null, 2)}
                   </pre>
                 </section>
@@ -222,7 +222,7 @@ export function AuditTable({ rows, page, totalPages, count }: Props) {
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                     After
                   </h4>
-                  <pre className="text-xs font-mono bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 overflow-x-auto whitespace-pre-wrap text-green-800 dark:text-green-300">
+                  <pre className="text-xs font-mono bg-green-50 border border-green-200 rounded-xl p-4 overflow-x-auto whitespace-pre-wrap text-green-800">
                     {JSON.stringify(selectedRow.after, null, 2)}
                   </pre>
                 </section>
