@@ -46,7 +46,16 @@ export const limiters = new Proxy({} as ReturnType<typeof getLimiters>, {
 
 export type LimiterKey = keyof ReturnType<typeof getLimiters>;
 
+// Fails open: if Upstash is unreachable (outage, or a free-tier database
+// deleted for inactivity) the request is allowed and the error logged, rather
+// than taking down every route that is rate limited. Supabase Auth applies its
+// own sign-in rate limits, so auth stays protected meanwhile.
 export async function checkLimit(key: LimiterKey, identifier: string) {
-  const { success, limit, remaining, reset } = await getLimiters()[key].limit(identifier);
-  return { success, limit, remaining, reset };
+  try {
+    const { success, limit, remaining, reset } = await getLimiters()[key].limit(identifier);
+    return { success, limit, remaining, reset };
+  } catch (err) {
+    console.error(`[ratelimit] "${key}" check failed; allowing request`, err);
+    return { success: true, limit: 0, remaining: 0, reset: 0 };
+  }
 }
