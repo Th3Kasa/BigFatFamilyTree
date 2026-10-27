@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 // /auth/callback and exchanges them for an SSR cookie session.
 // Only called by our own IMPLICIT_FLOW_HTML page — not a public API.
 export async function POST(request: NextRequest) {
-  let body: { access_token?: string; refresh_token?: string; type?: string };
+  let body: { access_token?: string; refresh_token?: string; type?: string; next?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -26,6 +26,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 401 });
   }
 
-  const next = type === "recovery" ? "/update-password" : "/";
+  // Honour a same-site ?next= (e.g. /welcome for new sign-ups); never an open redirect.
+  const requested = typeof body.next === "string" ? body.next : "/";
+  const safeNext =
+    requested.startsWith("/") && !requested.startsWith("//") && !requested.startsWith("/\\")
+      ? requested
+      : "/";
+  const next = type === "recovery" ? "/update-password" : safeNext;
   return NextResponse.json({ next });
 }

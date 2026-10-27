@@ -36,7 +36,7 @@ const IMPLICIT_FLOW_HTML = `<!DOCTYPE html>
       fetch('/api/auth/set-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: at, refresh_token: rt, type: tp })
+        body: JSON.stringify({ access_token: at, refresh_token: rt, type: tp, next: new URLSearchParams(window.location.search).get('next') })
       })
       .then(function(r) { return r.json(); })
       .then(function(d) { window.location.replace(d.next || '/'); })
