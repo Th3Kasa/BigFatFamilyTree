@@ -12,7 +12,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { Home, Mic, LogOut, Languages, LayoutGrid, UserPlus } from "lucide-react";
+import { Home, Mic, LogOut, Languages, LayoutGrid, UserPlus, Waypoints } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getDisplayName } from "@/lib/utils";
 
@@ -135,6 +135,13 @@ export function CommandProvider({
           <CommandSeparator />
 
           <CommandGroup heading="Actions">
+            <CommandItem
+              value="How are we related? relationship kin cousin family connection ما صلة القرابة"
+              onSelect={() => run(() => router.push("/relationships"))}
+            >
+              <Waypoints />
+              {lang === "ar" ? "ما صلة القرابة بيننا؟" : "How are we related?"}
+            </CommandItem>
             <CommandItem onSelect={() => run(() => router.push("/person/new"))}>
               <UserPlus />
               Add person

@@ -2,6 +2,7 @@
 
 import type { EdgeProps } from "@xyflow/react";
 import { EDGE_STYLES, GHOST_OPACITY, WIDOWED_GLYPH } from "@/lib/graph/edge-styles";
+import { DIM_OPACITY, type EdgeHighlight } from "@/lib/graph/highlight";
 
 type SpouseData = {
   edgeKind: "spouse";
@@ -13,6 +14,8 @@ type SpouseData = {
   orderIndex?: number;
   /** True when either spouse has more than one marriage. */
   showOrder?: boolean;
+  /** Relationship-finder highlight; present only while a path is active. */
+  highlight?: EdgeHighlight;
 };
 
 // Renders the marriage line as a guaranteed-horizontal segment.
@@ -30,7 +33,10 @@ export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data 
     ghost = false,
     orderIndex,
     showOrder = false,
+    highlight,
   } = (data ?? {}) as SpouseData;
+  const onPath = !!highlight?.on;
+  const dimmed = !!highlight && !highlight.on;
 
   // Horizontal marriage bar at the LOWER of the two handle Y coordinates
   const lineY = Math.max(sourceY, targetY);
@@ -51,14 +57,18 @@ export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data 
     EDGE_STYLES.coupleCurrent;
 
   const midX = (sourceX + targetX) / 2;
+  const stroke = onPath ? "var(--path)" : style.stroke;
 
   return (
-    <g opacity={ghost ? GHOST_OPACITY : 1}>
+    <g opacity={onPath ? 1 : (ghost ? GHOST_OPACITY : 1) * (dimmed ? DIM_OPACITY : 1)}>
+      {onPath ? (
+        <path d={d} style={{ stroke: "var(--path-soft)", strokeWidth: 10, fill: "none" }} strokeLinecap="round" />
+      ) : null}
       <path
         d={d}
         style={{
-          stroke: style.stroke,
-          strokeWidth: selected ? 3 : 2,
+          stroke,
+          strokeWidth: onPath ? 4 : selected ? 3 : 2,
           fill: "none",
           strokeDasharray: style.dash,
         }}
@@ -74,7 +84,7 @@ export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data 
           y={lineY - 5}
           textAnchor="middle"
           style={{
-            fill: style.stroke,
+            fill: stroke,
             fontSize: 12,
             fontWeight: 600,
             userSelect: "none",
@@ -92,14 +102,14 @@ export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data 
             cx={midX}
             cy={lineY + 12}
             r={8}
-            style={{ fill: "var(--background, white)", stroke: style.stroke, strokeWidth: 1.5 }}
+            style={{ fill: "var(--background, white)", stroke, strokeWidth: 1.5 }}
           />
           <text
             x={midX}
             y={lineY + 12}
             textAnchor="middle"
             dominantBaseline="central"
-            style={{ fill: style.stroke, fontSize: 10, fontWeight: 700, userSelect: "none" }}
+            style={{ fill: stroke, fontSize: 10, fontWeight: 700, userSelect: "none" }}
           >
             {orderIndex}
           </text>

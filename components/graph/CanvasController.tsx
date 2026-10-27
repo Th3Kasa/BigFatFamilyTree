@@ -11,6 +11,7 @@ import {
   Hand,
   Maximize2,
   LayoutGrid,
+  LocateFixed,
 } from "lucide-react";
 import { FamilyGraph } from "./FamilyGraph";
 import { Inspector, type InspectorHandle } from "./Inspector";
@@ -39,7 +40,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, getDisplayName } from "@/lib/utils";
+import {
+  applyEdgeHighlight,
+  buildHighlightIndex,
+  nodeHighlight,
+  type PathHighlight,
+} from "@/lib/graph/highlight";
 import type { GraphNode, GraphEdge, PersonInput } from "@/lib/graph/transform";
 
 type Props = {
@@ -49,6 +56,13 @@ type Props = {
   lang: "ar" | "en";
   /** Guest (signed-out) view: pan/zoom only, no editing, no detail drawer. */
   readOnly?: boolean;
+  /**
+   * Signed-out visitor. Defaults to `readOnly`; pass `false` for a read-only view
+   * a signed-in person is looking at (e.g. the relationship finder).
+   */
+  guest?: boolean;
+  /** Relationship-finder path to light up; everything else fades back. */
+  highlight?: PathHighlight | null;
 };
 
 type ToolMode = "select" | "pan";
@@ -169,7 +183,8 @@ function FloatingToolbar({
   );
 }
 
-function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readOnly = false }: Props) {
+function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readOnly = false, guest, highlight }: Props) {
+  const isGuest = guest ?? readOnly;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [menu, setMenu] = useState<ContextMenuTarget | null>(null);
@@ -177,7 +192,14 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
   const [selectedPerson, setSelectedPerson] = useState<PersonInput | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("select");
 
-  const { fitView } = useReactFlow() as { fitView: (opts?: { padding?: number; duration?: number }) => void };
+  const { fitView } = useReactFlow() as {
+    fitView: (opts?: {
+      padding?: number;
+      duration?: number;
+      maxZoom?: number;
+      nodes?: { id: string }[];
+    }) => void;
+  };
   const inspectorRef = useRef<InspectorHandle>(null);
   const selectedPersonRef = useRef(selectedPerson);
   selectedPersonRef.current = selectedPerson;
@@ -200,11 +222,35 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
     }
   }, [people]);
 
-  // Fit view once after initial mount
+  const highlightIndex = useMemo(() => buildHighlightIndex(highlight), [highlight]);
+
+  // Frame the whole tree on first mount, or just the path when one is active.
+  // Re-frames whenever the set of highlighted people changes (a new pick).
+  const highlightedIds = highlightIndex ? highlight!.nodeIds : null;
+  const highlightKey = highlightedIds ? highlightedIds.join(",") : "";
+  const framedOnce = useRef(false);
   useEffect(() => {
-    const t = setTimeout(() => fitView({ padding: 0.15, duration: 400 }), 100);
+    const t = setTimeout(() => {
+      if (highlightKey) {
+        fitView({ nodes: highlightKey.split(",").map((id) => ({ id })), padding: 0.3, duration: 500, maxZoom: 1.1 });
+      } else if (!framedOnce.current) {
+        fitView({ padding: 0.15, duration: 400 });
+      }
+      framedOnce.current = true;
+    }, 100);
     return () => clearTimeout(t);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fitView is stable; only re-frame when the highlighted set changes
+  }, [highlightKey]);
+
+  // Edges carry their highlight state only while a path is active, so the
+  // no-highlight path (normal editing/dragging) is untouched.
+  const displayEdges = useMemo(
+    () =>
+      highlightIndex
+        ? (edges as unknown as GraphEdge[]).map((e) => applyEdgeHighlight(e, highlightIndex))
+        : edges,
+    [edges, highlightIndex],
+  );
 
   // Inject onQuickAdd callbacks so node card buttons open the Inspector quick-add
   // panel instead of navigating to the full /person/new form.
@@ -214,6 +260,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
       data: {
         ...n.data,
         readOnly,
+        highlight: highlightIndex ? nodeHighlight(highlightIndex, n.id) : undefined,
         onQuickAdd: readOnly
           ? undefined
           : (kind: "child" | "spouse") => {
@@ -229,7 +276,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
             },
       },
     })),
-    [nodes, people, readOnly],
+    [nodes, people, readOnly, highlightIndex],
   );
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
@@ -494,6 +541,18 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
     (_e: React.MouseEvent, node: { id: string }) => {
       const person = people.find((p) => p.id === node.id) ?? null;
       // Guests can see the tree but not per-person details — nudge them to sign in.
+      if (readOnly && !isGuest) {
+        // Signed-in, read-only (relationship finder): offer the profile instead of navigating on a stray tap.
+        if (person) {
+          toast(getDisplayName(person, lang), {
+            action: {
+              label: lang === "ar" ? "فتح الملف" : "Open profile",
+              onClick: () => router.push(`/person/${person.slug ?? person.id}`),
+            },
+          });
+        }
+        return;
+      }
       if (readOnly) {
         const name = person
           ? (lang === "ar" ? person.given_ar ?? person.given_en : person.given_en ?? person.given_ar)
@@ -513,7 +572,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
       }
       setSelectedPerson(person);
     },
-    [people, readOnly, lang, router]
+    [people, readOnly, isGuest, lang, router]
   );
 
   const onPaneClick = useCallback(() => {
@@ -630,7 +689,7 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
     <div className="relative w-full h-full">
       <FamilyGraph
         nodes={nodesWithCallbacks}
-        edges={edges}
+        edges={displayEdges as typeof edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
@@ -658,7 +717,21 @@ function CanvasControllerInner({ initialNodes, initialEdges, people, lang, readO
         />
       )}
 
-      <CanvasOverlay lang={lang} readOnly={readOnly} />
+      {highlightIndex && (
+        <button
+          type="button"
+          onClick={() =>
+            fitView({ nodes: highlight!.nodeIds.map((id) => ({ id })), padding: 0.3, duration: 500, maxZoom: 1.1 })
+          }
+          title={lang === "ar" ? "تركيز على المسار" : "Focus on the path"}
+          aria-label={lang === "ar" ? "تركيز على المسار" : "Focus on the path"}
+          className="glass-2 absolute end-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] text-[var(--path)] shadow-[var(--shadow-floating)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+        >
+          <LocateFixed className="h-5 w-5" />
+        </button>
+      )}
+
+      <CanvasOverlay lang={lang} readOnly={readOnly} pathLegend={!!highlightIndex} />
 
       {!readOnly && (
       <>

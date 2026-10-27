@@ -10,6 +10,7 @@ import { Eye, Plus, Heart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { deletePersonCanvas } from "@/lib/actions/people";
+import { DIM_OPACITY, type NodeHighlight } from "@/lib/graph/highlight";
 import type { PersonNodeData } from "@/lib/graph/transform";
 
 type PersonNodeType = Node<PersonNodeData, "person">;
@@ -46,8 +47,36 @@ const STACKED_TARGET_STYLE: React.CSSProperties = {
   opacity: 0,
 };
 
+/** Orange ring around people on the highlighted relationship path. */
+function pathRing(h: NodeHighlight | undefined): React.CSSProperties | undefined {
+  if (h?.state !== "on") return undefined;
+  return h.step != null
+    ? { boxShadow: "0 0 0 3px var(--path), 0 0 0 9px var(--path-soft)" }
+    : { boxShadow: "0 0 0 2px var(--path), 0 0 0 7px var(--path-soft)" };
+}
+
+/** Step number for people on the route; a small tag for shared ancestors off it. */
+function PathMarker({ highlight, lang }: { highlight: NodeHighlight | undefined; lang: "ar" | "en" }) {
+  if (highlight?.state !== "on") return null;
+  if (highlight.step != null) {
+    return (
+      <span className="absolute -start-3 -top-3 z-30 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--path)] text-sm font-bold text-white shadow-md ring-2 ring-white">
+        <span className="sr-only">{lang === "ar" ? "الخطوة " : "Step "}</span>
+        {highlight.step}
+      </span>
+    );
+  }
+  return (
+    <span className="absolute start-3 -top-3 z-30 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[var(--path)] shadow-sm ring-1 ring-[var(--path)]">
+      {lang === "ar" ? "جدّ مشترك" : "Shared ancestor"}
+    </span>
+  );
+}
+
 export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
-  const { person, spouseId, lang, readOnly } = data;
+  const { person, spouseId, lang, readOnly, highlight } = data;
+  const dimmed = highlight?.state === "dim";
+  const ring = pathRing(highlight);
   const [hovered, setHovered] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const router = useRouter();
@@ -111,12 +140,14 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           onKeyDown={readOnly ? undefined : (e) => e.key === "Enter" && router.push(`/person/${person.slug ?? person.id}/edit`)}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
+          style={dimmed ? { opacity: DIM_OPACITY } : undefined}
           className={cn(
-            "relative flex w-[220px] h-[240px] items-start justify-center pt-6",
+            "relative flex w-[220px] h-[240px] items-start justify-center pt-6 transition-opacity duration-300",
             readOnly ? "cursor-default" : "cursor-pointer",
           )}
         >
           <div
+            style={ring}
             className={cn(
               "relative flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--card)]/70 px-4 py-3 text-center transition-[transform,border-color,box-shadow] duration-300 ease-out",
               "shadow-[0_2px_10px_-4px_rgba(40,10,15,0.10)]",
@@ -124,6 +155,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
               hovered && "-translate-y-px border-[var(--accent)]/70",
             )}
           >
+            <PathMarker highlight={highlight} lang={lang} />
             {!readOnly && <button
               type="button"
               tabIndex={deleteConfirm || hovered ? 0 : -1}
@@ -230,7 +262,7 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
 
       <motion.div
         initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
+        animate={{ opacity: dimmed ? DIM_OPACITY : 1, y: 0 }}
         transition={{ duration: 0.32, ease: [0.32, 0.72, 0.32, 1] }}
         className="relative"
         onMouseEnter={() => setHovered(true)}
@@ -248,8 +280,11 @@ export function PersonNode({ data, selected }: NodeProps<PersonNodeType>) {
           )}
         />
 
+        <PathMarker highlight={highlight} lang={lang} />
+
         {/* Card */}
         <div
+          style={ring}
           className={cn(
             "relative z-10 w-[220px] h-[240px] overflow-hidden rounded-[24px] cursor-default",
             "glass-2 border border-[var(--border)]",
