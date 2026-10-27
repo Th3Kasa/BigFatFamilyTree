@@ -39,10 +39,11 @@ A failed action (click, fill, goto…) stops the run. Failed `expect*` checks ar
 **3. Custom Playwright code**, for loops, branching or anything the step list can't express. Write a temporary `.mjs` file in the scratchpad:
 ```js
 // <scratchpad>/check.mjs
-export default async ({ page, context, log, extractText }) => {
+export default async ({ page, context, log, fail, extractText }) => {
   for (const path of ["/", "/login"]) {
     const res = await page.goto("http://localhost:3000" + path);
     log(res.status(), path, await page.title());
+    if (res.status() >= 500) fail(`${path} returned ${res.status()}`);
   }
   return await extractText("main"); // optional: printed after the logs
 };
@@ -50,7 +51,7 @@ export default async ({ page, context, log, extractText }) => {
 ```bash
 node scripts/pw.mjs --script "<scratchpad>/check.mjs"
 ```
-Collected console, page and network errors are appended automatically.
+`fail(msg)` marks the run FAIL without stopping it. Collected console, page and network errors are appended automatically. A reusable example is `scripts/smoke-routes.mjs` (checks every app route; `SITE_URL` env overrides the target).
 
 **4. Crawl a site** to check every same-origin page it links to (skips `/_*` internals and static files):
 ```bash
