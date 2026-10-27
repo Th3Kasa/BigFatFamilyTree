@@ -17,4 +17,22 @@ describe("ratelimit module", () => {
     expect(mod.limiters.upload).toBeDefined();
     expect(mod.limiters.generic).toBeDefined();
   });
+
+  it("fails open when Upstash is unreachable", async () => {
+    vi.doMock("@upstash/ratelimit", () => {
+      class Ratelimit {
+        static slidingWindow = () => ({});
+        limit = () => Promise.reject(new TypeError("fetch failed"));
+      }
+      return { Ratelimit };
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { checkLimit } = await import("@/lib/ratelimit");
+
+    await expect(checkLimit("auth", "1.2.3.4")).resolves.toMatchObject({ success: true });
+    expect(errSpy).toHaveBeenCalledOnce();
+
+    errSpy.mockRestore();
+    vi.doUnmock("@upstash/ratelimit");
+  });
 });
