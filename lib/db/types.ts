@@ -184,6 +184,61 @@ export type Database = {
           },
         ]
       }
+      link_requests: {
+        Row: {
+          created_at: string
+          id: string
+          parents_note: string | null
+          person_id: string | null
+          profile_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["link_request_status"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          parents_note?: string | null
+          person_id?: string | null
+          profile_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["link_request_status"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          parents_note?: string | null
+          person_id?: string | null
+          profile_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["link_request_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "link_requests_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "link_requests_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "link_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       people: {
         Row: {
           created_at: string
@@ -304,25 +359,37 @@ export type Database = {
         Row: {
           canvas_viewport: Json | null
           created_at: string
+          date_of_birth: string | null
           display_name: string | null
+          email: string | null
+          full_name: string | null
           id: string
           invited_by: string | null
+          person_id: string | null
           role: Database["public"]["Enums"]["user_role"]
         }
         Insert: {
           canvas_viewport?: Json | null
           created_at?: string
+          date_of_birth?: string | null
           display_name?: string | null
+          email?: string | null
+          full_name?: string | null
           id: string
           invited_by?: string | null
+          person_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
         }
         Update: {
           canvas_viewport?: Json | null
           created_at?: string
+          date_of_birth?: string | null
           display_name?: string | null
+          email?: string | null
+          full_name?: string | null
           id?: string
           invited_by?: string | null
+          person_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
         }
         Relationships: [
@@ -331,6 +398,13 @@ export type Database = {
             columns: ["invited_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: true
+            referencedRelation: "people"
             referencedColumns: ["id"]
           },
         ]
@@ -490,6 +564,7 @@ export type Database = {
       }
     }
     Functions: {
+      claimed_person_ids: { Args: never; Returns: string[] }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
@@ -516,6 +591,7 @@ export type Database = {
         | "notable_story"
         | "custom"
       gender_type: "m" | "f" | "unknown"
+      link_request_status: "pending" | "approved" | "declined" | "cancelled"
       proposal_status_type: "pending" | "approved" | "rejected"
       relationship_status_type: "current" | "divorced" | "widowed"
       relationship_type: "spouse" | "adopted_by" | "raised_by" | "godparent"
@@ -673,6 +749,7 @@ export const Constants = {
         "custom",
       ],
       gender_type: ["m", "f", "unknown"],
+      link_request_status: ["pending", "approved", "declined", "cancelled"],
       proposal_status_type: ["pending", "approved", "rejected"],
       relationship_status_type: ["current", "divorced", "widowed"],
       relationship_type: ["spouse", "adopted_by", "raised_by", "godparent"],
