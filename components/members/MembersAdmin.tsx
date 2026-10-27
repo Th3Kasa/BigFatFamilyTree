@@ -426,7 +426,7 @@ function RequestCard({
         <Initials name={who} size={44} />
         <div className="min-w-0">
           <div className="truncate text-[15px] font-bold">{who}</div>
-          <div className="truncate text-[13px] text-[var(--muted-foreground)]">
+          <div className="break-words text-[13px] text-[var(--muted-foreground)]">
             {r.account.email ?? "—"} ·{" "}
             <span suppressHydrationWarning>
               {t("joined", "انضم")} {relativeJoined(r.createdAt, lang)}
