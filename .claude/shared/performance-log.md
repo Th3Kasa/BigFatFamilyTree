@@ -22,6 +22,16 @@ Alfred logs every significant task here. This is the raw data that powers team e
 
 ## Active Log
 
+### 2026-10-27 — Task #9 (Vercel outage + text-only Playwright runner)
+**Task:** Explain why every Vercel deployment errors, fix it so all pages run, and replace the browser MCP with a text-only Playwright runner
+**Agents used:** Alfred solo (Vercel MCP, Supabase MCP, GitHub CLI)
+**Outcome:** ⚠️ Partially shipped. Build fix is in draft PR #234 (preview READY). Live login still returns 500 until the user restores the paused Supabase project (restore was blocked by the permission classifier).
+**Quality gate result:** HOLD on "all pages running" until Supabase is restored; build fix verified (typecheck, 53/53 tests, next build, Vercel preview READY)
+**What worked:** Build logs pinpointed the ERESOLVE in one call; the new pw.mjs runner found the second, hidden outage (paused Supabase) that a green build would have masked
+**What didn't:** About 60 Dependabot PRs auto-merged onto a broken install over six weeks, because auto-merge only read check-runs and Vercel reports commit statuses
+**Agent ratings this task:** Alfred solo ⭐⭐⭐⭐ — the root cause was found quickly, but checking whether the app actually ran should have happened in the first answer, not after the user asked
+**Improvement opportunity:** devops-deploy should check build status AND a runtime smoke test (pw.mjs crawl) of production whenever it diagnoses deployment errors
+
 ### 2026-05-24 — Task #8 (QA Pass 8 — 10 defects resolved)
 **Task:** Fix QA8 findings: linkSpouse missing both-party revalidation, createPersonQuick missing spouseId/childId revalidation, addSibling slug-only revalidation gap, handleRemoveEdge sync mutation error, handlePick missing startTransition, ring-rose-200/ring-sky-200 color tokens in Inspector, female AvatarFallback hardcoded color in PersonNode, ring-rose-200 in PersonPicker, bare border class in QuickAddDialog
 **Agents used:** qa-guard (audit, background), Alfred (all fixes)

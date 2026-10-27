@@ -64,7 +64,11 @@ Post-deploy:
 [ ] Auth flow works in production
 [ ] No errors in Vercel runtime logs
 [ ] No new error spikes in Sentry
+[ ] `node scripts/pw.mjs --crawl <prod-url>` shows no 5xx (a green build ≠ a working app)
+[ ] Supabase project status is ACTIVE (the free tier auto-pauses after inactivity)
 ```
+
+When diagnosing failed deployments, also check the auto-merge/CI gate: a gate that passes on zero checks lets broken PRs reach main. Vercel reports commit statuses, not check-runs.
 
 ## Communication Back to Alfred
 Deployment status + URL, build log findings, env var changes, migrations applied, post-deploy issues and resolution.

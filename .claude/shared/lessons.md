@@ -15,6 +15,14 @@ Mistakes and patterns logged here. tech-curator reviews and updates agent prompt
 
 ## Active Lessons
 
+### 2026-10-27 — Critical (Task #9)
+**Agent:** devops-deploy / Alfred
+**What happened:** Production stopped deploying on 2026-09-14 (three 0.186 vs postprocessing peer range) and nobody noticed for six weeks. Separately, the free-tier Supabase project auto-paused, so /login returns 500 on the live site.
+**Root cause:** The auto-merge workflow treated "no check-runs" as a pass, and Vercel reports commit statuses, so broken Dependabot PRs merged unchecked. There was no runtime smoke check, so the paused database was invisible.
+**Fix applied:** auto-merge.yml now requires a successful Vercel status (PR #234); three is pinned and Dependabot ignores three >= 0.186.
+**Prevention:** After any deploy diagnosis, run `node scripts/pw.mjs --crawl <prod-url>` and fail on any 5xx. Never let a CI gate pass on zero checks.
+**Prompt update needed:** Yes — added pw.mjs crawl, Supabase status and zero-checks gate items to the devops-deploy checklist. Fix applied 2026-10-27.
+
 ### 2026-05-23 — Critical (QA7-04)
 **Agent:** Alfred
 **What happened:** QA5-03 added `aria-hidden="true"` to the outer backdrop div of `QuickAddDialog` to mark it as decorative. The `role="dialog"` element is a child of that div, so `aria-hidden` on the parent hid the entire dialog from the accessibility tree — a complete WCAG 2.1 SC 4.1.3 regression introduced by the fix itself.
