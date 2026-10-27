@@ -161,7 +161,7 @@ function InlineQuickAdd({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0.32, 1] }}
-      className="absolute inset-0 flex flex-col bg-[var(--background,white)] dark:bg-[var(--background)]"
+      className="absolute inset-0 flex flex-col bg-[var(--background,white)]"
     >
       {/* Panel header */}
       <div className="flex items-center gap-2 px-6 pt-5 pb-4 border-b border-[var(--border)]">

@@ -41,6 +41,8 @@
 }
 
 :root {
+  color-scheme: light;
+
   /* Neutrals — warm parchment */
   --background:        oklch(0.985 0.012 60);
   --foreground:        oklch(0.18 0.04 15);
@@ -92,67 +94,6 @@
   --font-sans: "Inter Variable", system-ui, sans-serif;
   --font-display: "Fraunces Variable", Georgia, serif;
   --font-arabic: "IBM Plex Sans Arabic", system-ui, sans-serif;
-}
-
-.dark,
-[data-theme="dark"] {
-  --background:        oklch(0.14 0.04 18);
-  --foreground:        oklch(0.95 0.012 60);
-  --muted:             oklch(0.20 0.04 18);
-  --muted-foreground:  oklch(0.62 0.025 25);
-  --border:            oklch(0.26 0.04 18);
-  --input:             oklch(0.23 0.04 18);
-
-  --primary:           oklch(0.62 0.18 22);
-  --primary-foreground: oklch(0.99 0 0);
-  --accent:            oklch(0.72 0.18 38);
-  --accent-foreground: oklch(0.14 0.04 18);
-  --highlight:         oklch(0.66 0.22 18);
-  --highlight-foreground: oklch(0.99 0 0);
-  --ring:              oklch(0.72 0.18 38);
-
-  --destructive:       oklch(0.66 0.22 22);
-  --success:           oklch(0.66 0.15 145);
-  --warning:           oklch(0.78 0.18 70);
-
-  --secondary:         oklch(0.22 0.04 18);
-  --secondary-foreground: oklch(0.95 0.012 60);
-
-  --card:              oklch(0.18 0.04 18);
-  --card-foreground:   oklch(0.95 0.012 60);
-  --popover:           oklch(0.18 0.04 18);
-  --popover-foreground: oklch(0.95 0.012 60);
-
-  --surface-1:         oklch(0.20 0.04 18 / 0.78);
-  --surface-2:         oklch(0.22 0.04 18 / 0.88);
-
-  --shadow-floating:   0 1px 2px oklch(0 0 0 / 0.35),
-                       0 10px 28px oklch(0 0 0 / 0.5);
-  --shadow-deep:       0 1px 2px oklch(0 0 0 / 0.45),
-                       0 18px 44px oklch(0 0 0 / 0.6);
-  --shadow-glow:       0 0 0 1px oklch(0.72 0.18 38 / 0.30),
-                       0 8px 32px oklch(0.72 0.18 38 / 0.35);
-}
-
-[data-theme="archive"] {
-  --background:        oklch(0.95 0.024 60);
-  --foreground:        oklch(0.14 0.05 18);
-  --muted:             oklch(0.92 0.022 50);
-  --muted-foreground:  oklch(0.42 0.04 25);
-  --border:            oklch(0.86 0.022 40);
-  --input:             oklch(0.91 0.020 50);
-
-  --primary:           oklch(0.32 0.13 18);
-  --primary-foreground: oklch(0.985 0.006 60);
-  --accent:            oklch(0.68 0.20 38);
-  --accent-foreground: oklch(0.14 0.05 18);
-  --highlight:         oklch(0.60 0.22 18);
-  --ring:              oklch(0.68 0.20 38);
-
-  --card:              oklch(0.97 0.015 60);
-  --card-foreground:   oklch(0.14 0.05 18);
-  --popover:           oklch(0.97 0.015 60);
-  --popover-foreground: oklch(0.14 0.05 18);
 }
 
 /* ── Canvas / page background — subtle parchment + burgundy bloom ── */
