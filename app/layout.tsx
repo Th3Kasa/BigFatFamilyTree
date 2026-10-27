@@ -4,6 +4,8 @@ import "./globals.css";
 import { getLang } from "@/lib/lang/server";
 import { createClient } from "@/lib/supabase/server";
 import { CommandProvider } from "@/components/providers/command-provider";
+import { CurrentPersonProvider } from "@/components/providers/current-person-provider";
+import { fetchCurrentPerson } from "@/lib/members/current-person";
 import { TopBar } from "@/components/shell/TopBar";
 import { NavRail } from "@/components/shell/NavRail";
 import { MobileNav } from "@/components/shell/MobileNav";
@@ -45,6 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     ? await supabase.from("profiles").select("role").eq("id", user.id).single()
     : { data: null };
   const role = (profile as { role?: string | null } | null)?.role ?? undefined;
+  const currentPerson = user ? await fetchCurrentPerson(supabase, user.id) : null;
 
   return (
     <html
@@ -53,6 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`${fontSans.variable} ${fontDisplay.variable} ${fontArabic.variable}`}
     >
       <body className="antialiased">
+        <CurrentPersonProvider person={currentPerson}>
         <CommandProvider lang={lang}>
           {user ? (
             <>
@@ -71,6 +75,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
           <Toaster position="bottom-right" />
         </CommandProvider>
+        </CurrentPersonProvider>
       </body>
     </html>
   );
