@@ -10,25 +10,16 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-  CommandShortcut,
 } from "@/components/ui/command";
-import { Home, Mic, LogOut, Languages, LayoutGrid, UserPlus, Waypoints } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { Languages, LogOut, Network, Plus, Users, Waypoints } from "lucide-react";
 import { getDisplayName } from "@/lib/utils";
-
-interface Person {
-  id: string;
-  slug?: string | null;
-  given_en?: string | null;
-  given_ar?: string | null;
-  family_name_en?: string | null;
-  family_name_ar?: string | null;
-}
+import { shell } from "@/lib/client/shell-store";
+import { useFocusPerson } from "@/lib/client/use-focus-person";
+import { loadDirectory, type DirectoryPerson } from "@/lib/client/family-directory";
+import { switchLanguage } from "@/lib/lang/client";
 
 interface CommandProviderProps {
   children: React.ReactNode;
-  /** Optional initial people — kept for SSR compatibility; we always re-fetch on open. */
-  people?: Person[];
   lang?: "ar" | "en";
 }
 
@@ -44,33 +35,24 @@ export function useCommandPalette() {
   return React.useContext(CommandContext);
 }
 
-export function CommandProvider({
-  children,
-  people: initialPeople = [],
-  lang = "en",
-}: CommandProviderProps) {
+/**
+ * Keyboard command palette (Ctrl/⌘ K when the top-bar search isn't on screen).
+ * People, navigation and a few actions; every label is bilingual.
+ */
+export function CommandProvider({ children, lang = "en" }: CommandProviderProps) {
   const [open, setOpen] = React.useState(false);
-  const [people, setPeople] = React.useState<Person[]>(initialPeople);
+  const [people, setPeople] = React.useState<DirectoryPerson[]>([]);
   const router = useRouter();
+  const focusPerson = useFocusPerson();
+  const signOutRef = React.useRef<HTMLFormElement>(null);
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
 
-  // Re-fetch the people list every time the palette opens.
-  // Chosen over a Supabase realtime subscription because the palette is
-  // only relevant while open, and re-fetch is simpler, cheaper, and avoids
-  // managing a long-lived channel + RLS-aware auth state in this provider.
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    const supabase = createClient();
-    supabase
-      .from("people")
-      .select("id, slug, given_en, given_ar, family_name_en, family_name_ar")
-      .is("deleted_at", null)
-      .order("family_name_en", { ascending: true, nullsFirst: false })
-      .order("given_en", { ascending: true, nullsFirst: false })
-      .limit(200)
-      .then(({ data }) => {
-        if (!cancelled && data) setPeople(data as Person[]);
-      });
+    loadDirectory().then((d) => {
+      if (!cancelled) setPeople(d.people);
+    });
     return () => {
       cancelled = true;
     };
@@ -78,7 +60,7 @@ export function CommandProvider({
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
@@ -95,20 +77,21 @@ export function CommandProvider({
   return (
     <CommandContext.Provider value={{ openCommand: () => setOpen(true), closeCommand: () => setOpen(false) }}>
       {children}
+      <form ref={signOutRef} action="/auth/signout" method="post" hidden />
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search people, transcripts, actions…" />
+        <CommandInput placeholder={t("Search people or jump to a page…", "ابحث عن شخص أو انتقل إلى صفحة…")} />
         <CommandList>
-          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandEmpty>{t("Nothing found.", "لا توجد نتائج.")}</CommandEmpty>
 
           {people.length > 0 && (
-            <CommandGroup heading="People">
-              {people.slice(0, 20).map((p) => {
+            <CommandGroup heading={t("People", "الأشخاص")}>
+              {people.slice(0, 50).map((p) => {
                 const name = getDisplayName(p, lang);
                 return (
                   <CommandItem
                     key={p.id}
-                    value={`${name} ${p.given_en ?? ""} ${p.given_ar ?? ""} ${p.family_name_en ?? ""} ${p.family_name_ar ?? ""}`}
-                    onSelect={() => run(() => router.push(`/person/${p.slug ?? p.id}`))}
+                    value={`${name} ${p.given_en ?? ""} ${p.given_ar ?? ""} ${p.family_name_en ?? ""} ${p.family_name_ar ?? ""} ${p.id}`}
+                    onSelect={() => run(() => focusPerson(p.id))}
                   >
                     {name}
                   </CommandItem>
@@ -119,52 +102,45 @@ export function CommandProvider({
 
           <CommandSeparator />
 
-          <CommandGroup heading="Navigation">
-            <CommandItem onSelect={() => run(() => router.push("/"))}>
-              <Home />
-              Canvas
-              <CommandShortcut>G C</CommandShortcut>
+          <CommandGroup heading={t("Go to", "انتقل إلى")}>
+            <CommandItem value="family tree home canvas شجرة العائلة" onSelect={() => run(() => router.push("/"))}>
+              <Network />
+              {t("Family tree", "شجرة العائلة")}
             </CommandItem>
-            <CommandItem onSelect={() => run(() => router.push("/transcripts"))}>
-              <Mic />
-              Transcripts
-              <CommandShortcut>G T</CommandShortcut>
+            <CommandItem value="people directory everyone الأشخاص" onSelect={() => run(() => router.push("/people"))}>
+              <Users />
+              {t("People", "الأشخاص")}
             </CommandItem>
-          </CommandGroup>
-
-          <CommandSeparator />
-
-          <CommandGroup heading="Actions">
             <CommandItem
               value="How are we related? relationship kin cousin family connection ما صلة القرابة"
               onSelect={() => run(() => router.push("/relationships"))}
             >
               <Waypoints />
-              {lang === "ar" ? "ما صلة القرابة بيننا؟" : "How are we related?"}
+              {t("How are we related?", "ما صلة القرابة بيننا؟")}
             </CommandItem>
-            <CommandItem onSelect={() => run(() => router.push("/person/new"))}>
-              <UserPlus />
-              Add person
-            </CommandItem>
-            <CommandItem onSelect={() => run(() => router.push("/?autoLayout=1"))}>
-              <LayoutGrid />
-              Auto-layout canvas
-            </CommandItem>
-            <CommandItem onSelect={() => {
-              const next = document.cookie.includes("lang=ar") ? "en" : "ar";
-              const secure = location.protocol === "https:" ? "; Secure" : "";
-              document.cookie = `lang=${next}; path=/; max-age=31536000; SameSite=Lax${secure}`;
-              run(() => window.location.reload());
-            }}>
-              <Languages />
-              Switch language
+          </CommandGroup>
+
+          <CommandSeparator />
+
+          <CommandGroup heading={t("Actions", "إجراءات")}>
+            <CommandItem value="add person event photo memory إضافة" onSelect={() => run(() => shell.openAdd())}>
+              <Plus />
+              {t("Add to the family…", "أضف إلى العائلة…")}
             </CommandItem>
             <CommandItem
-              onSelect={() => run(() => router.push("/auth/signout"))}
+              value="switch language arabic english عربي English اللغة"
+              onSelect={() => run(() => switchLanguage(lang === "ar" ? "en" : "ar"))}
+            >
+              <Languages />
+              {lang === "ar" ? "English" : "العربية"}
+            </CommandItem>
+            <CommandItem
+              value="sign out log out تسجيل الخروج"
+              onSelect={() => run(() => signOutRef.current?.requestSubmit())}
               className="text-[var(--destructive)]"
             >
               <LogOut />
-              Sign out
+              {t("Sign out", "تسجيل الخروج")}
             </CommandItem>
           </CommandGroup>
         </CommandList>

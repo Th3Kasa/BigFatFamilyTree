@@ -4,12 +4,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { CanvasView } from "@/components/graph/CanvasView";
-import { MobilePeopleSheet } from "@/components/MobilePeopleSheet";
 import { RelationshipBanner } from "@/components/relationships/RelationshipBanner";
 import { makeKinContext, relate } from "@/lib/kinship/view";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TopBar } from "@/components/shell/TopBar";
-import { NavRail } from "@/components/shell/NavRail";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
 const TREE_COLUMNS =
@@ -58,14 +56,12 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
         : null;
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
+      <div className="flex min-h-svh flex-col">
         <TopBar user={null} lang={lang} />
-        <NavRail lang={lang} />
         <main className="overflow-hidden">
           {guestTree ? (
             <div
-              className="canvas-stage relative h-[calc(100svh-57px)] overflow-hidden"
-              data-grain="on"
+              className="canvas-stage relative h-[calc(100svh-var(--topbar-h))] overflow-hidden"
             >
               <CanvasView
                 initialNodes={guestTree.nodes}
@@ -78,7 +74,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
               {guestPath && <RelationshipBanner lang={lang} answer={guestPath.view.oneLine} />}
             </div>
           ) : (
-            <div className="flex h-[calc(100svh-57px)] items-center justify-center px-4">
+            <div className="flex h-[calc(100svh-var(--topbar-h))] items-center justify-center px-4">
               <div className="max-w-sm text-center">
                 <div className="mb-4 text-5xl">🌳</div>
                 <h1
@@ -140,10 +136,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   return (
     <>
       {/* Canvas — always primary, full viewport */}
-      <div
-        className="canvas-stage relative h-[calc(100vh-57px-64px)] md:h-[calc(100vh-57px)] overflow-hidden"
-        data-grain="on"
-      >
+      <div className="canvas-stage relative h-[calc(100svh-var(--topbar-h)-var(--tabbar-h))] overflow-hidden">
         <CanvasView
           initialNodes={nodes}
           initialEdges={edges}
@@ -159,9 +152,6 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
           />
         )}
       </div>
-
-      {/* Mobile: bottom-sheet people list, triggered by FAB */}
-      <MobilePeopleSheet people={typedPeople} lang={lang} />
     </>
   );
 }

@@ -4,9 +4,7 @@ import "./globals.css";
 import { getLang } from "@/lib/lang/server";
 import { createClient } from "@/lib/supabase/server";
 import { CommandProvider } from "@/components/providers/command-provider";
-import { TopBar } from "@/components/shell/TopBar";
-import { NavRail } from "@/components/shell/NavRail";
-import { MobileNav } from "@/components/shell/MobileNav";
+import { AppShell } from "@/components/shell/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 
 const fontSans = Inter({
@@ -31,7 +29,7 @@ const fontArabic = IBM_Plex_Sans_Arabic({
 export const metadata: Metadata = {
   title: "Big Fat Family Tree",
   description:
-    "A spatial family history archive built for multiple generations — family stories and future histories to be stored.",
+    "Our family tree, stories and photos in one friendly place, for every generation.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -55,21 +53,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="antialiased">
         <CommandProvider lang={lang}>
           {user ? (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] grid-rows-[auto_1fr] min-h-svh">
-                <TopBar user={user} lang={lang} role={role} />
-                <NavRail lang={lang} role={role} />
-                <main className="overflow-auto pb-16 md:pb-0">
-                  {children}
-                </main>
-              </div>
-              <MobileNav lang={lang} />
-            </>
+            <AppShell user={user} lang={lang} role={role}>
+              {children}
+            </AppShell>
           ) : (
             children
           )}
 
-          <Toaster position="bottom-right" />
+          <Toaster
+            position={lang === "ar" ? "bottom-left" : "bottom-right"}
+            dir={lang === "ar" ? "rtl" : "ltr"}
+            mobileOffset={{ bottom: "calc(var(--tabbar-h) + 12px)" }}
+          />
         </CommandProvider>
       </body>
     </html>
