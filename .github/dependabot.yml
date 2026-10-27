@@ -6,6 +6,12 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     labels: ["dependencies"]
+    ignore:
+      # postprocessing (used by @react-three/postprocessing) declares
+      # peer three@"< 0.186.0". Bumping three past that breaks `npm install`
+      # on Vercel. Remove once postprocessing supports three 0.186+.
+      - dependency-name: "three"
+        versions: [">=0.186.0"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
