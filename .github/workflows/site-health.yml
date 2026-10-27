@@ -1,0 +1,96 @@
+name: Site health & keep-alive
+
+# Free-tier Supabase pauses after 7 days without activity, and free Upstash
+# databases are removed when idle. This pings both and checks every route twice
+# a week, and opens (or updates) a GitHub issue when anything fails.
+on:
+  schedule:
+    - cron: "0 21 * * 0,3" # Sun + Wed 21:00 UTC = Mon + Thu ~8am Sydney
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  SITE_URL: https://bigfatfamilytree.vercel.app
+  SUPABASE_URL: https://srmmatuyiybtgowwvixd.supabase.co
+
+jobs:
+  health:
+    name: Site health
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Keep Supabase awake (database query)
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Repository secret SUPABASE_ANON_KEY is not set."
+            exit 1
+          fi
+          # A PostgREST read runs a real query, which counts as project activity.
+          # RLS may return [] for the anon role; any non-5xx answer means it is up.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/settings?select=key&limit=1" || echo 000)
+          echo "Supabase REST: HTTP $code"
+          if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
+            echo "::error::Supabase is unreachable or paused (HTTP $code). Restore it in the Supabase dashboard."
+            exit 1
+          fi
+
+      - name: Keep Upstash awake (PING)
+        if: ${{ !cancelled() }}
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: |
+          if [ -z "$UPSTASH_REDIS_REST_URL" ] || [ -z "$UPSTASH_REDIS_REST_TOKEN" ]; then
+            echo "::error::Repository secrets UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN are not set."
+            exit 1
+          fi
+          body=$(curl -s --max-time 30 -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
+            "$UPSTASH_REDIS_REST_URL/ping" || true)
+          echo "Upstash: $body"
+          if [ "$body" != '{"result":"PONG"}' ]; then
+            echo "::error::Upstash Redis did not answer PING. The database may have been removed; recreate it and update the Vercel env vars."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        if: ${{ !cancelled() }}
+
+      - uses: actions/setup-node@v4
+        if: ${{ !cancelled() }}
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install runner
+        if: ${{ !cancelled() }}
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Check every page
+        if: ${{ !cancelled() }}
+        run: node scripts/pw.mjs --script scripts/smoke-routes.mjs
+
+      - name: Open or update an alert issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="🚨 Site health check failed"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title $title" --json number --jq '.[0].number // empty')
+          msg="The scheduled site health check failed on $(date -u '+%Y-%m-%d %H:%M UTC'). See which step failed: $RUN_URL"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$msg"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$msg
+
+          Common causes: Supabase project paused, Upstash database removed, or a broken deploy. Close this issue once fixed."
+          fi
