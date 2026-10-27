@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/auth/safe-next";
 
 // Receives implicit-flow tokens from the client-side fragment handler in
 // /auth/callback and exchanges them for an SSR cookie session.
@@ -26,12 +27,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 401 });
   }
 
-  // Honour a same-site ?next= (e.g. /welcome for new sign-ups); never an open redirect.
-  const requested = typeof body.next === "string" ? body.next : "/";
-  const safeNext =
-    requested.startsWith("/") && !requested.startsWith("//") && !requested.startsWith("/\\")
-      ? requested
-      : "/";
-  const next = type === "recovery" ? "/update-password" : safeNext;
+  // Honour a same-site ?next= (e.g. /welcome for new sign-ups); never an open
+  // redirect. The client navigates with window.location.replace(next), which
+  // resolves relative to our origin, so the guard must be parser-safe.
+  const next = type === "recovery" ? "/update-password" : safeNextPath(body.next);
   return NextResponse.json({ next });
 }
