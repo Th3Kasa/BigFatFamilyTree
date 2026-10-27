@@ -26,7 +26,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/audit" className="text-sm text-gray-600 hover:text-gray-900">Audit Log</Link>
         </nav>
       </header>
-      <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+      <div className="max-w-5xl mx-auto px-6 py-8">{children}</div>
     </div>
   );
 }

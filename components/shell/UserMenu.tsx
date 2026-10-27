@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { LogOut, Shield } from "lucide-react";
+import { LogOut, Shield, UserCheck } from "lucide-react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import {
   DropdownMenu,
@@ -104,6 +104,12 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
         <DropdownMenuSeparator />
         {role === "admin" && (
           <>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/members">
+                <UserCheck />
+                {t("Members", "الأعضاء")}
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/admin">
                 <Shield />

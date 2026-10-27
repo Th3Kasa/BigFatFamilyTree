@@ -75,7 +75,7 @@ type Props = {
 type ToolMode = "select" | "pan";
 
 const pillButton =
-  "flex h-11 min-w-11 items-center justify-center gap-1.5 px-3 text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] disabled:pointer-events-none disabled:opacity-40";
+  "flex h-11 min-w-10 items-center justify-center gap-1.5 px-2.5 text-sm font-semibold sm:min-w-11 sm:px-3 text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] disabled:pointer-events-none disabled:opacity-40";
 
 /** Zoom −/+ and Fit, plus "Center on me" / "Focus on the path" when they apply. */
 function ViewControls({
