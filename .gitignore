@@ -20,3 +20,6 @@ __pycache__/
 venv/
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# Playwright runner auth state (scripts/pw.mjs --save-storage)
+/.auth/
