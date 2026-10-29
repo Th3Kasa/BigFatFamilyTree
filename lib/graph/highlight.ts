@@ -109,7 +109,9 @@ export function edgeHighlight(index: HighlightIndex, edge: EdgeLike): EdgeHighli
     }
     case "spouse": {
       const onRoute = !!data.relationshipId && index.relationships.has(data.relationshipId);
-      const ancestorCouple = index.ancestors.has(edge.source) && index.ancestors.has(edge.target);
+      // Cards may be reference cards, so compare the people, not the node ids.
+      const [a, b] = data.personIds ?? [edge.source, edge.target];
+      const ancestorCouple = index.ancestors.has(a) && index.ancestors.has(b);
       return { on: onRoute || ancestorCouple };
     }
     case "adopted":
