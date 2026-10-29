@@ -11,12 +11,20 @@ import { getOrCreateFamilyPin } from "@/lib/auth/family-pin";
 import { constantTimeEqual, derivePinPassword, memberEmail } from "@/lib/auth/pin-crypto";
 import { accountLockKey, remainingDelayMs } from "@/lib/auth/pin-lockout";
 import {
+  clearDeviceCookie,
+  lookupRememberedDevice,
+  rememberDevice,
+  revokeDevices,
+  touchDevice,
+} from "@/lib/auth/pin-device-store";
+import {
   changePinSchema,
   firstIssueCode,
   isDuplicateIdentityError,
   makeNameKey,
   pinJoinSchema,
   pinMessage,
+  pinSchema,
   pinSignInSchema,
   type ChangePinInput,
   type Lang,
@@ -133,9 +141,31 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
     return fail(gate.code, lang);
   }
 
-  // 3. Look the account up and try the derived password. When there is no such
-  // account we still run a sign-in against a placeholder address.
+  // 3 + 4. Look the account up and try the derived password.
   const profile = await findPinProfile(nameKey, dateOfBirth);
+  const result = await attemptPinSignIn({ profile, lockId, gate, pin, startedAt, lang, secret });
+  if (result.ok && profile) await rememberDevice(profile.id);
+  return result;
+}
+
+/**
+ * The attempt itself, shared by the full form (name + birthday + PIN) and the
+ * remembered-device form (PIN only): both take their try from the SAME account
+ * counters (`lockId`) before this runs, so neither path is a way around the other's lock.
+ *
+ * With no account we still run a sign-in against a placeholder address so the work
+ * done is the same either way.
+ */
+async function attemptPinSignIn(args: {
+  profile: PinProfile | null;
+  lockId: string;
+  gate: Extract<AttemptGate, { ok: true }>;
+  pin: string;
+  startedAt: number;
+  lang: Lang;
+  secret: string;
+}): Promise<PinResult> {
+  const { profile, lockId, gate, pin, startedAt, lang, secret } = args;
   const userId = profile?.id ?? DUMMY_ID;
   let email = memberEmail(DUMMY_ID);
   if (profile) {
@@ -155,7 +185,7 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
     return { ok: true, redirectTo: "/" };
   }
 
-  // 4. Failure (already counted above). The day's last try on a real account
+  // Failure (already counted). The day's last try on a real account
   // is recorded for the admins: someone may be guessing that member's PIN.
   if (profile && gate.lastDay && !notACredentialError(error?.status)) {
     await writeAudit({
@@ -171,6 +201,48 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
   if (gate.lastDay) return fail("locked_day", lang);
   if (gate.lastShort) return fail("locked", lang);
   return fail("generic_signin", lang);
+}
+
+// ── sign in from a remembered device (PIN only) ──────────────────────────────
+
+/**
+ * The returning-device form: the server resolves the member from the httpOnly
+ * device cookie (hash lookup), then runs the same checks as the full form: the
+ * per-IP limit, then the per-account lockout keyed on the resolved profile's
+ * name_key + birthday, which is exactly the key the full form uses, so both
+ * paths drain one shared counter. An unknown, revoked or expired token clears
+ * the cookie and answers "device_unknown" (the page then shows the full form).
+ */
+export async function signInWithDevice(rawPin: string, lang: Lang): Promise<PinResult> {
+  const startedAt = Date.now();
+  const parsed = pinSchema.safeParse(rawPin);
+  if (!parsed.success) return fail("pin_format", lang);
+  const pin = parsed.data;
+  const secret = env().SUPABASE_SERVICE_ROLE_KEY;
+
+  const ip = await clientIp();
+  const ipCheck = await checkLimitStrict("pinIp", sha(`ip:${ip}`));
+  if (ipCheck.unavailable) return fail("busy", lang);
+  if (!ipCheck.success) return fail("too_many_ip", lang);
+
+  const lookup = await lookupRememberedDevice();
+  if (lookup.state !== "ok") {
+    if (lookup.state === "stale") await clearDeviceCookie();
+    await padTo(startedAt);
+    return fail("device_unknown", lang);
+  }
+  const { device } = lookup;
+
+  const lockId = pinAccountLockId(device.nameKey, device.dateOfBirth);
+  const gate = await takeAttempt(lockId);
+  if (!gate.ok) {
+    await padTo(startedAt);
+    return fail(gate.code, lang);
+  }
+
+  const result = await attemptPinSignIn({ profile: { id: device.profileId }, lockId, gate, pin, startedAt, lang, secret });
+  if (result.ok) await touchDevice(device.deviceId);
+  return result;
 }
 
 // ── join ─────────────────────────────────────────────────────────────────────
@@ -284,6 +356,7 @@ export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinRes
     console.error("[pin-join] auto sign-in failed:", signInErr.message);
     return fail("failed", lang);
   }
+  await rememberDevice(userId);
   return { ok: true, redirectTo: "/welcome" };
 }
 
@@ -340,5 +413,9 @@ export async function changeOwnPin(raw: ChangePinInput, lang: Lang): Promise<Pin
     before: null,
     after: { event: "pin_changed_by_member" },
   });
+  // The old PIN is gone, so every remembered device is forgotten; this one is
+  // remembered again straight away (the member is signed in on it right now).
+  await revokeDevices(user.id, user.id, "pin_changed");
+  await rememberDevice(user.id);
   return { ok: true, redirectTo: "/" };
 }

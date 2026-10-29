@@ -16,9 +16,11 @@ import {
   clearPinLockout,
   joinWithPin,
   pinAccountLockId,
+  signInWithDevice,
   signInWithPin,
   type PinResult,
 } from "@/lib/auth/pin-session";
+import { forgetCurrentDevice, revokeDevices } from "@/lib/auth/pin-device-store";
 import { setUpOwnPin } from "@/lib/auth/pin-setup-session";
 import type { PinSetupInput } from "@/lib/auth/pin-setup";
 import type { ChangePinInput, PinJoinInput, PinSignInInput } from "@/lib/auth/pin-validation";
@@ -30,6 +32,16 @@ import type { MemberActionResult } from "@/lib/members/types";
 
 export async function pinSignInAction(input: PinSignInInput): Promise<PinResult> {
   return signInWithPin(input, await getLang());
+}
+
+/** Returning device: the member is resolved from the httpOnly device cookie; only the PIN comes from the browser. */
+export async function pinDeviceSignInAction(pin: string): Promise<PinResult> {
+  return signInWithDevice(typeof pin === "string" ? pin : "", await getLang());
+}
+
+/** "Not you?" (and a stale cookie): forget this device, i.e. delete its row and clear the cookie. */
+export async function forgetThisDeviceAction(): Promise<void> {
+  await forgetCurrentDevice();
 }
 
 export async function pinJoinAction(input: PinJoinInput): Promise<PinResult> {
@@ -92,6 +104,8 @@ export async function resetMemberPin(input: { profileId: string }): Promise<Memb
     return { ok: false, error: t("Couldn't reset the PIN. Please try again.", "تعذّرت إعادة تعيين الرمز. حاول مرة أخرى.") };
   }
   await svc.from("profiles").update({ pin_must_change: true }).eq("id", target.id);
+  // Devices that remembered the old PIN start again.
+  await revokeDevices(ctx.userId, target.id, "pin_reset_by_admin");
   // A reset also clears any lockout on that account (15-minute and 24-hour).
   if (target.name_key && target.date_of_birth) {
     await clearPinLockout(pinAccountLockId(target.name_key, target.date_of_birth));

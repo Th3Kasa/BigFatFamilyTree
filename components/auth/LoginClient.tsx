@@ -8,9 +8,11 @@ import { magicLinkSchema } from "@/lib/validation/auth";
 import { safeNextPath } from "@/lib/auth/safe-next";
 import { SignupForm, useDocumentLang } from "@/components/auth/SignupForm";
 import { PinSignInForm } from "@/components/auth/PinSignInForm";
+import { DeviceSignInForm, type RememberedMember } from "@/components/auth/DeviceSignInForm";
+import { forgetThisDeviceAction } from "@/lib/actions/pin";
 import { LanguageToggle } from "@/components/shell/LanguageToggle";
 import { cardClass, fieldClass, pill, Spinner } from "@/components/members/primitives";
-import { ensureBootstrapUser, signInBootstrapAdmin } from "./actions";
+import { ensureBootstrapUser, signInBootstrapAdmin } from "@/app/(auth)/login/actions";
 import { cn } from "@/lib/utils";
 
 type Lang = "ar" | "en";
@@ -122,7 +124,21 @@ function LinkButton({ children, onClick }: { children: React.ReactNode; onClick:
 
 /* ─── main page ──────────────────────────────────────────────── */
 
-export default function LoginPage() {
+type LoginClientProps = {
+  /** Set by the server from the httpOnly device cookie: who "Welcome back" greets. */
+  member: RememberedMember | null;
+  /** A device cookie is present but no longer valid; clear it quietly. */
+  staleDevice: boolean;
+};
+
+export function LoginClient({ member: initialMember, staleDevice }: LoginClientProps) {
+  const [member, setMember] = useState<RememberedMember | null>(initialMember);
+
+  // Unknown, revoked or expired token: drop the cookie silently and show the full form.
+  useEffect(() => {
+    if (staleDevice) void forgetThisDeviceAction().catch(() => {});
+  }, [staleDevice]);
+
   const lang = useDocumentLang();
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const uid = useId();
@@ -312,7 +328,9 @@ export default function LoginPage() {
           ? t("Sign in with a magic link", "الدخول برابط سحري")
           : sent
             ? t("Check your email", "تحقق من بريدك")
-            : t("Welcome back", "أهلًا بعودتك");
+            : screen === "signin" && member
+              ? t(`Welcome back, ${member.firstName}`, `أهلًا بعودتك يا ${member.firstName}`)
+              : t("Welcome back", "أهلًا بعودتك");
 
   const subheading =
     screen === "signup"
@@ -325,7 +343,9 @@ export default function LoginPage() {
             ? null
             : screen === "email"
               ? t("Admins and invited members: sign in with your email and password.", "للمشرفين والمدعوّين: سجّل الدخول ببريدك وكلمة المرور.")
-              : t("Your name, birthday and PIN. That's all.", "اسمك وتاريخ ميلادك ورمزك السري. هذا كل شيء.");
+              : member
+                ? t("Type your PIN to continue.", "اكتب رمزك السري للمتابعة.")
+                : t("Your name, birthday and PIN. That's all.", "اسمك وتاريخ ميلادك ورمزك السري. هذا كل شيء.");
 
   const sentCopy =
     screen === "sent-reset"
@@ -442,7 +462,18 @@ export default function LoginPage() {
 
               <div className="mt-5">
                 {/* ── sign in (family PIN) ── */}
-                {screen === "signin" && (
+                {screen === "signin" && member && (
+                  <DeviceSignInForm
+                    lang={lang}
+                    member={member}
+                    onDone={() => {
+                      window.location.href = nextFromUrl();
+                    }}
+                    onUseFullForm={() => setMember(null)}
+                    onAdminEmail={() => goTo("email")}
+                  />
+                )}
+                {screen === "signin" && !member && (
                   <PinSignInForm
                     lang={lang}
                     onDone={() => {

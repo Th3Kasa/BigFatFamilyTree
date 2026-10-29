@@ -59,6 +59,10 @@ export const PIN_MESSAGES = {
     "To set a new PIN without the old one, sign in with an email link first (\"Admins: sign in with email\"), then try again within 15 minutes.",
     "لتعيين رمز جديد دون القديم، ادخل أولًا عبر رابط البريد الإلكتروني («للمشرفين: الدخول بالبريد»)، ثم حاول خلال ١٥ دقيقة.",
   ],
+  device_unknown: [
+    "Please sign in with your name, birthday and PIN.",
+    "يرجى تسجيل الدخول باسمك وتاريخ ميلادك ورمزك السري.",
+  ],
   not_allowed: ["This account can't do that.", "لا يمكن لهذا الحساب تنفيذ ذلك."],
 } as const satisfies Record<string, readonly [string, string]>;
 

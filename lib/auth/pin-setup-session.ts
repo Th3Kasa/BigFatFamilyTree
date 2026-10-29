@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { checkLimit } from "@/lib/ratelimit";
 import { writeAudit } from "@/lib/members/account-admin";
 import { derivePinPassword } from "@/lib/auth/pin-crypto";
+import { revokeDevices } from "@/lib/auth/pin-device-store";
 import { clearPinLockout, pinAccountLockId, pinUserLockId, type PinResult } from "@/lib/auth/pin-session";
 import {
   firstIssueCode,
@@ -209,9 +210,11 @@ async function rollbackAuth(
   if (error) console.error("[pin-setup] ROLLBACK FAILED for", userId, error.message);
 }
 
-/** Clear tries for this identity, and write the audit entry (never the PIN). */
+/** Clear tries for this identity, forget remembered devices, and write the audit entry (never the PIN). */
 async function finish(userId: string, nameKey: string, dateOfBirth: string, event: string): Promise<void> {
   await Promise.all([clearPinLockout(pinAccountLockId(nameKey, dateOfBirth)), clearPinLockout(pinUserLockId(userId))]);
+  // A new PIN means every device that remembered the old one starts again.
+  await revokeDevices(userId, userId, "pin_set_up_from_email");
   await writeAudit({
     actorId: userId,
     rowId: userId,
