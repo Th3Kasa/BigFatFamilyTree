@@ -11,6 +11,7 @@ import {
   submitLinkRequest,
 } from "@/lib/actions/members";
 import { formatPersonSubline } from "@/lib/members/match";
+import { hasFullName } from "@/lib/members/claim-query";
 import type { JourneyScreen } from "@/lib/members/journey";
 import type { ClaimCandidate, CurrentPerson, MySuggestion, PersonSummary } from "@/lib/members/types";
 import { cn, getDisplayName } from "@/lib/utils";
@@ -128,6 +129,13 @@ export function WelcomeFlow({
       return; // server already searched for the pre-filled name
     }
     const seq = ++requestSeq.current;
+    if (!hasFullName(query)) {
+      // Not enough to search on yet: no request, and no stale results.
+      setResults([]);
+      setSearched(false);
+      setSearching(false);
+      return;
+    }
     const timer = setTimeout(async () => {
       setSearching(true);
       setSearchError(null);
@@ -147,7 +155,7 @@ export function WelcomeFlow({
       } finally {
         if (seq === requestSeq.current) setSearching(false);
       }
-    }, 250);
+    }, 700);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, step, retryTick]);
@@ -314,12 +322,12 @@ export function WelcomeFlow({
         <p className={cn(cardClass, "p-4 text-[15px] leading-relaxed")}>
           {adminName
             ? t(
-                `Not sure why? Ask ${adminName}, the family admin. They can sort it out in a minute.`,
-                `لست متأكدًا من السبب؟ اسأل ${adminName}، مشرف العائلة. يمكنه حلّها خلال دقيقة.`,
+                `Not sure why? Ask ${adminName}. They can sort it out in a minute.`,
+                `لست متأكدًا من السبب؟ اسأل ${adminName}. يمكنه حلّها خلال دقيقة.`,
               )
             : t(
-                "Not sure why? Ask the family admin. They can sort it out in a minute.",
-                "لست متأكدًا من السبب؟ اسأل مشرف العائلة. يمكنه حلّها خلال دقيقة.",
+                "Not sure why? Ask the family admins. They can sort it out in a minute.",
+                "لست متأكدًا من السبب؟ اسأل مشرفي العائلة. يمكنهم حلّها خلال دقيقة.",
               )}
         </p>
         <button
@@ -340,7 +348,9 @@ export function WelcomeFlow({
   const count = results.length;
   const statusText = searching
     ? t("Searching…", "جارٍ البحث…")
-    : !searched
+    : !hasFullName(query)
+      ? t("Type your first and family name", "اكتب اسمك الأول واسم العائلة")
+      : !searched
       ? ""
       : count === 0
         ? t("No one matches yet", "لا توجد نتائج مطابقة بعد")
@@ -363,8 +373,8 @@ export function WelcomeFlow({
         </h1>
         <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
           {t(
-            "Search your name. An admin will confirm it's you, then the tree will show where you fit.",
-            "ابحث عن اسمك. سيؤكد المشرف أنه أنت، ثم تُظهر الشجرة مكانك فيها.",
+            "Type your first and family name. An admin will confirm it's you, then the tree will show where you fit.",
+            "اكتب اسمك الأول واسم العائلة. سيؤكد المشرف أنه أنت، ثم تُظهر الشجرة مكانك فيها.",
           )}
         </p>
       </div>
@@ -386,7 +396,7 @@ export function WelcomeFlow({
             maxLength={120}
             autoComplete="name"
             enterKeyHint="search"
-            placeholder={t("Type your name", "اكتب اسمك")}
+            placeholder={t("First and family name", "الاسم الأول واسم العائلة")}
             aria-describedby={`${uid}-status`}
             className={cn(fieldClass, "border-[var(--primary)] bg-white ps-11 font-semibold")}
           />
@@ -456,8 +466,8 @@ export function WelcomeFlow({
       {searched && !searching && count === 0 && !searchError ? (
         <p className="text-sm text-[var(--muted-foreground)]">
           {t(
-            "Try just your first name, or the spelling a relative would use. Or tell us below.",
-            "جرّب اسمك الأول فقط، أو الكتابة التي يستخدمها أقاربك. أو أخبرنا في الأسفل.",
+            "Try another spelling, the way a relative would write your first and family name. Or tell us below.",
+            "جرّب كتابة أخرى، كما يكتب أقاربك اسمك الأول واسم العائلة. أو أخبرنا في الأسفل.",
           )}
         </p>
       ) : null}

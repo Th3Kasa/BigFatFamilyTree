@@ -14,6 +14,7 @@ import {
 } from "@/lib/members/permissions";
 import { dobToBirthDateText, hasArabic, splitFullName } from "@/lib/members/match";
 import { searchClaimCandidates } from "@/lib/members/search";
+import { ClaimSearchLimitError } from "@/lib/members/claim-query";
 import { canTransitionRequest, isLastAdminError } from "@/lib/members/rules";
 import { canRemoveAccess } from "@/lib/members/approval";
 import { buildRequestNote } from "@/lib/members/request-note";
@@ -180,11 +181,23 @@ export async function searchClaimCandidatesAction(
     .eq("id", ctx.userId)
     .maybeSingle();
 
-  const results = await searchClaimCandidates(ctx.supabase, {
-    query: parsed.data.query,
-    dob: (profile as { date_of_birth: string | null } | null)?.date_of_birth ?? null,
-  });
-  return { ok: true, data: results };
+  try {
+    const results = await searchClaimCandidates(ctx.supabase, {
+      query: parsed.data.query,
+      dob: (profile as { date_of_birth: string | null } | null)?.date_of_birth ?? null,
+    });
+    return { ok: true, data: results };
+  } catch (e) {
+    if (e instanceof ClaimSearchLimitError) {
+      return fail(
+        t(
+          "You've used today's searches. Ask the family admins to add you, or try again tomorrow.",
+          "استخدمت عمليات البحث لهذا اليوم. اطلب من مشرفي العائلة إضافتك أو حاول غدًا.",
+        ),
+      );
+    }
+    throw e;
+  }
 }
 
 /** "This is me" (personId set) or "I'm not in the tree yet" (personId null). */
@@ -586,7 +599,7 @@ export async function inviteMember(input: InviteMemberInput): Promise<InviteMemb
     role: d.role,
     approveNow: d.approveNow,
     personId: d.personId,
-    redirectTo: await inviteRedirectUrl(),
+    redirectTo: inviteRedirectUrl(),
   });
   if (!result.ok) {
     if (result.reason === "exists") {

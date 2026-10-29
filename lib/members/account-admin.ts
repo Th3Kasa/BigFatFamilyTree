@@ -1,5 +1,4 @@
 import "server-only";
-import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { MemberRole } from "./types";
 
@@ -8,14 +7,17 @@ import type { MemberRole } from "./types";
 // module cannot be imported from a client component. Callers must already have
 // verified the super admin (getSuperAdminContext) before calling anything here.
 
-/** Where the invite email sends people: /auth/callback, then on to /welcome. */
-export async function inviteRedirectUrl(): Promise<string> {
+export const DEFAULT_SITE_URL = "https://www.bigfatfamilytree.com.au";
+
+/**
+ * Where the invite email sends people: /auth/callback, then on to /welcome.
+ * Never derived from request headers (a forged Host header must not be able to
+ * point an invitation at another site).
+ */
+export function inviteRedirectUrl(): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (configured) return `${configured.replace(/\/+$/, "")}/auth/callback?next=/welcome`;
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}/auth/callback?next=/welcome`;
+  const base = configured && /^https?:\/\//.test(configured) ? configured : DEFAULT_SITE_URL;
+  return `${base.replace(/\/+$/, "")}/auth/callback?next=/welcome`;
 }
 
 export type InviteResult =

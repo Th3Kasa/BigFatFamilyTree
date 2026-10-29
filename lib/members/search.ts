@@ -1,12 +1,19 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
-import { normalizeClaimQuery, toClaimCandidate, type ClaimRow } from "./claim-query";
+import {
+  ClaimSearchLimitError,
+  hasFullName,
+  normalizeClaimQuery,
+  toClaimCandidate,
+  type ClaimRow,
+} from "./claim-query";
 import type { ClaimCandidate } from "./types";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * People who might be the signed-in member, for "Find yourself". An account
+ * People who might be the signed-in member (first AND family name required;
+ * a daily limit applies to accounts waiting for access), for "Find yourself". An account
  * that is still waiting for access cannot read `people`, so this goes through
  * public.search_people_for_claim() (SECURITY DEFINER): at most 20 rows with a
  * few display columns and the birth YEAR only, ranked exact birth date, then
@@ -19,12 +26,13 @@ export async function searchClaimCandidates(
   opts: { query: string; dob: string | null; limit?: number },
 ): Promise<ClaimCandidate[]> {
   const normalized = normalizeClaimQuery(opts.query, opts.dob);
-  if (!normalized.ok) return [];
+  if (!normalized.ok || !hasFullName(normalized.input.q)) return [];
 
   const { data, error } = await supabase.rpc("search_people_for_claim", {
     q: normalized.input.q,
     dob: normalized.input.dob,
   });
+  if (error?.hint === "claim_search_limit") throw new ClaimSearchLimitError();
   if (error || !data) return [];
 
   const { data: claimedData } = await supabase.rpc("claimed_person_ids");

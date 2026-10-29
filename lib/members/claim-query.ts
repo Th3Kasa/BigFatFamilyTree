@@ -27,6 +27,34 @@ export function normalizeClaimQuery(
   return { ok: true, input: { q, dob } };
 }
 
+/** Words the database will search on: letters/digits only, up to 6. */
+export function claimWords(q: string): string[] {
+  return q
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+/**
+ * Accounts waiting for access must type a first AND a family name: two words of
+ * at least 2 characters (mirrors search_people_for_claim). Searches that don't
+ * meet it are not sent at all.
+ */
+export function hasFullName(q: string): boolean {
+  const words = claimWords(q);
+  return words.length >= 2 && words.every((w) => w.length >= 2);
+}
+
+/** Thrown by searchClaimCandidates when the per-account daily search limit is reached. */
+export class ClaimSearchLimitError extends Error {
+  constructor() {
+    super("claim_search_limit");
+  }
+}
+
 export type ClaimRow = {
   id: string;
   given_en: string | null;

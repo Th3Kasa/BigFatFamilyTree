@@ -5,6 +5,7 @@ import { toPersonSummary, type ClaimRow } from "./claim-query";
 import { fetchCurrentPerson } from "./current-person";
 import { journeyScreen, latestRequestState, type JourneyScreen, type RequestState } from "./journey";
 import { searchClaimCandidates } from "./search";
+import { ClaimSearchLimitError } from "./claim-query";
 import type { ClaimCandidate, CurrentPerson, MySuggestion, PersonSummary } from "./types";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
@@ -19,7 +20,7 @@ export type WelcomeData = {
   request: RequestState;
   initialResults: ClaimCandidate[];
   suggestions: MySuggestion[];
-  /** First admin's display name for "ask X" (never an email). */
+  /** Always null for now: waiting accounts are told "the family admins", never a name. */
   adminName: string | null;
 };
 
@@ -66,16 +67,17 @@ export async function loadWelcomeData(
     pending = { person: claimRow ? toPersonSummary(claimRow) : null };
   }
 
-  let adminName: string | null = null;
-  if (screen === "declined") {
-    const { data } = await supabase.rpc("first_admin_name");
-    adminName = typeof data === "string" && data.trim() ? data.trim() : null;
-  }
+  // Accounts waiting for access are never told which admin to ask (no names).
+  const adminName: string | null = null;
 
-  const initialResults =
-    linked || pending || screen === "declined"
-      ? []
-      : await searchClaimCandidates(supabase, { query: prefill, dob: profile?.date_of_birth ?? null });
+  let initialResults: ClaimCandidate[] = [];
+  if (!linked && !pending && screen !== "declined") {
+    try {
+      initialResults = await searchClaimCandidates(supabase, { query: prefill, dob: profile?.date_of_birth ?? null });
+    } catch (e) {
+      if (!(e instanceof ClaimSearchLimitError)) throw e;
+    }
+  }
 
   return {
     screen,

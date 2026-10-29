@@ -4,16 +4,18 @@ import { createClient } from "@/lib/supabase/server";
 import { safeNextPath } from "@/lib/auth/safe-next";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isBootstrapAdmin } from "@/lib/auth/bootstrap";
+import { promoteIfNoAdmins } from "@/lib/auth/bootstrap-admin";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
+// First-run only: promotes a bootstrap email to admin while there are ZERO
+// admins. Once any admin exists this never changes a role again.
 async function maybeBootstrapAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
   if (user && isBootstrapAdmin(user.email)) {
     try {
-      const svc = createServiceClient();
-      await svc.from("profiles").upsert({ id: user.id, role: "admin" }, { onConflict: "id" });
+      await promoteIfNoAdmins(createServiceClient(), user.id);
     } catch (e) {
-      console.error("[bootstrap admin] failed for", user.email, e);
+      console.error("[bootstrap admin] failed:", e instanceof Error ? e.message : e);
     }
   }
 }
