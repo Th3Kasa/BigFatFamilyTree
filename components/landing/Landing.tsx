@@ -26,7 +26,7 @@ export function Landing({ lang }: { lang: Lang }) {
     {
       icon: Heart,
       title: t("Keep memories alive", "حافظ على الذكريات"),
-      body: t("Stories, photos and voices, saved for every generation.", "قصص وصور وأصوات محفوظة لكل الأجيال."),
+      body: t("Stories and photos, saved for every generation.", "قصص وصور محفوظة لكل الأجيال."),
     },
   ];
 
