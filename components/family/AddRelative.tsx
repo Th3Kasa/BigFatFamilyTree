@@ -80,8 +80,8 @@ export function AddRelative(props: AddRelativeProps) {
 
   const subjectName = getNameParts(subject, lang).given || getDisplayName(subject, lang);
   const noParents = !subject.father_id && !subject.mother_id;
-  const siblingNeedsParent = slot === "sibling" && noParents;
-  const [mode, setMode] = useState<Mode>(replace || suggestedId || siblingNeedsParent ? "existing" : "new");
+  const siblingNoParents = slot === "sibling" && noParents;
+  const [mode, setMode] = useState<Mode>(replace || suggestedId ? "existing" : "new");
   const [pickedId, setPickedId] = useState<string | null>(suggestedId ?? null);
   const fam = defaultFamily(slot, subject);
   const [form, setForm] = useState<NewPersonFields>({
@@ -117,7 +117,7 @@ export function AddRelative(props: AddRelativeProps) {
     ? changeLabel(slot, subjectName, relativeName, relativeGender, lang, status)
     : confirmLabel(slot, subjectName, relativeName, relativeGender, lang, status);
   const valid =
-    (mode === "existing" ? !!picked : !!(form.given_en.trim() || form.given_ar.trim()) && !siblingNeedsParent) &&
+    (mode === "existing" ? !!picked : !!(form.given_en.trim() || form.given_ar.trim())) &&
     !(slot === "child" && needsFatherChoice && !fatherId);
 
   function submit(e: React.FormEvent) {
@@ -198,26 +198,26 @@ export function AddRelative(props: AddRelativeProps) {
         </div>
       )}
 
-      {mode === "new" && siblingNeedsParent && (
+      {siblingNoParents && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-relaxed text-[var(--foreground)]">
           <p>
             {t(
-              `Brothers and sisters are linked through a shared parent. Add ${subjectName}'s father or mother first, or pick someone already in the tree.`,
-              `يرتبط الإخوة عبر أحد الوالدين. أضف أب ${subjectName} أو أمّه أولًا، أو اختر شخصًا موجودًا في الشجرة.`,
+              `${subjectName}'s parents aren't in the tree yet. That's fine: we'll add an "Unknown parent" card for both of them, and you can fill it in later.`,
+              `والدا ${subjectName} غير موجودين في الشجرة بعد. لا بأس: سنضيف بطاقة "والد غير معروف" لكليهما، ويمكنك إكمالها لاحقًا.`,
             )}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={chip(false)} onClick={() => onSwitchSlot("father")}>
-              {t("Add father", "أضف الأب")}
+              {t("Add their father instead", "أضف الأب بدلًا من ذلك")}
             </button>
             <button type="button" className={chip(false)} onClick={() => onSwitchSlot("mother")}>
-              {t("Add mother", "أضف الأم")}
+              {t("Add their mother instead", "أضف الأم بدلًا من ذلك")}
             </button>
           </div>
         </div>
       )}
 
-      {mode === "new" && !siblingNeedsParent && (
+      {mode === "new" && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor={`${uid}-ge`} className={labelCls}>

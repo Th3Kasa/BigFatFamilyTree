@@ -1,26 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ReactFlowProvider, ViewportPortal, useEdgesState, useNodesInitialized, useNodesState, useReactFlow, useStore, type Edge, type Node, type NodeChange, type NodeMouseHandler, type OnMoveStart, type OnNodeDrag } from "@xyflow/react";
+import { ReactFlowProvider, useEdgesState, useNodesInitialized, useNodesState, useReactFlow, type Edge, type Node, type NodeChange, type NodeMouseHandler, type OnMoveStart, type OnNodeDrag } from "@xyflow/react";
 import { toast } from "sonner";
 import { LayoutGrid, LocateFixed, Maximize2, Minus, Plus, Route } from "lucide-react";
 import { FamilyGraph } from "./FamilyGraph";
 import { CanvasOverlay } from "./CanvasOverlay";
+import { BranchLabels, GenerationRail } from "./GenerationRail";
 import { FamilyHub } from "@/components/family/FamilyHub";
 import { FamilyView } from "@/components/family/FamilyView";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { saveCardOffset, autoLayoutAll } from "@/lib/actions/canvas";
-import { clusterMates, manualOffset, nudgeFor, ROW_HEIGHT } from "@/lib/graph/layout";
+import { clusterMates, manualOffset, nudgeFor } from "@/lib/graph/layout";
+import { branchLabels, collapseGenerations, generationRows } from "@/lib/graph/generations";
 import { buildFamilyModel } from "@/lib/graph/units";
-import { cn, getDisplayName } from "@/lib/utils";
+import { cn, getDisplayName, getNameParts } from "@/lib/utils";
 import { shell } from "@/lib/client/shell-store";
 import { useMediaQuery, DESKTOP_QUERY } from "@/lib/client/use-media-query";
 import { useCurrentPerson } from "@/components/providers/current-person-provider";
 import { useRole } from "@/components/providers/role-provider";
 import { applyEdgeHighlight, buildHighlightIndex, nodeHighlight, type PathHighlight } from "@/lib/graph/highlight";
 import { defaultFamilyFocus } from "@/lib/graph/family-view";
-import { COMPACT_ZOOM, FIT_ALL, resolveViewportIntent } from "@/lib/graph/viewport";
+import { FIT_ALL, OPEN_ZOOM, resolveViewportIntent } from "@/lib/graph/viewport";
 import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graph/node-size";
 import { buildGraphElements, relationshipsFromEdges, type GraphEdge, type GraphNode, type PersonInput, type SlotKind } from "@/lib/graph/transform";
 import type { RelativeSlot } from "@/lib/people/relative-copy";
@@ -149,31 +151,40 @@ function ViewToggle({ lang, view, onChange }: { lang: "ar" | "en"; view: View; o
   );
 }
 
-/** "Generation 1", "الجيل ١" at the start of each row of the full tree. */
-function RowLabels({ nodes, lang }: { nodes: GraphNode[]; lang: "ar" | "en" }) {
-  const compact = useStore((s) => s.transform[2] < COMPACT_ZOOM);
-  const cards = nodes.filter((n) => n.type === "person");
-  if (cards.length === 0) return null;
-  const minX = Math.min(...cards.map((n) => n.position.x));
-  const rows = [...new Set(cards.map((n) => n.position.y))].sort((a, b) => a - b);
-  const arabicDigits = (n: number) => String(n).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
-  return (
-    <ViewportPortal>
-      {rows.map((y) => {
-        const n = Math.round(y / ROW_HEIGHT) + 1;
-        return (
-          <div
-            key={y}
-            aria-hidden
-            className={cn("pointer-events-none absolute select-none whitespace-nowrap font-semibold text-[var(--muted-foreground)]", compact ? "text-[40px]" : "text-sm")}
-            style={{ transform: `translate(${minX - (compact ? 340 : 150)}px, ${y + NODE_HEIGHT / 2}px) translateY(-50%)` }}
-          >
-            {lang === "ar" ? `الجيل ${arabicDigits(n)}` : `Generation ${n}`}
-          </div>
-        );
-      })}
-    </ViewportPortal>
-  );
+const COLLAPSED_KEY = "bft.tree.minimisedGenerations";
+const collapsedListeners = new Set<() => void>();
+const subscribeCollapsed = (fn: () => void) => {
+  collapsedListeners.add(fn);
+  return () => collapsedListeners.delete(fn);
+};
+function readCollapsedRaw(): string {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) ?? "[]";
+  } catch {
+    return "[]";
+  }
+}
+let collapsedFallback = "[]";
+function writeCollapsed(value: number[]) {
+  collapsedFallback = JSON.stringify(value);
+  try {
+    localStorage.setItem(COLLAPSED_KEY, collapsedFallback);
+  } catch {
+    // Storage blocked: the choice lasts until the page is reloaded.
+  }
+  collapsedListeners.forEach((fn) => fn());
+}
+const collapsedSnapshot = () => {
+  const raw = readCollapsedRaw();
+  return raw === "[]" ? collapsedFallback : raw;
+};
+function parseCollapsed(raw: string): Set<number> {
+  try {
+    const list = JSON.parse(raw);
+    return new Set(Array.isArray(list) ? list.filter((n): n is number => Number.isInteger(n)) : []);
+  } catch {
+    return new Set();
+  }
 }
 
 function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, guest, highlight, focusId, meId: meIdProp }: Props) {
@@ -260,8 +271,28 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
     if (next !== window.location.pathname + window.location.search) window.history.replaceState(window.history.state, "", next);
   }, [view, familyId, canToggle]);
 
+  // ── Minimised generations (remembered on this device) ─────────────────────
+  const collapsedRaw = useSyncExternalStore(subscribeCollapsed, collapsedSnapshot, () => "[]");
+  const collapsed = useMemo(() => parseCollapsed(collapsedRaw), [collapsedRaw]);
+  const toggleGeneration = useCallback(
+    (index: number) => {
+      const next = new Set(collapsed);
+      if (!next.delete(index)) next.add(index);
+      writeCollapsed([...next].sort((a, b) => a - b));
+    },
+    [collapsed],
+  );
+  const shownNodes = useMemo(() => collapseGenerations(nodes as unknown as GraphNode[], [], collapsed).nodes, [nodes, collapsed]);
+  const rows = useMemo(() => generationRows(nodes as unknown as GraphNode[], collapsed), [nodes, collapsed]);
+  const labels = useMemo(
+    () => branchLabels(shownNodes, (n) => getNameParts(n.data.person, lang).family ?? "", NODE_WIDTH),
+    [shownNodes, lang],
+  );
+
   // ── Viewport ───────────────────────────────────────────────────────────────
   const userMoved = useRef(false);
+  /** The tree opened on the signed-in member (not the whole tree): resizes keep them in view. */
+  const openedOnMe = useRef(false);
   const onMoveStart: OnMoveStart = useCallback((event) => {
     if (event) userMoved.current = true; // programmatic moves have no event
   }, []);
@@ -307,14 +338,14 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
   /** Centre a person, leaving room for the desktop family panel beside them. */
   const centreOn = useCallback(
     (id: string, panelWillOpen: boolean) => {
-      const n = (nodes as unknown as GraphNode[]).find((x) => x.id === id);
-      if (!n) return;
+      const n = shownNodes.find((x) => x.id === id);
+      if (!n || n.hidden) return;
       const zoom = Math.max(getZoom(), FOCUS_ZOOM);
       const shift = panelWillOpen && desktop ? PANEL_W / 2 / zoom : 0;
       const dir = lang === "ar" ? -1 : 1;
       setCenter(n.position.x + NODE_WIDTH / 2 + dir * shift, n.position.y + NODE_HEIGHT / 2, { zoom, duration: 500 });
     },
-    [nodes, getZoom, setCenter, desktop, lang],
+    [shownNodes, getZoom, setCenter, desktop, lang],
   );
 
   const select = useCallback(
@@ -354,7 +385,14 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
     if (intent.kind === "path") fitView({ nodes: intent.ids.map((id) => ({ id })), padding: 0.3, duration: 500, maxZoom: 1.1 });
     else if (framed.current) return;
     else if (intent.kind === "node") focusOn(intent.id);
-    else fitAll(0);
+    else if (meId && peopleById.has(meId) && view === "tree") {
+      // Open close up on the member, readable straight away; "Fit" still shows everyone.
+      const n = shownNodes.find((x) => x.id === meId);
+      if (n && !n.hidden) {
+        setCenter(n.position.x + NODE_WIDTH / 2, n.position.y + NODE_HEIGHT / 2, { zoom: OPEN_ZOOM, duration: 0 });
+        openedOnMe.current = true;
+      } else fitAll(0);
+    } else fitAll(0);
     framed.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- frame once when measured, and again only when the path changes
   }, [nodesReady, highlightKey]);
@@ -365,7 +403,10 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
     const onResize = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        if (!userMoved.current && !highlightKey && view === "tree") fitAll(200);
+        if (userMoved.current || highlightKey || view !== "tree") return;
+        const n = openedOnMe.current && meId ? shownNodes.find((x) => x.id === meId) : null;
+        if (n && !n.hidden) setCenter(n.position.x + NODE_WIDTH / 2, n.position.y + NODE_HEIGHT / 2, { zoom: getZoom(), duration: 200 });
+        else fitAll(200);
       }, 150);
     };
     window.addEventListener("resize", onResize);
@@ -373,7 +414,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
       window.removeEventListener("resize", onResize);
       clearTimeout(timer);
     };
-  }, [fitAll, highlightKey, view]);
+  }, [fitAll, highlightKey, view, meId, shownNodes, setCenter, getZoom]);
 
   // After "Tidy up" the server sends new positions; fit them once they land.
   const refitAfterTidy = useRef(false);
@@ -464,6 +505,11 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
         };
       }),
     [nodes, readOnly, highlightIndex, canEdit, selectedId, slotsFor, openSlot, focusOn],
+  );
+
+  const shown = useMemo(
+    () => collapseGenerations(nodesWithCallbacks, displayEdges as GraphEdge[], collapsed),
+    [nodesWithCallbacks, displayEdges, collapsed],
   );
 
   const moved = useMemo(() => (isAdmin ? merged.filter((p) => manualOffset(p) != null).length : 0), [merged, isAdmin]);
@@ -584,8 +630,8 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
     <div className="relative h-full w-full">
       <div className={cn("h-full w-full", view === "family" && "invisible")} aria-hidden={view === "family" || undefined}>
         <FamilyGraph
-          nodes={nodesWithCallbacks}
-          edges={displayEdges as GraphEdge[]}
+          nodes={shown.nodes}
+          edges={shown.edges}
           onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeDragStop={onNodeDragStop}
@@ -595,7 +641,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
           panOnDrag
           nodesDraggable={canEdit}
         >
-          {view === "tree" && <RowLabels nodes={nodes as unknown as GraphNode[]} lang={lang} />}
+          {view === "tree" && <BranchLabels labels={labels} />}
         </FamilyGraph>
 
         {canEdit && view === "tree" && (
@@ -614,6 +660,8 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
             if (intent.kind === "node") focusOn(intent.id);
           } : undefined}
         />
+
+        {view === "tree" && <GenerationRail rows={rows} lang={lang} onToggle={toggleGeneration} />}
 
         <CanvasOverlay lang={lang} readOnly={readOnly} canEdit={canEdit} pathLegend={!!highlightIndex} />
       </div>

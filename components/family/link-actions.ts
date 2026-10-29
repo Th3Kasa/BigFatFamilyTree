@@ -80,6 +80,11 @@ export async function addNewRelative(
     const field = created?.fieldErrors ? Object.values(created.fieldErrors)[0] : undefined;
     return { success: false, error: created?.error ?? field };
   }
+  if (slot === "sibling" && !subject.father_id && !subject.mother_id) {
+    // Parents unknown: addSibling links the two through an "Unknown parent" card.
+    const r = await addSibling(subject.id, created.personId);
+    if (!r.success) return { success: false, error: r.error, personId: created.personId };
+  }
   if (slot === "partner" && opts.status && opts.status !== "current") {
     const r = await linkSpouse(subject.id, created.personId, opts.status);
     if (!r.success) return { success: false, error: r.error, personId: created.personId };
