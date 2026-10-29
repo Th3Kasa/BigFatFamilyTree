@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 import { fieldClass } from "@/components/members/primitives";
-import { MIN_DOB } from "@/lib/validation/members";
+import { DobSelect } from "@/components/auth/DobSelect";
 
 export type Identity = { firstName: string; lastName: string; dob: string };
 
@@ -19,7 +19,6 @@ type Props = {
 export function IdentityFields({ lang, value, onChange, disabled, dobHint }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const uid = useId();
-  const todayLocal = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, viewer's timezone
 
   return (
     <>
@@ -59,30 +58,7 @@ export function IdentityFields({ lang, value, onChange, disabled, dobHint }: Pro
           className={fieldClass}
         />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${uid}-dob`} className="text-sm font-semibold">
-          {t("Date of birth", "تاريخ الميلاد")}
-        </label>
-        <input
-          id={`${uid}-dob`}
-          name="bday"
-          type="date"
-          autoComplete="bday"
-          required
-          min={MIN_DOB}
-          max={todayLocal}
-          value={value.dob}
-          onChange={(e) => onChange({ ...value, dob: e.target.value })}
-          disabled={disabled}
-          aria-describedby={dobHint ? `${uid}-dob-hint` : undefined}
-          className={fieldClass}
-        />
-        {dobHint ? (
-          <p id={`${uid}-dob-hint`} className="text-xs text-[var(--muted-foreground)]">
-            {dobHint}
-          </p>
-        ) : null}
-      </div>
+      <DobSelect lang={lang} value={value.dob} onChange={(dob) => onChange({ ...value, dob })} disabled={disabled} hint={dobHint} />
     </>
   );
 }
