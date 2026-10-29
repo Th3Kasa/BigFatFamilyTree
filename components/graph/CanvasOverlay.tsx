@@ -5,12 +5,14 @@ import { Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EDGE_STYLES, GHOST_OPACITY, WIDOWED_GLYPH } from "@/lib/graph/edge-styles";
 
-const HINT_KEY = "bft.canvas.hint.dismissed";
+const HINT_KEY = "bft.canvas.hint.v2.dismissed";
 
 type Props = {
   lang: "ar" | "en";
   /** Read-only view: hide the editing hint. The legend stays. */
   readOnly?: boolean;
+  /** Editors and admins: the tip mentions the "+ Add" placeholders. */
+  canEdit?: boolean;
   /** A relationship path is highlighted: add it to the legend. */
   pathLegend?: boolean;
 };
@@ -29,7 +31,7 @@ function readHintDismissed() {
  * Canvas chrome that isn't a control: the first-visit tip and the line legend
  * (two common line types, with every type one tap away in a popover).
  */
-export function CanvasOverlay({ lang, readOnly = false, pathLegend = false }: Props) {
+export function CanvasOverlay({ lang, readOnly = false, canEdit = false, pathLegend = false }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const storedDismissed = useSyncExternalStore(noopSubscribe, readHintDismissed, () => true);
   const [dismissed, setDismissed] = useState(false);
@@ -47,7 +49,7 @@ export function CanvasOverlay({ lang, readOnly = false, pathLegend = false }: Pr
   return (
     <>
       {showHint && (
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center pe-16 ps-3 md:top-4 md:pe-20">
+        <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center px-3 md:top-[4.5rem] md:pe-20">
           <div
             role="note"
             className="pointer-events-auto flex max-w-md items-start gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--card)] py-3 pe-2 ps-4 shadow-[var(--shadow-floating)]"
@@ -55,10 +57,12 @@ export function CanvasOverlay({ lang, readOnly = false, pathLegend = false }: Pr
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
             <p className="text-sm leading-relaxed text-[var(--foreground)]">
               <strong className="font-semibold">{t("Tip: ", "نصيحة: ")}</strong>
-              {t(
-                "Click anyone to see their family. Drag a dot from one card to another to connect two people.",
-                "انقر على أي شخص لترى عائلته. اسحب نقطة من بطاقة إلى أخرى لربط شخصين.",
-              )}
+              {canEdit
+                ? t(
+                    "Click anyone to see their family. The dashed boxes show who's missing: click one to add them.",
+                    "انقر على أي شخص لترى عائلته. المربعات المنقّطة تُظهر من ينقص: انقر على أحدها لإضافته.",
+                  )
+                : t("Click anyone to see their family.", "انقر على أي شخص لترى عائلته.")}
             </p>
             <button
               type="button"

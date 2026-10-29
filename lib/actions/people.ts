@@ -81,7 +81,7 @@ export async function createPerson(
       type: "spouse",
       status: "current",
     });
-    // Person is already committed; if link fails, redirect anyway — user can re-link from Inspector.
+    // Person is already committed; if link fails, redirect anyway — user can re-link from the family panel.
     if (relErr) {
       revalidatePath("/");
       redirect(`/person/${data.slug ?? data.id}`);
@@ -229,8 +229,7 @@ export async function createPersonQuick(
 }
 
 // ── linkParentChild ────────────────────────────────────────────────────────────
-// Used when dragging a connection from a parent node's bottom handle to a
-// child node's top handle on the canvas.
+// Links an existing person as a parent (the family panel's "Already in the tree").
 export async function linkParentChild(parentId: string, childId: string): Promise<ActionState> {
   if (parentId === childId) return { success: false, error: "A person cannot be their own parent." };
   const supabase = await createClient();
@@ -345,70 +344,6 @@ export async function unlinkParent(
   return { success: true };
 }
 
-// ── convertParentToSpouse ─────────────────────────────────────────────────────
-// One-shot: unlinks the parent-child relationship AND inserts a spouse rel.
-// Used when a parent link was created by mistake and the two people are
-// actually partners.
-export async function convertParentToSpouse(
-  parentId: string,
-  childId: string,
-): Promise<{ success: boolean; error?: string }> {
-  if (parentId === childId) {
-    return { success: false, error: "Cannot link a person to themselves." };
-  }
-
-  const supabase = await createClient();
-
-  const { data: child } = await supabase
-    .from("people")
-    .select("father_id, mother_id, slug")
-    .eq("id", childId)
-    .maybeSingle();
-
-  if (!child) return { success: false, error: "Person not found." };
-
-  const ch = child as { father_id: string | null; mother_id: string | null; slug: string | null };
-  const field =
-    ch.father_id === parentId
-      ? "father_id"
-      : ch.mother_id === parentId
-        ? "mother_id"
-        : null;
-
-  if (!field) return { success: false, error: "No parent link found between these two people." };
-
-  const { error: unlinkErr } = await supabase
-    .from("people")
-    .update({ [field]: null })
-    .eq("id", childId);
-  if (unlinkErr) return { success: false, error: unlinkErr.message };
-
-  const { data: existing } = await supabase
-    .from("relationships")
-    .select("id")
-    .eq("type", "spouse")
-    .or(
-      `and(person_a_id.eq.${parentId},person_b_id.eq.${childId}),and(person_a_id.eq.${childId},person_b_id.eq.${parentId})`,
-    )
-    .maybeSingle();
-
-  if (!existing) {
-    const { error: insertErr } = await supabase.from("relationships").insert({
-      person_a_id: parentId,
-      person_b_id: childId,
-      type: "spouse",
-      status: "current",
-    });
-    if (insertErr) return { success: false, error: insertErr.message };
-  }
-
-  revalidatePath("/");
-  if (ch.slug) revalidatePath(`/person/${ch.slug}`);
-  revalidatePath(`/person/${childId}`);
-  revalidatePath(`/person/${parentId}`);
-  return { success: true };
-}
-
 // ── linkSpouse ────────────────────────────────────────────────────────────────
 // Creates a spouse relationship between two existing people. Idempotent.
 // If a row already exists, updates its status when the caller's status differs.
@@ -466,88 +401,20 @@ export async function linkSpouse(
   return { success: true, relationshipId: (data as { id: string }).id };
 }
 
-// ── linkAdopted ───────────────────────────────────────────────────────────────
-// Records an adoptive parent → child relationship in the relationships table.
-// Idempotent on the same parent/child pair.
-export async function linkAdopted(
-  parentId: string,
-  childId: string,
-): Promise<{ success: boolean; error?: string }> {
-  if (parentId === childId) {
-    return { success: false, error: "Cannot adopt yourself." };
-  }
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("relationships")
-    .select("id")
-    .eq("type", "adopted_by")
-    .eq("person_a_id", childId)
-    .eq("person_b_id", parentId)
-    .maybeSingle();
-  if (existing) {
-    revalidatePath("/");
-    revalidatePath(`/person/${parentId}`);
-    revalidatePath(`/person/${childId}`);
-    return { success: true };
-  }
-  const { error } = await supabase.from("relationships").insert({
-    person_a_id: childId,
-    person_b_id: parentId,
-    type: "adopted_by",
-    status: "current",
-  });
-  if (error) return { success: false, error: error.message };
-  revalidatePath("/");
-  revalidatePath(`/person/${parentId}`);
-  revalidatePath(`/person/${childId}`);
-  return { success: true };
-}
-
-// ── linkGuardian ──────────────────────────────────────────────────────────────
-// Records a guardian/raised-by relationship.
-export async function linkGuardian(
-  guardianId: string,
-  childId: string,
-): Promise<{ success: boolean; error?: string }> {
-  if (guardianId === childId) {
-    return { success: false, error: "Cannot be your own guardian." };
-  }
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("relationships")
-    .select("id")
-    .eq("type", "raised_by")
-    .eq("person_a_id", childId)
-    .eq("person_b_id", guardianId)
-    .maybeSingle();
-  if (existing) {
-    revalidatePath("/");
-    revalidatePath(`/person/${guardianId}`);
-    revalidatePath(`/person/${childId}`);
-    return { success: true };
-  }
-  const { error } = await supabase.from("relationships").insert({
-    person_a_id: childId,
-    person_b_id: guardianId,
-    type: "raised_by",
-    status: "current",
-  });
-  if (error) return { success: false, error: error.message };
-  revalidatePath("/");
-  revalidatePath(`/person/${guardianId}`);
-  revalidatePath(`/person/${childId}`);
-  return { success: true };
-}
-
 // ── linkChild ─────────────────────────────────────────────────────────────────
-// Sets parentId as the father_id or mother_id of childId, based on parent's
-// gender. Idempotent.
+// Sets parentId as the father_id or mother_id of childId: the slot the caller
+// names explicitly (when the parents' genders don't decide it), otherwise by the
+// parent's gender. Fills an empty slot only. Idempotent.
 export async function linkChild(
   parentId: string,
   childId: string,
+  slot?: "father_id" | "mother_id",
 ): Promise<{ success: boolean; error?: string }> {
   if (parentId === childId) {
     return { success: false, error: "Cannot link a person to themselves." };
+  }
+  if (slot !== undefined && slot !== "father_id" && slot !== "mother_id") {
+    return { success: false, error: "Invalid parent slot." };
   }
 
   const supabase = await createClient();
@@ -558,7 +425,7 @@ export async function linkChild(
     .maybeSingle();
   if (!parent) return { success: false, error: "Parent not found." };
 
-  const field = (parent as { gender: string }).gender === "f" ? "mother_id" : "father_id";
+  const field = slot ?? ((parent as { gender: string }).gender === "f" ? "mother_id" : "father_id");
 
   const { data: child } = await supabase
     .from("people")
