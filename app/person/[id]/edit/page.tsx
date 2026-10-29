@@ -6,6 +6,7 @@ import { updatePerson } from "@/lib/actions/people";
 import { PersonForm } from "@/components/forms/PersonForm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { BackButton } from "@/components/person/BackButton";
+import { withSignedPhotos } from "@/lib/storage/photos";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -28,6 +29,7 @@ export default async function EditPersonPage({ params }: Props) {
   ]);
 
   if (!person) notFound();
+  const personWithPhoto = (await withSignedPhotos(supabase, [person]))[0];
 
   const updateThisPerson = updatePerson.bind(null, person.id);
   const name = getDisplayName(person, lang);
@@ -49,7 +51,7 @@ export default async function EditPersonPage({ params }: Props) {
           <CardContent>
             <PersonForm
               action={updateThisPerson}
-              initialData={person}
+              initialData={personWithPhoto}
               people={people ?? []}
               lang={lang}
               submitLabel={t("Save changes", "حفظ التغييرات")}

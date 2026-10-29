@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { signRowPhotos } from "@/lib/storage/sign";
 import { createClient } from "@/lib/supabase/client";
 import { getDisplayName } from "@/lib/utils";
 
@@ -55,8 +56,11 @@ async function fetchDirectory(): Promise<Directory> {
       .order("created_at", { ascending: false })
       .limit(500),
   ]);
-  const people: DirectoryPerson[] = ((peopleRes.data ?? []) as (DirectoryPerson & { is_placeholder?: boolean })[])
-    .filter((p) => !p.is_placeholder);
+  // The photos bucket is private: sign the whole directory with one request.
+  const people: DirectoryPerson[] = await signRowPhotos(
+    supabase,
+    ((peopleRes.data ?? []) as (DirectoryPerson & { is_placeholder?: boolean })[]).filter((p) => !p.is_placeholder),
+  );
   const stories = (eventsRes.data ?? []) as DirectoryStory[];
   return { people, stories };
 }

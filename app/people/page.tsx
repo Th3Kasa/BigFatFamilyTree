@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { cn, getDisplayName } from "@/lib/utils";
 import { PeopleDirectory } from "@/components/people/PeopleDirectory";
+import { withSignedPhotos } from "@/lib/storage/photos";
 import type { DirectoryPerson } from "@/lib/client/family-directory";
 
 type SearchParams = Promise<{ sort?: string | string[] }>;
@@ -36,7 +37,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Searc
   const role = (profile as { role?: string } | null)?.role;
   const canEdit = role === "admin" || role === "editor";
 
-  const people = (rows ?? []) as DirectoryPerson[];
+  const people = await withSignedPhotos(supabase, (rows ?? []) as DirectoryPerson[]);
   if (sort === "az") {
     people.sort((a, b) => getDisplayName(a, lang).localeCompare(getDisplayName(b, lang), lang));
   }

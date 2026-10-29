@@ -10,6 +10,7 @@ import { makeKinContext, relate } from "@/lib/kinship/view";
 import { Landing } from "@/components/landing/Landing";
 import { homeEntry } from "@/lib/members/journey";
 import { handleFirstVisit } from "@/lib/members/onboarding";
+import { withSignedPhotos } from "@/lib/storage/photos";
 import { commonFamilyName, countGenerations } from "@/lib/people/stats";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
@@ -95,12 +96,14 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   // stamp profiles.onboarded_at when they arrive there).
   await handleFirstVisit(supabase, user.id, params);
 
-  const [{ data: people }, { data: relationships }, { count: storyCount }, { data: profile }] = await Promise.all([
+  const [{ data: peopleRows }, { data: relationships }, { count: storyCount }, { data: profile }] = await Promise.all([
     supabase.from("people").select(TREE_COLUMNS).is("deleted_at", null).order("given_en"),
     supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
     supabase.from("events").select("id", { count: "exact", head: true }).eq("type", "notable_story"),
     supabase.from("profiles").select("role").eq("id", user.id).single(),
   ]);
+  // Photos live in a private bucket: sign them here so the canvas gets ready-to-use URLs.
+  const people = peopleRows ? await withSignedPhotos(supabase, peopleRows) : peopleRows;
   const role = (profile as { role?: string | null } | null)?.role;
   const canEdit = role === "admin" || role === "editor";
 

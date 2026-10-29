@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { RelationshipFinder } from "@/components/relationships/RelationshipFinder";
+import { withSignedPhotos } from "@/lib/storage/photos";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
 const TREE_COLUMNS =
@@ -30,7 +31,7 @@ export default async function RelationshipsPage({ searchParams }: { searchParams
     supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
   ]);
 
-  const people = (peopleRows ?? []) as PersonInput[];
+  const people = await withSignedPhotos(supabase, (peopleRows ?? []) as PersonInput[]);
   const relationships = (relRows ?? []) as RelationshipInput[];
   const { nodes, edges } = buildGraphElements(people, relationships, lang);
 

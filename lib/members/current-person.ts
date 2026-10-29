@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { withSignedPhotos } from "@/lib/storage/photos";
 import type { CurrentPerson } from "./types";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
@@ -31,7 +32,8 @@ export async function fetchCurrentPerson(
     .eq("id", personId)
     .is("deleted_at", null)
     .maybeSingle();
-  return (person as CurrentPerson | null) ?? null;
+  if (!person) return null;
+  return (await withSignedPhotos(supabase, [person as CurrentPerson]))[0];
 }
 
 /**

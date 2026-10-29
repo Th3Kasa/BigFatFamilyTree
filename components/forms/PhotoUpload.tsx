@@ -54,8 +54,8 @@ export function PhotoUpload({ currentUrl, onUpload }: Props) {
       return;
     }
 
-    const { data } = supabase.storage.from("photos").getPublicUrl(path);
-    onUpload(data.publicUrl);
+    // The bucket is private: the form stores the path; pages sign it when they render.
+    onUpload(path);
     setUploading(false);
   }
 
