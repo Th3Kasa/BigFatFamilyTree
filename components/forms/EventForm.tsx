@@ -41,6 +41,7 @@ const fieldClass =
   "w-full rounded-2xl border border-transparent bg-[var(--input)] px-4 py-3 text-[15px] text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)] hover:border-[var(--border-strong)] focus-visible:border-[var(--primary)] focus-visible:bg-[var(--card)] focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
 const selectClass =
   "h-11 w-full rounded-full border border-transparent bg-[var(--input)] px-4 text-[15px] text-[var(--foreground)] outline-none transition-colors hover:border-[var(--border-strong)] focus-visible:border-[var(--primary)] focus-visible:bg-[var(--card)] focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
+const ARABIC_RE = /[؀-ۿ]/;
 const labelClass = "text-sm font-semibold text-[var(--foreground)]";
 const hintClass = "text-xs text-[var(--muted-foreground)]";
 
@@ -48,6 +49,7 @@ export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
   const router = useRouter();
   const memory = kind === "memory";
   const [type, setType] = useState<string>(memory ? "notable_story" : "birth");
+  const [memoryText, setMemoryText] = useState("");
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
 
   const [state, formAction, pending] = useActionState(
@@ -70,16 +72,8 @@ export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
 
   // The visitor's own language comes first; the other is optional.
   const storyFields = [
-    {
-      name: "story_en",
-      dir: "ltr" as const,
-      label: memory ? t("Your memory (English)", "الذكرى (بالإنجليزية)") : t("Story (English)", "القصة (بالإنجليزية)"),
-    },
-    {
-      name: "story_ar",
-      dir: "rtl" as const,
-      label: memory ? t("Your memory (Arabic)", "الذكرى (بالعربية)") : t("Story (Arabic)", "القصة (بالعربية)"),
-    },
+    { name: "story_en", dir: "ltr" as const, label: t("Story (English)", "القصة (بالإنجليزية)") },
+    { name: "story_ar", dir: "rtl" as const, label: t("Story (Arabic)", "القصة (بالعربية)") },
   ];
   if (lang === "ar") storyFields.reverse();
 
@@ -92,7 +86,10 @@ export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
       )}
 
       {memory ? (
-        <input type="hidden" name="type" value="notable_story" />
+        <>
+          <input type="hidden" name="type" value="notable_story" />
+          <input type="hidden" name="date_precision" value="around" />
+        </>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -120,58 +117,28 @@ export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
         </div>
       )}
 
-      {storyFields.map((f, i) => (
-        <div key={f.name} className="space-y-1.5">
-          <label htmlFor={f.name} className={labelClass}>
-            {f.label}
-            {i > 0 && <span className="font-normal text-[var(--muted-foreground)]"> {t("(optional)", "(اختياري)")}</span>}
+      {memory ? (
+        <div className="space-y-1.5">
+          <label htmlFor="memory_text" className={labelClass}>
+            {t("Your memory", "ذكراك")}
           </label>
+          {/* One box in any language; the text is filed under Arabic if it's written in Arabic script. */}
           <textarea
-            id={f.name}
-            name={f.name}
-            dir={f.dir}
-            rows={memory && i === 0 ? 6 : 4}
-            required={memory && i === 0}
+            id="memory_text"
+            name={ARABIC_RE.test(memoryText) ? "story_ar" : "story_en"}
+            dir="auto"
+            rows={7}
+            required
             maxLength={4000}
-            placeholder={
-              memory && i === 0
-                ? t("What do you remember? A moment, a habit, something they used to say…", "ماذا تتذكر؟ لحظة، عادة، شيء كانوا يقولونه…")
-                : undefined
-            }
+            value={memoryText}
+            onChange={(e) => setMemoryText(e.target.value)}
+            placeholder={t("What do you remember? A moment, a habit, something they used to say…", "ماذا تتذكر؟ لحظة، عادة، شيء كانوا يقولونه…")}
             className={fieldClass}
           />
         </div>
-      ))}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label htmlFor="date_value" className={labelClass}>
-            {memory ? t("When was it? (optional)", "متى كان ذلك؟ (اختياري)") : t("Date", "التاريخ")}
-          </label>
-          <Input id="date_value" name="date_value" type="date" />
-          <p className={hintClass}>{t("Leave empty if you're not sure.", "اتركه فارغًا إن لم تكن متأكدًا.")}</p>
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="date_precision" className={labelClass}>
-            {t("How sure is the date?", "ما مدى دقة التاريخ؟")}
-          </label>
-          <select id="date_precision" name="date_precision" defaultValue={memory ? "around" : "exact"} className={selectClass}>
-            {DATE_PRECISIONS.map((p) => (
-              <option key={p} value={p}>
-                {label(p, PRECISION_LABELS)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="location" className={labelClass}>
-            {memory ? t("Where was it? (optional)", "أين كان ذلك؟ (اختياري)") : t("Place", "المكان")}
-          </label>
-          <Input id="location" name="location" dir="auto" maxLength={200} placeholder={t("e.g. Beirut", "مثلًا: بيروت")} />
-        </div>
-      </div>
+      ) : (
+        <EventDetails storyFields={storyFields} labelFn={label} t={t} />
+      )}
 
       <div className="flex flex-wrap items-center gap-3 pt-1">
         <Button type="submit" disabled={pending}>
@@ -186,5 +153,59 @@ export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function EventDetails({
+  storyFields,
+  labelFn,
+  t,
+}: {
+  storyFields: { name: string; dir: "ltr" | "rtl"; label: string }[];
+  labelFn: (key: string, map: Record<string, { ar: string; en: string }>) => string;
+  t: (en: string, ar: string) => string;
+}) {
+  return (
+    <>
+      {storyFields.map((f, i) => (
+        <div key={f.name} className="space-y-1.5">
+          <label htmlFor={f.name} className={labelClass}>
+            {f.label}
+            {i > 0 && <span className="font-normal text-[var(--muted-foreground)]"> {t("(optional)", "(اختياري)")}</span>}
+          </label>
+          <textarea id={f.name} name={f.name} dir={f.dir} rows={4} maxLength={4000} className={fieldClass} />
+        </div>
+      ))}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label htmlFor="date_value" className={labelClass}>
+            {t("Date", "التاريخ")}
+          </label>
+          <Input id="date_value" name="date_value" type="date" />
+          <p className={hintClass}>{t("Leave empty if you're not sure.", "اتركه فارغًا إن لم تكن متأكدًا.")}</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="date_precision" className={labelClass}>
+            {t("How sure is the date?", "ما مدى دقة التاريخ؟")}
+          </label>
+          <select id="date_precision" name="date_precision" defaultValue="exact" className={selectClass}>
+            {DATE_PRECISIONS.map((p) => (
+              <option key={p} value={p}>
+                {labelFn(p, PRECISION_LABELS)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-2">
+          <label htmlFor="location" className={labelClass}>
+            {t("Place", "المكان")}
+          </label>
+          <Input id="location" name="location" dir="auto" maxLength={200} placeholder={t("e.g. Beirut", "مثلًا: بيروت")} />
+        </div>
+      </div>
+    </>
   );
 }
