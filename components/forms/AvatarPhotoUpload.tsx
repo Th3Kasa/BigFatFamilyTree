@@ -70,10 +70,11 @@ export function AvatarPhotoUpload({
       return;
     }
 
-    const { data } = supabase.storage.from("photos").getPublicUrl(path);
-    const publicUrl = data.publicUrl;
+    // The bucket is private: save the path, and show a short-lived signed URL meanwhile.
+    const { data: signed } = await supabase.storage.from("photos").createSignedUrl(path, 3600);
+    const shownUrl = signed?.signedUrl ?? blobUrl;
 
-    const result = await updatePersonPhoto(personId, publicUrl);
+    const result = await updatePersonPhoto(personId, path);
     URL.revokeObjectURL(blobUrl);
 
     if (!result.success) {
@@ -83,7 +84,7 @@ export function AvatarPhotoUpload({
       return;
     }
 
-    setOptimisticUrl(publicUrl);
+    setOptimisticUrl(shownUrl);
     setBusy(false);
     startTransition(() => router.refresh());
   }

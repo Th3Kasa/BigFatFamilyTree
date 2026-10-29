@@ -357,7 +357,10 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           canvas_viewport: Json | null
+          checklist_dismissed_at: string | null
           created_at: string
           date_of_birth: string | null
           display_name: string | null
@@ -365,11 +368,16 @@ export type Database = {
           full_name: string | null
           id: string
           invited_by: string | null
+          is_super_admin: boolean
+          onboarded_at: string | null
           person_id: string | null
           role: Database["public"]["Enums"]["user_role"]
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           canvas_viewport?: Json | null
+          checklist_dismissed_at?: string | null
           created_at?: string
           date_of_birth?: string | null
           display_name?: string | null
@@ -377,11 +385,16 @@ export type Database = {
           full_name?: string | null
           id: string
           invited_by?: string | null
+          is_super_admin?: boolean
+          onboarded_at?: string | null
           person_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           canvas_viewport?: Json | null
+          checklist_dismissed_at?: string | null
           created_at?: string
           date_of_birth?: string | null
           display_name?: string | null
@@ -389,10 +402,19 @@ export type Database = {
           full_name?: string | null
           id?: string
           invited_by?: string | null
+          is_super_admin?: boolean
+          onboarded_at?: string | null
           person_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profiles_invited_by_fkey"
             columns: ["invited_by"]
@@ -477,6 +499,67 @@ export type Database = {
           },
         ]
       }
+      relative_suggestions: {
+        Row: {
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          name: string
+          note: string | null
+          person_id: string | null
+          relation: string
+          status: Database["public"]["Enums"]["relative_suggestion_status"]
+          suggested_by: string
+        }
+        Insert: {
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          name: string
+          note?: string | null
+          person_id?: string | null
+          relation: string
+          status?: Database["public"]["Enums"]["relative_suggestion_status"]
+          suggested_by: string
+        }
+        Update: {
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          name?: string
+          note?: string | null
+          person_id?: string | null
+          relation?: string
+          status?: Database["public"]["Enums"]["relative_suggestion_status"]
+          suggested_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relative_suggestions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "relative_suggestions_suggested_by_fkey"
+            columns: ["suggested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "relative_suggestions_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           focal_person_id: string | null
@@ -504,7 +587,7 @@ export type Database = {
           recorded_at: string | null
           recorded_with: string | null
           segments: Json | null
-          uploaded_by: string
+          uploaded_by: string | null
         }
         Insert: {
           audio_url: string
@@ -514,7 +597,7 @@ export type Database = {
           recorded_at?: string | null
           recorded_with?: string | null
           segments?: Json | null
-          uploaded_by: string
+          uploaded_by: string | null
         }
         Update: {
           audio_url?: string
@@ -524,7 +607,7 @@ export type Database = {
           recorded_at?: string | null
           recorded_with?: string | null
           segments?: Json | null
-          uploaded_by?: string
+          uploaded_by?: string | null
         }
         Relationships: [
           {
@@ -574,6 +657,42 @@ export type Database = {
         }[]
       }
       claimed_person_ids: { Args: never; Returns: string[] }
+      dismiss_checklist: { Args: never; Returns: undefined }
+      first_admin_name: { Args: never; Returns: string | null }
+      is_approved: { Args: never; Returns: boolean }
+      is_super_admin: { Args: never; Returns: boolean }
+      mark_onboarded: { Args: never; Returns: undefined }
+      my_pending_claim_person: {
+        Args: never
+        Returns: {
+          id: string
+          given_en: string | null
+          given_ar: string | null
+          family_name_en: string | null
+          family_name_ar: string | null
+          birth_year: number | null
+          father_name_en: string | null
+          father_name_ar: string | null
+          mother_name_en: string | null
+          mother_name_ar: string | null
+        }[]
+      }
+      search_people_for_claim: {
+        Args: { q: string; dob?: string | null }
+        Returns: {
+          id: string
+          given_en: string | null
+          given_ar: string | null
+          family_name_en: string | null
+          family_name_ar: string | null
+          birth_year: number | null
+          father_name_en: string | null
+          father_name_ar: string | null
+          mother_name_en: string | null
+          mother_name_ar: string | null
+          dob_match: string
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
@@ -603,6 +722,7 @@ export type Database = {
       link_request_status: "pending" | "approved" | "declined" | "cancelled"
       proposal_status_type: "pending" | "approved" | "rejected"
       relationship_status_type: "current" | "divorced" | "widowed"
+      relative_suggestion_status: "pending" | "added" | "already_in_tree" | "dismissed"
       relationship_type: "spouse" | "adopted_by" | "raised_by" | "godparent"
       user_role: "admin" | "editor" | "viewer"
     }
@@ -761,6 +881,7 @@ export const Constants = {
       link_request_status: ["pending", "approved", "declined", "cancelled"],
       proposal_status_type: ["pending", "approved", "rejected"],
       relationship_status_type: ["current", "divorced", "widowed"],
+      relative_suggestion_status: ["pending", "added", "already_in_tree", "dismissed"],
       relationship_type: ["spouse", "adopted_by", "raised_by", "godparent"],
       user_role: ["admin", "editor", "viewer"],
     },

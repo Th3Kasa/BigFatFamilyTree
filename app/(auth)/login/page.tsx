@@ -1,122 +1,70 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Loader2, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
 import { signUpProfileSchema } from "@/lib/validation/members";
 import { safeNextPath } from "@/lib/auth/safe-next";
 import { SignupForm, useDocumentLang } from "@/components/auth/SignupForm";
+import { LanguageToggle } from "@/components/shell/LanguageToggle";
+import { cardClass, fieldClass, pill, Spinner } from "@/components/members/primitives";
 import { ensureBootstrapUser, signInBootstrapAdmin } from "./actions";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-/* ─── floating-label input ───────────────────────────────────── */
-function FloatingInput({
-  id,
-  label,
-  value,
-  onChange,
-  disabled,
-  type = "email",
-  autoComplete,
-  showToggle,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled: boolean;
-  type?: "email" | "password" | "text";
-  autoComplete?: string;
-  showToggle?: boolean;
-}) {
-  const [focused, setFocused] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const lifted = focused || value.length > 0;
-  const inputType = type === "password" ? (visible ? "text" : "password") : type;
+type Lang = "ar" | "en";
+type Screen = "signin" | "magic" | "signup" | "forgot" | "sent-magic" | "sent-signup" | "sent-reset";
 
-  return (
-    <div className="relative">
-      <input
-        id={id}
-        type={inputType}
-        autoComplete={autoComplete ?? (type === "password" ? "current-password" : "email")}
-        required
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        disabled={disabled}
-        className={cn(
-          "peer w-full rounded-lg border border-[var(--border)] bg-transparent pb-2 pt-5 text-sm text-[var(--foreground)] shadow-sm transition-colors",
-          showToggle ? "px-4 pr-10" : "px-4",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-          "disabled:cursor-not-allowed disabled:opacity-50"
-        )}
-      />
-      <label
-        htmlFor={id}
-        className={cn(
-          "pointer-events-none absolute start-4 text-[var(--muted-foreground)] transition-all duration-150",
-          lifted ? "top-1.5 text-[10px] font-medium text-[var(--primary)]" : "top-3.5 text-sm"
-        )}
-      >
-        {label}
-      </label>
-      {showToggle && type === "password" && (
-        <button
-          type="button"
-          tabIndex={-1}
-          onClick={() => setVisible((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-        >
-          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        </button>
-      )}
-    </div>
-  );
-}
+const RESEND_COOLDOWN_SECONDS = 60;
 
 /* ─── resend countdown ───────────────────────────────────────── */
-function useResendCountdown(active: boolean, seconds = 30) {
+// Starts at `seconds` whenever `runKey` changes (entering a "check your email"
+// screen, or sending again) and ticks down to 0.
+function useCountdown(seconds: number, runKey: string | null) {
   const [remaining, setRemaining] = useState(seconds);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!active) {
-      setRemaining(seconds);
-      return;
-    }
+    if (runKey === null) return;
     setRemaining(seconds);
-    intervalRef.current = setInterval(() => {
+    const id = setInterval(() => {
       setRemaining((r) => {
         if (r <= 1) {
-          clearInterval(intervalRef.current!);
+          clearInterval(id);
           return 0;
         }
         return r - 1;
       });
     }, 1000);
-    return () => clearInterval(intervalRef.current!);
-  }, [active, seconds]);
+    return () => clearInterval(id);
+  }, [runKey, seconds]);
 
   return remaining;
 }
 
-type Screen = "signin" | "magic" | "signup" | "forgot" | "sent-magic" | "sent-signup" | "sent-reset";
+/* ─── friendly errors ────────────────────────────────────────── */
 
-/* ─── main page ──────────────────────────────────────────────── */
-
-// Supabase's built-in mailer allows only a few emails per hour for the whole
-// project; turn its raw error into something a family member understands.
-function friendlyAuthError(error: { message: string; status?: number }): string {
+// Supabase's mailer allows only a few emails per hour for the whole project;
+// turn its raw error into something a family member understands.
+function friendlyAuthError(error: { message: string; status?: number }, lang: Lang = "en"): string {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   if (error.status === 429 || /rate limit/i.test(error.message)) {
-    return "Too many emails were sent just now. Please wait a few minutes and try again.";
+    return t(
+      "Too many emails were sent just now. Please wait a few minutes and try again.",
+      "تم إرسال عدد كبير من الرسائل الآن. انتظر بضع دقائق ثم حاول مرة أخرى.",
+    );
+  }
+  if (/invalid login credentials/i.test(error.message)) {
+    return t(
+      "That email and password don't match. Check them, or use a magic link instead.",
+      "البريد وكلمة المرور غير متطابقين. تحقق منهما أو استخدم رابطًا سحريًا.",
+    );
+  }
+  if (/email not confirmed/i.test(error.message)) {
+    return t(
+      "Please confirm your email first. We sent you a link when you signed up.",
+      "يرجى تأكيد بريدك أولًا. أرسلنا لك رابطًا عند التسجيل.",
+    );
   }
   return error.message;
 }
@@ -124,15 +72,9 @@ function friendlyAuthError(error: { message: string; status?: number }): string 
 // Sign-up is the one flow used by the whole family (often on phones, often in
 // Arabic), so its errors are plain-language and bilingual. Anything unexpected
 // falls through to friendlyAuthError.
-function friendlySignupError(error: { message: string; status?: number }, lang: "ar" | "en"): string {
+function friendlySignupError(error: { message: string; status?: number }, lang: Lang): string {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const msg = error.message;
-  if (error.status === 429 || /rate limit/i.test(msg)) {
-    return t(
-      "Too many emails were sent just now. Please wait a few minutes and try again.",
-      "تم إرسال عدد كبير من الرسائل الآن. انتظر بضع دقائق ثم حاول مرة أخرى.",
-    );
-  }
   if (/already (registered|been registered)|already exists/i.test(msg)) {
     return t(
       "There's already an account with this email. Try signing in instead.",
@@ -145,7 +87,7 @@ function friendlySignupError(error: { message: string; status?: number }, lang: 
   if (/signups? (are )?(not allowed|disabled)/i.test(msg)) {
     return t("Sign-ups are closed right now. Please ask a family admin.", "التسجيل مغلق حاليًا. اسأل مشرف العائلة.");
   }
-  return friendlyAuthError(error);
+  return friendlyAuthError(error, lang);
 }
 
 // Where to land after signing in: the ?next= the middleware adds when it
@@ -156,10 +98,58 @@ function nextFromUrl(): string {
   return safeNextPath(new URLSearchParams(window.location.search).get("next"));
 }
 
+/* ─── small pieces ───────────────────────────────────────────── */
+
+function Field({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-semibold text-[var(--foreground)]">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function ErrorBox({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="rounded-2xl border border-[#F6D3BC] bg-[#FFF4EC] px-4 py-3 text-sm font-medium text-[#9A3412]">
+      {message}
+    </p>
+  );
+}
+
+function LinkButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex min-h-11 items-center justify-center rounded-full px-3 text-sm font-semibold text-[var(--primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ─── main page ──────────────────────────────────────────────── */
+
 export default function LoginPage() {
   const lang = useDocumentLang();
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const uid = useId();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
   const [dob, setDob] = useState("");
   // Where a magic link should land after sign-in ("/welcome" for new sign-ups).
@@ -167,33 +157,61 @@ export default function LoginPage() {
   const [screen, setScreen] = useState<Screen>("signin");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [resendTick, setResendTick] = useState(0);
+  const [resendNote, setResendNote] = useState<string | null>(null);
+  const tabRefs = useRef<Record<"signin" | "signup", HTMLButtonElement | null>>({ signin: null, signup: null });
 
-  const resendRemaining = useResendCountdown(screen === "sent-magic");
-  const canResend = resendRemaining === 0;
+  // "Join the family" on the landing page opens the sign-up tab: /login?mode=signup
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("mode") === "signup") setScreen("signup");
+  }, []);
+
+  const sent = screen === "sent-magic" || screen === "sent-signup" || screen === "sent-reset";
+  const remaining = useCountdown(RESEND_COOLDOWN_SECONDS, sent ? `${screen}:${resendTick}` : null);
+  const canResend = remaining === 0;
 
   function goTo(s: Screen) {
     setScreen(s);
     setErrorMsg(null);
+    setResendNote(null);
     if (s !== "sent-magic") setAfterAuth(null);
   }
 
+  const activeTab: "signin" | "signup" | null =
+    screen === "signup" ? "signup" : screen === "signin" || screen === "magic" ? "signin" : null;
+
+  function onTabKey(e: React.KeyboardEvent, current: "signin" | "signup") {
+    const order: Array<"signin" | "signup"> = lang === "ar" ? ["signup", "signin"] : ["signin", "signup"];
+    const idx = order.indexOf(current);
+    let next: "signin" | "signup" | null = null;
+    if (e.key === "ArrowRight") next = order[(idx + (lang === "ar" ? -1 : 1) + 2) % 2];
+    else if (e.key === "ArrowLeft") next = order[(idx + (lang === "ar" ? 1 : -1) + 2) % 2];
+    else if (e.key === "Home") next = order[0];
+    else if (e.key === "End") next = order[1];
+    if (!next) return;
+    e.preventDefault();
+    goTo(next);
+    tabRefs.current[next]?.focus();
+  }
+
+  /* ── sign in with a password ── */
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
     const parsed = magicLinkSchema.safeParse({ email });
     if (!parsed.success) {
-      setErrorMsg("Enter a valid email address.");
+      setErrorMsg(t("Enter a valid email address.", "أدخل بريدًا إلكترونيًا صحيحًا."));
       return;
     }
     if (!password) {
-      setErrorMsg("Enter your password.");
+      setErrorMsg(t("Enter your password.", "أدخل كلمة المرور."));
       return;
     }
     setLoading(true);
     const supabase = createClient();
 
     // Path 1: bootstrap-admin login (works even if Supabase's email/password
-    // provider is disabled — we verify the password server-side and exchange
+    // provider is disabled: we verify the password server-side and exchange
     // a service-role-minted magic-link token for a session).
     const adminAttempt = await signInBootstrapAdmin(parsed.data.email, password);
     if (adminAttempt.ok) {
@@ -203,7 +221,7 @@ export default function LoginPage() {
       });
       setLoading(false);
       if (verifyErr) {
-        setErrorMsg(`Verify failed: ${verifyErr.message}`);
+        setErrorMsg(friendlyAuthError(verifyErr, lang));
         return;
       }
       window.location.href = nextFromUrl();
@@ -219,24 +237,19 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (error) {
-      const tag = bootstrapResult.ok
-        ? bootstrapResult.details
-          ? `[bootstrap ok: ${bootstrapResult.details}]`
-          : "[bootstrap ok]"
-        : `[bootstrap failed: ${bootstrapResult.reason}${bootstrapResult.details ? ` — ${bootstrapResult.details}` : ""}]`;
-      const adminTag = adminAttempt.ok === false ? ` [admin: ${adminAttempt.error}]` : "";
-      setErrorMsg(`${error.message} ${tag}${adminTag}`);
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[login] bootstrap:", bootstrapResult, "admin attempt:", adminAttempt);
+      }
+      setErrorMsg(friendlyAuthError(error, lang));
       return;
     }
     window.location.href = nextFromUrl();
   }
 
-  async function handleMagicLink(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorMsg(null);
+  /* ── magic link ── */
+  async function sendMagicLink(): Promise<string | null> {
     const parsed = magicLinkSchema.safeParse({ email });
-    if (!parsed.success) { setErrorMsg("Enter a valid email address."); return; }
-    setLoading(true);
+    if (!parsed.success) return t("Enter a valid email address.", "أدخل بريدًا إلكترونيًا صحيحًا.");
     await ensureBootstrapUser(parsed.data.email);
     const supabase = createClient();
     // A resend after a magic-link sign-up keeps going to /welcome; a normal
@@ -250,20 +263,26 @@ export default function LoginPage() {
         }`,
       },
     });
+    return error ? friendlyAuthError(error, lang) : null;
+  }
+
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMsg(null);
+    setLoading(true);
+    const err = await sendMagicLink();
     setLoading(false);
-    if (error) { setErrorMsg(friendlyAuthError(error)); return; }
+    if (err) {
+      setErrorMsg(err);
+      return;
+    }
     goTo("sent-magic");
   }
 
-  async function handleResend() {
-    if (!canResend) return;
-    await handleMagicLink({ preventDefault: () => {} } as React.FormEvent);
-  }
-
+  /* ── sign up ── */
   // Validate the three things both sign-up routes need (name, date of birth,
   // email). Returns the clean values, or null after showing the first problem.
   function validateSignupBasics() {
-    const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
     const profile = signUpProfileSchema.safeParse({ fullName, dateOfBirth: dob });
     if (!profile.success) {
       const issue = profile.error.issues[0];
@@ -291,7 +310,6 @@ export default function LoginPage() {
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
-    const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
     const basics = validateSignupBasics();
     if (!basics) return;
     if (password.length < 8) {
@@ -348,474 +366,362 @@ export default function LoginPage() {
       },
     });
     setLoading(false);
-    if (error) { setErrorMsg(friendlySignupError(error, lang)); return; }
+    if (error) {
+      setErrorMsg(friendlySignupError(error, lang));
+      return;
+    }
     setAfterAuth("/welcome");
     goTo("sent-magic");
+  }
+
+  /* ── forgot password ── */
+  async function sendReset(): Promise<string | null> {
+    const parsed = magicLinkSchema.safeParse({ email });
+    if (!parsed.success) return t("Enter a valid email address.", "أدخل بريدًا إلكترونيًا صحيحًا.");
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
+    });
+    return error ? friendlyAuthError(error, lang) : null;
   }
 
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
-    const parsed = magicLinkSchema.safeParse({ email });
-    if (!parsed.success) { setErrorMsg("Enter a valid email address."); return; }
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
-    });
+    const err = await sendReset();
     setLoading(false);
-    if (error) { setErrorMsg(friendlyAuthError(error)); return; }
+    if (err) {
+      setErrorMsg(err);
+      return;
+    }
     goTo("sent-reset");
   }
 
+  /* ── resend from a "check your email" screen ── */
+  async function handleResend() {
+    if (!canResend || loading) return;
+    setErrorMsg(null);
+    setResendNote(null);
+    setLoading(true);
+    let err: string | null;
+    if (screen === "sent-signup") {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: email.trim(),
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome` },
+      });
+      err = error ? friendlySignupError(error, lang) : null;
+    } else if (screen === "sent-reset") {
+      err = await sendReset();
+    } else {
+      err = await sendMagicLink();
+    }
+    setLoading(false);
+    if (err) {
+      setErrorMsg(err);
+      return;
+    }
+    setResendNote(t("Sent again. Check your inbox.", "أُرسلت مرة أخرى. تحقق من بريدك."));
+    setResendTick((n) => n + 1);
+  }
+
+  /* ── render ── */
+  const heading =
+    screen === "signup"
+      ? t("Join the family", "انضم إلى العائلة")
+      : screen === "forgot"
+        ? t("Forgot your password?", "نسيت كلمة المرور؟")
+        : screen === "magic"
+          ? t("Sign in with a magic link", "الدخول برابط سحري")
+          : sent
+            ? t("Check your email", "تحقق من بريدك")
+            : t("Welcome back", "أهلًا بعودتك");
+
+  const subheading =
+    screen === "signup"
+      ? t("Four quick details, then we'll help you find your place in the family tree.", "أربع خانات صغيرة، ثم نساعدك على إيجاد مكانك في شجرة العائلة.")
+      : screen === "forgot"
+        ? t("Enter your email and we'll send you a reset link.", "أدخل بريدك وسنرسل لك رابط إعادة التعيين.")
+        : screen === "magic"
+          ? t("Enter your email and we'll send you a link. No password needed.", "أدخل بريدك وسنرسل لك رابطًا. لا حاجة لكلمة مرور.")
+          : sent
+            ? null
+            : t("Sign in to see the family tree.", "سجّل الدخول لترى شجرة العائلة.");
+
+  const sentCopy =
+    screen === "sent-signup"
+      ? t("We sent a link to confirm your account to", "أرسلنا رابط تأكيد حسابك إلى")
+      : screen === "sent-reset"
+        ? t("We sent a password reset link to", "أرسلنا رابط إعادة تعيين كلمة المرور إلى")
+        : t("We sent a sign-in link to", "أرسلنا رابط تسجيل الدخول إلى");
+
   return (
-    <div className="flex min-h-dvh flex-col md:flex-row">
-      {/* ── brand panel ── */}
-      <div
-        className={cn(
-          "relative flex shrink-0 flex-col items-center justify-center overflow-hidden",
-          "h-[30vh] md:h-auto md:w-1/2 lg:w-[52%]",
-          "text-[oklch(0.99_0.006_60)]"
-        )}
-        style={{
-          background:
-            "radial-gradient(900px 600px at 80% -10%, oklch(0.62 0.20 38 / 0.55), transparent 60%), radial-gradient(900px 700px at 10% 110%, oklch(0.40 0.18 18 / 0.7), transparent 60%), linear-gradient(155deg, oklch(0.20 0.08 12) 0%, oklch(0.26 0.12 18) 40%, oklch(0.22 0.09 4) 100%)",
-        }}
-        aria-hidden="false"
-      >
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg width='160' height='160' viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-            animation: "ambient-drift 18s ease-in-out infinite",
-          }}
-        />
-
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.32, 0.72, 0.32, 1] }}
-          className="hidden flex-col items-center gap-9 px-10 md:flex"
-        >
-          <div className="relative">
-            <div
-              aria-hidden
-              className="absolute inset-0 -m-6 rounded-[2rem] opacity-90 blur-2xl"
-              style={{
-                background:
-                  "radial-gradient(closest-side, oklch(0.68 0.18 38 / 0.55), transparent 70%)",
-              }}
-            />
-            <Image
-              src="/logo.png"
-              alt="Big Fat Family"
-              width={1200}
-              height={411}
-              priority
-              className="relative h-auto w-[min(440px,80%)] rounded-[1.5rem] bg-white px-7 py-6 shadow-[0_20px_60px_-12px_rgba(0,0,0,0.55)] ring-1 ring-white/30 [filter:brightness(1.04)]"
-            />
-          </div>
-
-          <p
-            className="max-w-sm text-center text-[15px] leading-relaxed text-[oklch(0.93_0.03_30)]"
-            style={{ fontFamily: "var(--font-display)", fontOpticalSizing: "auto" }}
-          >
-            Preserve your family&apos;s memory for generations to come
-          </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.32, 0.72, 0.32, 1] }}
-          className="flex flex-col items-center gap-3 md:hidden"
-        >
-          <Image
-            src="/logo-mark.png"
-            alt="Big Fat Family"
-            width={64}
-            height={64}
-            priority
-            className="h-14 w-14 rounded-full bg-white p-1 shadow-[0_6px_24px_rgba(0,0,0,0.45)] ring-1 ring-white/30"
-          />
-          <p
-            className="text-2xl font-semibold tracking-tight"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            Big Fat Family
-          </p>
-          <p className="max-w-[22ch] text-center text-xs text-[oklch(0.92_0.03_30)]">
-            Preserve your family&apos;s memory for generations to come
-          </p>
-        </motion.div>
-
-        <svg
-          className="pointer-events-none absolute -right-px top-0 hidden h-full md:block"
-          viewBox="0 0 60 800"
-          preserveAspectRatio="none"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path d="M60 0 Q0 400 60 800 L60 0Z" fill="var(--background)" />
-        </svg>
+    <div className="flex min-h-dvh flex-col items-center bg-[var(--background)] px-4 pb-10 pt-4 sm:pt-6">
+      <div className="flex w-full max-w-[420px] justify-end">
+        <LanguageToggle lang={lang} />
       </div>
 
-      {/* ── form panel ── */}
-      <div className="flex flex-1 items-center justify-center bg-[var(--background)] px-4 py-8 sm:px-6 sm:py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-          className="w-full max-w-sm"
-        >
-          <Card
-            className="border-[var(--border)] shadow-[var(--shadow-deep)]"
-            style={{ background: "var(--surface-2, white)" }}
+      <main id="main" className={cn(cardClass, "mt-4 w-full max-w-[420px] p-5 shadow-[var(--shadow-floating)] sm:mt-8 sm:p-8")}>
+        <div className="flex justify-center">
+          <Image
+            src="/logo.png"
+            alt="Big Fat Family"
+            width={1200}
+            height={411}
+            priority
+            sizes="180px"
+            className="h-auto w-[180px]"
+          />
+        </div>
+
+        {/* ── tabs: Sign in | Join the family ── */}
+        {activeTab ? (
+          <div
+            role="tablist"
+            aria-label={t("Sign in or join", "تسجيل الدخول أو الانضمام")}
+            className="mt-6 grid grid-cols-2 gap-1 rounded-full bg-[var(--muted)] p-1"
           >
-            <AnimatePresence mode="wait" initial={false}>
+            {(["signin", "signup"] as const).map((key) => (
+              <button
+                key={key}
+                ref={(el) => {
+                  tabRefs.current[key] = el;
+                }}
+                type="button"
+                role="tab"
+                id={`${uid}-tab-${key}`}
+                aria-selected={activeTab === key}
+                aria-controls={`${uid}-panel`}
+                tabIndex={activeTab === key ? 0 : -1}
+                onClick={() => goTo(key)}
+                onKeyDown={(e) => onTabKey(e, key)}
+                className={cn(
+                  "min-h-11 rounded-full px-3 text-sm font-semibold text-[var(--foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
+                  activeTab === key ? "bg-white shadow-[0_1px_3px_rgba(36,21,23,0.12)]" : "text-[var(--muted-foreground)] hover:bg-white/60",
+                )}
+              >
+                {key === "signin" ? t("Sign in", "تسجيل الدخول") : t("Join the family", "انضم إلى العائلة")}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
-              {/* ── sent: magic link ── */}
-              {screen === "sent-magic" && (
-                <motion.div
-                  key="sent-magic"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  <CardHeader className="items-center text-center">
-                    <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                      <Mail className="h-7 w-7 text-[var(--primary)]" strokeWidth={1.5} />
-                    </div>
-                    <CardTitle className="text-xl">Check your email</CardTitle>
-                    <CardDescription className="mt-1">
-                      We sent a sign-in link to{" "}
-                      <span className="font-medium text-[var(--foreground)]">{email}</span>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3 text-center">
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      Didn&apos;t receive it? Check your spam folder.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={!canResend}
-                      onClick={handleResend}
-                      className="w-full"
-                    >
-                      {canResend ? "Resend link" : `Resend in ${resendRemaining}s`}
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => goTo("signin")}
-                      className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
-                    >
-                      Back to sign in
-                    </button>
-                  </CardContent>
-                </motion.div>
-              )}
+        <div
+          id={`${uid}-panel`}
+          role={activeTab ? "tabpanel" : undefined}
+          aria-labelledby={activeTab ? `${uid}-tab-${activeTab}` : undefined}
+          className="mt-6"
+        >
+          {sent ? (
+            <div className="flex flex-col items-center text-center">
+              <span className="flex size-16 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)]">
+                <Mail aria-hidden="true" className="size-8" strokeWidth={1.6} />
+              </span>
+              <h1 className="font-heading mt-4 text-[26px] font-bold leading-tight">{heading}</h1>
+              <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+                {sentCopy}{" "}
+                <strong dir="ltr" className="break-all font-semibold text-[var(--foreground)]">
+                  {email.trim()}
+                </strong>
+                .
+              </p>
+              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                {screen === "sent-signup"
+                  ? t(
+                      "Once confirmed, we'll help you find your place in the family tree. Not there? Check your spam folder.",
+                      "بعد التأكيد سنساعدك على إيجاد مكانك في شجرة العائلة. لم تصلك؟ تحقق من البريد المزعج.",
+                    )
+                  : t("Not there? Check your spam folder.", "لم تصلك؟ تحقق من البريد المزعج.")}
+              </p>
 
-              {/* ── sent: sign up confirm ── */}
-              {screen === "sent-signup" && (
-                <motion.div
-                  key="sent-signup"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
+              <div className="mt-5 flex w-full flex-col gap-2" aria-live="polite">
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={!canResend || loading}
+                  className={cn(pill.outline, "min-h-[52px] w-full text-base")}
                 >
-                  <CardHeader className="items-center text-center">
-                    <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                      <Mail className="h-7 w-7 text-[var(--primary)]" strokeWidth={1.5} />
-                    </div>
-                    <CardTitle className="text-xl">
-                      {lang === "ar" ? "أكّد حسابك" : "Confirm your account"}
-                    </CardTitle>
-                    <CardDescription className="mt-1">
-                      {lang === "ar" ? "افتح بريدك لتأكيد حسابك على " : "Check your email to confirm your account at "}
-                      <span className="font-medium text-[var(--foreground)]" dir="ltr">{email}</span>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3 text-center">
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      {lang === "ar"
-                        ? "بعد التأكيد سنساعدك على إيجاد مكانك في شجرة العائلة. لم تصلك الرسالة؟ تحقق من البريد المزعج."
-                        : "Once confirmed, we'll help you find your place in the family tree. Didn't receive it? Check your spam folder."}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => goTo("signin")}
-                      className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
-                    >
-                      Back to sign in
-                    </button>
-                  </CardContent>
-                </motion.div>
-              )}
+                  {loading ? <Spinner /> : null}
+                  {canResend
+                    ? t("Resend email", "أعد إرسال الرسالة")
+                    : t(`Resend in ${remaining}s`, `أعد الإرسال بعد ${remaining} ث`)}
+                </button>
+                {resendNote ? (
+                  <p role="status" className="text-sm font-medium text-[#2F5A27]">
+                    {resendNote}
+                  </p>
+                ) : null}
+                <ErrorBox message={errorMsg} />
+              </div>
 
-              {/* ── sent: password reset ── */}
-              {screen === "sent-reset" && (
-                <motion.div
-                  key="sent-reset"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  <CardHeader className="items-center text-center">
-                    <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                      <Mail className="h-7 w-7 text-[var(--primary)]" strokeWidth={1.5} />
-                    </div>
-                    <CardTitle className="text-xl">Check your email</CardTitle>
-                    <CardDescription className="mt-1">
-                      Password reset link sent — check your inbox at{" "}
-                      <span className="font-medium text-[var(--foreground)]">{email}</span>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3 text-center">
-                    <button
-                      type="button"
-                      onClick={() => goTo("signin")}
-                      className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
-                    >
-                      Back to sign in
-                    </button>
-                  </CardContent>
-                </motion.div>
-              )}
+              <div className="mt-2 flex flex-wrap justify-center gap-x-2">
+                <LinkButton onClick={() => goTo(screen === "sent-signup" ? "signup" : screen === "sent-reset" ? "forgot" : "magic")}>
+                  {t("Wrong email? Change it", "بريد خاطئ؟ غيّره")}
+                </LinkButton>
+                <LinkButton onClick={() => goTo("signin")}>{t("Back to sign in", "العودة لتسجيل الدخول")}</LinkButton>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h1 className="font-heading text-[26px] font-bold leading-tight">{heading}</h1>
+              {subheading ? (
+                <p className="mt-1.5 text-[15px] leading-relaxed text-[var(--muted-foreground)]">{subheading}</p>
+              ) : null}
 
-              {/* ── sign in (password) ── */}
-              {screen === "signin" && (
-                <motion.div
-                  key="signin"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-xl">Sign in</CardTitle>
-                    <CardDescription>Enter your email and password.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleSignIn} className="space-y-4" noValidate>
-                      <FloatingInput
-                        id="email"
-                        label="Email address"
+              <div className="mt-5">
+                {/* ── sign in (password) ── */}
+                {screen === "signin" && (
+                  <form onSubmit={handleSignIn} className="flex flex-col gap-4" noValidate>
+                    <Field id={`${uid}-email`} label={t("Email", "البريد الإلكتروني")}>
+                      <input
+                        id={`${uid}-email`}
+                        name="email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        dir="ltr"
+                        required
                         value={email}
-                        onChange={setEmail}
+                        onChange={(e) => setEmail(e.target.value)}
                         disabled={loading}
+                        placeholder="name@example.com"
+                        className={cn(fieldClass, lang === "ar" && "text-end")}
                       />
-                      <FloatingInput
-                        id="password"
-                        label="Password"
-                        type="password"
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={setPassword}
-                        disabled={loading}
-                        showToggle
-                      />
-
-                      <div className="flex justify-end">
+                    </Field>
+                    <Field id={`${uid}-password`} label={t("Password", "كلمة المرور")}>
+                      <div className="relative">
+                        <input
+                          id={`${uid}-password`}
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="current-password"
+                          dir="ltr"
+                          required
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          disabled={loading}
+                          className={cn(fieldClass, "pe-14")}
+                        />
                         <button
                           type="button"
-                          onClick={() => goTo("forgot")}
-                          className="text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-label={showPassword ? t("Hide password", "إخفاء كلمة المرور") : t("Show password", "إظهار كلمة المرور")}
+                          aria-pressed={showPassword}
+                          className="absolute end-1.5 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-white hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
                         >
-                          Forgot password?
+                          {showPassword ? <EyeOff aria-hidden="true" className="size-5" /> : <Eye aria-hidden="true" className="size-5" />}
                         </button>
                       </div>
+                    </Field>
 
-                      {errorMsg && (
-                        <Alert variant="destructive" className="py-2">
-                          <AlertDescription>{errorMsg}</AlertDescription>
-                        </Alert>
-                      )}
+                    <div className="-mt-2 flex justify-end">
+                      <LinkButton onClick={() => goTo("forgot")}>{t("Forgot password?", "نسيت كلمة المرور؟")}</LinkButton>
+                    </div>
 
-                      <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? (
-                          <><Loader2 className="animate-spin" /> Signing in…</>
-                        ) : "Sign in"}
-                      </Button>
+                    <ErrorBox message={errorMsg} />
 
-                      <button
-                        type="button"
-                        onClick={() => goTo("magic")}
-                        className="block w-full text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
-                      >
-                        Use a magic link instead
-                      </button>
+                    <button type="submit" disabled={loading} className={cn(pill.primary, "min-h-[52px] text-base")}>
+                      {loading ? <Spinner /> : null}
+                      {loading ? t("Signing in…", "جارٍ تسجيل الدخول…") : t("Sign in", "تسجيل الدخول")}
+                    </button>
 
-                      <p className="text-center text-xs text-[var(--muted-foreground)]">
-                        Don&apos;t have an account?{" "}
-                        <button
-                          type="button"
-                          onClick={() => goTo("signup")}
-                          className="font-medium text-[var(--foreground)] underline-offset-4 hover:underline"
-                        >
-                          Sign up
-                        </button>
-                      </p>
-                    </form>
-                  </CardContent>
-                </motion.div>
-              )}
+                    <div className="flex items-center gap-3 text-xs text-[var(--muted-foreground)]" aria-hidden="true">
+                      <span className="h-px flex-1 bg-[var(--border)]" />
+                      {t("or", "أو")}
+                      <span className="h-px flex-1 bg-[var(--border)]" />
+                    </div>
+                    <button type="button" onClick={() => goTo("magic")} className={cn(pill.outline, "min-h-[52px] text-base")}>
+                      {t("Email me a magic link", "أرسل لي رابطًا سحريًا")}
+                    </button>
+                  </form>
+                )}
 
-              {/* ── magic link ── */}
-              {screen === "magic" && (
-                <motion.div
-                  key="magic"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-xl">Sign in</CardTitle>
-                    <CardDescription>Enter your email — we&apos;ll send you a magic link.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleMagicLink} className="space-y-4" noValidate>
-                      <FloatingInput
-                        id="email-magic"
-                        label="Email address"
+                {/* ── magic link ── */}
+                {screen === "magic" && (
+                  <form onSubmit={handleMagicLink} className="flex flex-col gap-4" noValidate>
+                    <Field id={`${uid}-email-magic`} label={t("Email", "البريد الإلكتروني")}>
+                      <input
+                        id={`${uid}-email-magic`}
+                        name="email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        dir="ltr"
+                        required
                         value={email}
-                        onChange={setEmail}
+                        onChange={(e) => setEmail(e.target.value)}
                         disabled={loading}
+                        placeholder="name@example.com"
+                        className={cn(fieldClass, lang === "ar" && "text-end")}
                       />
+                    </Field>
+                    <ErrorBox message={errorMsg} />
+                    <button type="submit" disabled={loading} className={cn(pill.primary, "min-h-[52px] text-base")}>
+                      {loading ? <Spinner /> : null}
+                      {loading ? t("Sending…", "جارٍ الإرسال…") : t("Send magic link", "أرسل الرابط السحري")}
+                    </button>
+                    <button type="button" onClick={() => goTo("signin")} className={cn(pill.ghost, "min-h-11")}>
+                      {t("Use email and password instead", "استخدم البريد وكلمة المرور بدلًا من ذلك")}
+                    </button>
+                  </form>
+                )}
 
-                      {errorMsg && (
-                        <Alert variant="destructive" className="py-2">
-                          <AlertDescription>{errorMsg}</AlertDescription>
-                        </Alert>
-                      )}
+                {/* ── sign up ── */}
+                {screen === "signup" && (
+                  <SignupForm
+                    lang={lang}
+                    fullName={fullName}
+                    onFullName={setFullName}
+                    dob={dob}
+                    onDob={setDob}
+                    email={email}
+                    onEmail={setEmail}
+                    password={password}
+                    onPassword={setPassword}
+                    loading={loading}
+                    errorMsg={errorMsg}
+                    onSubmit={handleSignUp}
+                    onMagicLink={handleSignUpMagicLink}
+                    onSignIn={() => goTo("signin")}
+                  />
+                )}
 
-                      <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? (
-                          <><Loader2 className="animate-spin" /> Sending…</>
-                        ) : "Send magic link"}
-                      </Button>
-
-                      <button
-                        type="button"
-                        onClick={() => goTo("signin")}
-                        className="block w-full text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
-                      >
-                        Use email + password instead
-                      </button>
-
-                      <p className="text-center text-xs text-[var(--muted-foreground)]">
-                        Don&apos;t have an account?{" "}
-                        <button
-                          type="button"
-                          onClick={() => goTo("signup")}
-                          className="font-medium text-[var(--foreground)] underline-offset-4 hover:underline"
-                        >
-                          Sign up
-                        </button>
-                      </p>
-                    </form>
-                  </CardContent>
-                </motion.div>
-              )}
-
-              {/* ── sign up ── */}
-              {screen === "signup" && (
-                <motion.div
-                  key="signup"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-xl">{lang === "ar" ? "أنشئ حسابك" : "Create your account"}</CardTitle>
-                    <CardDescription>
-                      {lang === "ar"
-                        ? "أربع خانات صغيرة، ثم نساعدك على إيجاد مكانك في شجرة العائلة."
-                        : "Four quick details, then we'll help you find your place in the family tree."}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <SignupForm
-                      lang={lang}
-                      fullName={fullName}
-                      onFullName={setFullName}
-                      dob={dob}
-                      onDob={setDob}
-                      email={email}
-                      onEmail={setEmail}
-                      password={password}
-                      onPassword={setPassword}
-                      loading={loading}
-                      errorMsg={errorMsg}
-                      onSubmit={handleSignUp}
-                      onMagicLink={handleSignUpMagicLink}
-                      onSignIn={() => goTo("signin")}
-                    />
-                  </CardContent>
-                </motion.div>
-              )}
-
-              {/* ── forgot password ── */}
-              {screen === "forgot" && (
-                <motion.div
-                  key="forgot"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-xl">Forgot password?</CardTitle>
-                    <CardDescription>
-                      Enter your email and we&apos;ll send you a reset link.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleForgotPassword} className="space-y-4" noValidate>
-                      <FloatingInput
-                        id="email-forgot"
-                        label="Email address"
+                {/* ── forgot password ── */}
+                {screen === "forgot" && (
+                  <form onSubmit={handleForgotPassword} className="flex flex-col gap-4" noValidate>
+                    <Field id={`${uid}-email-forgot`} label={t("Email", "البريد الإلكتروني")}>
+                      <input
+                        id={`${uid}-email-forgot`}
+                        name="email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        dir="ltr"
+                        required
                         value={email}
-                        onChange={setEmail}
+                        onChange={(e) => setEmail(e.target.value)}
                         disabled={loading}
+                        placeholder="name@example.com"
+                        className={cn(fieldClass, lang === "ar" && "text-end")}
                       />
-
-                      {errorMsg && (
-                        <Alert variant="destructive" className="py-2">
-                          <AlertDescription>{errorMsg}</AlertDescription>
-                        </Alert>
-                      )}
-
-                      <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? (
-                          <><Loader2 className="animate-spin" /> Sending…</>
-                        ) : "Send reset link"}
-                      </Button>
-
-                      <button
-                        type="button"
-                        onClick={() => goTo("signin")}
-                        className="block w-full text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--foreground)] hover:underline"
-                      >
-                        Back to sign in
-                      </button>
-                    </form>
-                  </CardContent>
-                </motion.div>
-              )}
-
-            </AnimatePresence>
-          </Card>
-        </motion.div>
-      </div>
+                    </Field>
+                    <ErrorBox message={errorMsg} />
+                    <button type="submit" disabled={loading} className={cn(pill.primary, "min-h-[52px] text-base")}>
+                      {loading ? <Spinner /> : null}
+                      {loading ? t("Sending…", "جارٍ الإرسال…") : t("Send reset link", "أرسل رابط إعادة التعيين")}
+                    </button>
+                    <button type="button" onClick={() => goTo("signin")} className={cn(pill.ghost, "min-h-11")}>
+                      {t("Back to sign in", "العودة لتسجيل الدخول")}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

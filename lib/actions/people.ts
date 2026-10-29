@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { normalizePhotoValue } from "@/lib/storage/photo-path";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { personSchema } from "@/lib/validation/people";
@@ -277,8 +278,10 @@ export async function updatePersonPhoto(
   id: string,
   photoUrl: string | null,
 ): Promise<{ success: boolean; error?: string }> {
-  if (photoUrl !== null && !/^https?:\/\//.test(photoUrl)) {
-    return { success: false, error: "Invalid photo URL" };
+  // Store the bucket path (the bucket is private); a signed or public URL is reduced to it.
+  const stored = photoUrl === null ? null : normalizePhotoValue(photoUrl);
+  if (photoUrl !== null && stored === null) {
+    return { success: false, error: "Invalid photo" };
   }
 
   const supabase = await createClient();
@@ -291,7 +294,7 @@ export async function updatePersonPhoto(
 
   const { error } = await supabase
     .from("people")
-    .update({ photo_url: photoUrl })
+    .update({ photo_url: stored })
     .eq("id", id)
     .is("deleted_at", null);
 

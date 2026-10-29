@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizePhotoValue } from "@/lib/storage/photo-path";
 
 const nullableText = z.string().max(200).nullish().transform((v) => v ?? null);
 
@@ -18,7 +19,13 @@ export const personSchema = z
     father_id: z.string().uuid().nullish().transform((v) => v ?? null),
     mother_id: z.string().uuid().nullish().transform((v) => v ?? null),
     is_placeholder: z.boolean(),
-    photo_url: z.string().url().nullish().transform((v) => v ?? null),
+    // A bucket path (new), or a URL: public/signed URLs into our bucket are reduced to their path.
+    photo_url: z
+      .string()
+      .max(2000)
+      .nullish()
+      .refine((v) => !v || normalizePhotoValue(v) !== null, "Invalid photo")
+      .transform((v) => normalizePhotoValue(v)),
     notes_en: z.string().max(2000).nullish().transform((v) => v ?? null),
     notes_ar: z.string().max(2000).nullish().transform((v) => v ?? null),
     birth_date: z.string().max(20).nullish().transform((v) => v ?? null),

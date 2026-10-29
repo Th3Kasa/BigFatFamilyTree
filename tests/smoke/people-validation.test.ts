@@ -41,9 +41,17 @@ describe("personSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects photo_url that is not a URL", () => {
-    const result = personSchema.safeParse({ ...valid, photo_url: "not-a-url" });
+  it("accepts a bucket path as photo_url", () => {
+    expect(personSchema.safeParse({ ...valid, photo_url: "abc/9f1c.jpg" }).success).toBe(true);
+  });
+
+  it("rejects a photo_url that is neither a bucket path nor a URL", () => {
+    const result = personSchema.safeParse({ ...valid, photo_url: "not a url!" });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts a bucket path as photo_url", () => {
+    expect(personSchema.safeParse({ ...valid, photo_url: "abc/9f1c.jpg" }).success).toBe(true);
   });
 
   it("accepts null photo_url", () => {

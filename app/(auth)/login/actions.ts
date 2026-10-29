@@ -2,10 +2,13 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { isBootstrapAdmin, bootstrapPasswordFor } from "@/lib/auth/bootstrap";
+import { BOOTSTRAP_FAILED, countAdmins, promoteIfNoAdmins } from "@/lib/auth/bootstrap-admin";
 
-export type EnsureBootstrapResult =
-  | { ok: true; details?: string }
-  | { ok: false; reason: "not_bootstrap" | "create_failed"; details?: string };
+// Every failure, whatever the cause (unknown email, wrong password,
+// admins already exist, Supabase error), returns this same result.
+export type EnsureBootstrapResult = { ok: true } | { ok: false; error: string };
+
+const FAILED = { ok: false, error: BOOTSTRAP_FAILED } as const;
 
 async function findUserByEmail(
   svc: ReturnType<typeof createServiceClient>,
@@ -23,127 +26,68 @@ async function findUserByEmail(
   return match?.id ?? null;
 }
 
-// Idempotent: ensures a bootstrap-admin user exists in auth.users, has the
-// optional bootstrap password set, and has role='admin' in profiles.
-// Safe to call for non-bootstrap emails — no-op returns {ok:false, not_bootstrap}.
+// Creates the FIRST admin of a fresh install, and nothing else. When any admin
+// already exists this is a no-op that fails generically, so the bootstrap
+// credentials can
+// never re-promote an account or reset a password on a later sign-in.
 export async function ensureBootstrapUser(
   rawEmail: string,
 ): Promise<EnsureBootstrapResult> {
   const email = (rawEmail ?? "").toLowerCase().trim();
-  if (!isBootstrapAdmin(email)) {
-    return { ok: false, reason: "not_bootstrap" };
-  }
+  if (!isBootstrapAdmin(email)) return FAILED;
 
-  const svc = createServiceClient();
-  const password = bootstrapPasswordFor(email);
+  try {
+    const svc = createServiceClient();
+    if ((await countAdmins(svc)) !== 0) return FAILED;
 
-  // Try to create with email + password (idempotent: a 422 means user exists)
-  const { data: created, error: createErr } = await svc.auth.admin.createUser({
-    email,
-    email_confirm: true,
-    ...(password ? { password } : {}),
-  });
-
-  let userId: string | null = created?.user?.id ?? null;
-
-  let updateError: string | null = null;
-
-  if (createErr) {
-    const msg = createErr.message?.toLowerCase() ?? "";
-    const status = (createErr as { status?: number }).status;
-    const alreadyExists =
-      status === 422 ||
-      msg.includes("registered") ||
-      msg.includes("already") ||
-      msg.includes("exists");
-    if (!alreadyExists) {
-      console.error("[ensureBootstrapUser] createUser failed:", createErr);
-      return {
-        ok: false,
-        reason: "create_failed",
-        details: `createUser: ${createErr.message ?? "unknown error"}`,
-      };
-    }
-    // User already exists — look up id so we can update password + profile role
-    try {
-      userId = await findUserByEmail(svc, email);
-    } catch (e) {
-      console.error("[ensureBootstrapUser] lookup failed:", e);
-      updateError = `lookup: ${(e as Error)?.message ?? "unknown"}`;
-    }
-  }
-
-  // Ensure the password is set every time so the user can rely on it even if
-  // it was previously rotated by Supabase or never persisted.
-  if (userId && password) {
-    const { error: updErr } = await svc.auth.admin.updateUserById(userId, {
-      password,
+    const password = bootstrapPasswordFor(email);
+    const { data: created, error: createErr } = await svc.auth.admin.createUser({
+      email,
       email_confirm: true,
+      ...(password ? { password } : {}),
     });
-    if (updErr) {
-      console.error("[ensureBootstrapUser] password update failed:", updErr);
-      updateError = `updateUser: ${updErr.message ?? "unknown error"}`;
-    }
-  } else if (password && !userId) {
-    updateError = "could not resolve user id to set password";
-  }
 
-  // Promote to admin in profiles (covered by the auth callback too, but
-  // upsert here so password-login users don't need to wait for callback).
-  if (userId) {
-    const { error: profileErr } = await svc
-      .from("profiles")
-      .upsert({ id: userId, role: "admin" }, { onConflict: "id" });
-    if (profileErr) {
-      updateError = (updateError ? `${updateError}; ` : "") + `profile: ${profileErr.message}`;
+    let userId: string | null = created?.user?.id ?? null;
+    if (createErr) {
+      // The account may already exist (an earlier attempt); look it up.
+      userId = await findUserByEmail(svc, email);
+      if (!userId) {
+        console.error("[bootstrap] could not create or find the first admin:", createErr.message);
+        return FAILED;
+      }
+      if (password) await svc.auth.admin.updateUserById(userId, { password, email_confirm: true });
     }
-  }
+    if (!userId) return FAILED;
 
-  return { ok: true, details: updateError ?? undefined };
+    return (await promoteIfNoAdmins(svc, userId)) ? { ok: true } : FAILED;
+  } catch (e) {
+    console.error("[bootstrap] failed:", e instanceof Error ? e.message : e);
+    return FAILED;
+  }
 }
 
 // ── signInBootstrapAdmin ──────────────────────────────────────────────────────
-// Workaround for Supabase projects with email/password login disabled.
-//
-// 1. Verify the email is a known bootstrap admin and the password matches the
-//    one configured in BOOTSTRAP_ADMIN_CREDENTIALS.
-// 2. Ensure the user exists in auth.users (idempotent).
-// 3. Use the admin API to mint a magic-link token bound to that email and
-//    return its `token_hash`.
-// 4. The client then exchanges that hash for a session via
-//    supabase.auth.verifyOtp({ token_hash, type: "magiclink" }) — no email
-//    round-trip and no dependency on the password provider being enabled.
+// First-run only, for projects with email/password login disabled: while there
+// are zero admins, the configured bootstrap email + password mint a session
+// token for the first admin. After that it always fails generically.
 export async function signInBootstrapAdmin(
   rawEmail: string,
   password: string,
-): Promise<
-  | { ok: true; tokenHash: string }
-  | { ok: false; error: string }
-> {
+): Promise<{ ok: true; tokenHash: string } | { ok: false; error: string }> {
   const email = (rawEmail ?? "").toLowerCase().trim();
-  if (!isBootstrapAdmin(email)) {
-    return { ok: false, error: "Email not in admin allowlist" };
-  }
   const expected = bootstrapPasswordFor(email);
-  if (!expected || password !== expected) {
-    return { ok: false, error: "Invalid password" };
+  if (!isBootstrapAdmin(email) || !expected || password !== expected) return FAILED;
+
+  try {
+    const ensured = await ensureBootstrapUser(email);
+    if (!ensured.ok) return FAILED;
+
+    const svc = createServiceClient();
+    const { data, error } = await svc.auth.admin.generateLink({ type: "magiclink", email });
+    if (error || !data?.properties?.hashed_token) return FAILED;
+    return { ok: true, tokenHash: data.properties.hashed_token };
+  } catch (e) {
+    console.error("[bootstrap] sign-in failed:", e instanceof Error ? e.message : e);
+    return FAILED;
   }
-
-  // Make sure the user + admin role + password are in place
-  await ensureBootstrapUser(email);
-
-  const svc = createServiceClient();
-  const { data, error } = await svc.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-  });
-
-  if (error || !data?.properties?.hashed_token) {
-    return {
-      ok: false,
-      error: `Could not mint session token: ${error?.message ?? "no token returned"}`,
-    };
-  }
-
-  return { ok: true, tokenHash: data.properties.hashed_token };
 }

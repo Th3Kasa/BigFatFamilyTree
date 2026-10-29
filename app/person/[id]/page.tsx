@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { withSignedPhotos } from "@/lib/storage/photos";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -52,7 +53,9 @@ const loadPerson = cache(async (id: string) => {
   const supabase = await createClient();
   const q = supabase.from("people").select("*").is("deleted_at", null);
   const { data } = await (UUID_RE.test(id) ? q.eq("id", id) : q.eq("slug", id)).maybeSingle();
-  return { supabase, person: data };
+  // Photos are private: swap the stored path for a short-lived signed URL.
+  const person = data ? (await withSignedPhotos(supabase, [data]))[0] : data;
+  return { supabase, person };
 });
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -105,7 +108,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
   const role = (viewerProfile as { role?: string } | null)?.role ?? "";
   const canEdit = role === "admin" || role === "editor";
 
-  const allPeople = (peopleRows ?? []) as FamilyPerson[];
+  const allPeople = await withSignedPhotos(supabase, (peopleRows ?? []) as FamilyPerson[]);
   const family = familyOf(personId, allPeople, (relRows ?? []) as FamilyRelationship[]);
 
   async function handleDelete() {

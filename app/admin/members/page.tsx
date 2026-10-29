@@ -58,7 +58,8 @@ export default async function AdminMembersPage() {
           lang={lang}
           data={data}
           currentUserId={ctx.userId}
-          initialTab={data.pending.length > 0 ? "waiting" : "all"}
+          isSuperAdmin={ctx.isSuperAdmin}
+          initialTab={data.pending.length + data.waitingAccess.length > 0 ? "waiting" : data.suggestions.length > 0 ? "suggestions" : "all"}
         />
       )}
     </div>

@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 export type AdminContext = {
   supabase: Awaited<ReturnType<typeof createClient>>;
   userId: string;
+  /** The owner account: may add/remove members and admins. */
+  isSuperAdmin: boolean;
 };
 
 /**
@@ -20,12 +22,18 @@ export async function getAdminContext(): Promise<AdminContext | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_super_admin")
     .eq("id", user.id)
     .maybeSingle();
-  if (profile?.role !== "admin") return null;
+  if (profile?.role !== "admin" && !profile?.is_super_admin) return null;
 
-  return { supabase, userId: user.id };
+  return { supabase, userId: user.id, isSuperAdmin: !!profile?.is_super_admin };
+}
+
+/** Like getAdminContext(), but only for the super admin. Re-read from the database on every call. */
+export async function getSuperAdminContext(): Promise<AdminContext | null> {
+  const ctx = await getAdminContext();
+  return ctx?.isSuperAdmin ? ctx : null;
 }
 
 export async function getSignedInUserId(): Promise<{

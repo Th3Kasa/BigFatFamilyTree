@@ -1,26 +1,27 @@
 import Link from "next/link";
 import { Network, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/service";
+import { redirect } from "next/navigation";
 import { getLang, type Lang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { CanvasView } from "@/components/graph/CanvasView";
 import { RelationshipBanner } from "@/components/relationships/RelationshipBanner";
 import { makeKinContext, relate } from "@/lib/kinship/view";
-import { TopBar } from "@/components/shell/TopBar";
+import { Landing } from "@/components/landing/Landing";
+import { homeEntry } from "@/lib/members/journey";
+import { handleFirstVisit } from "@/lib/members/onboarding";
+import { withSignedPhotos } from "@/lib/storage/photos";
 import { commonFamilyName, countGenerations } from "@/lib/people/stats";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
-// Public card columns only: guests see names and photos, never dates or notes.
-const GUEST_TREE_COLUMNS =
-  "id, slug, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y";
-// Signed-in members also see life years on the cards.
-const TREE_COLUMNS = `${GUEST_TREE_COLUMNS}, birth_date, death_date`;
+const TREE_COLUMNS =
+  "id, slug, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y, birth_date, death_date";
 
 type SearchParams = Promise<{
   from?: string | string[];
   to?: string | string[];
   focus?: string | string[];
+  tour?: string | string[];
 }>;
 
 /**
@@ -84,76 +85,25 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Guests explore the whole tree read-only — they sign in from within the
-  // app, not behind a wall. The tree is fetched with the service client so
-  // RLS stays locked (no anonymous DB access); only the public "card" columns
-  // are read. Profiles, details, and every edit require signing in (enforced
-  // by middleware + RLS on those routes).
-  if (!user) {
-    const service = createServiceClient();
-    const [{ data: gPeople }, { data: gRels }] = await Promise.all([
-      service.from("people").select(GUEST_TREE_COLUMNS).is("deleted_at", null).order("given_en"),
-      service.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
-    ]);
+  // Signed-out visitors get the landing page and NOTHING else: no queries, no
+  // service client, no family data. A deep link (/?from=…&to=…) goes to sign-in
+  // first and comes back here afterwards.
+  const entry = homeEntry({ signedIn: !!user, params });
+  if (entry.kind === "login") redirect(`/login?next=${encodeURIComponent(entry.next)}`);
+  if (entry.kind === "landing" || !user) return <Landing lang={lang} />;
 
-    const guestPeople = (gPeople ?? []) as PersonInput[];
-    const guestRels = (gRels ?? []) as RelationshipInput[];
-    const guestPath = pathFromQuery(params, guestPeople, guestRels);
-    const guestTree = guestPeople.length > 0 ? buildGraphElements(guestPeople, guestRels, lang) : null;
-    const summary = treeSummary(guestPeople, null, lang);
+  // First visit after approval: send a linked member to the tour once (and
+  // stamp profiles.onboarded_at when they arrive there).
+  await handleFirstVisit(supabase, user.id, params);
 
-    return (
-      <div className="flex min-h-svh flex-col">
-        <TopBar user={null} lang={lang} />
-        <main id="main" className="flex h-[calc(100svh-var(--topbar-h))] flex-col gap-3 p-3 md:gap-4 md:px-6 md:py-5">
-          {guestTree ? (
-            <>
-              <TreeHeader title={summary.title} subtitle={summary.subtitle} />
-              <div className="canvas-stage relative min-h-0 flex-1 overflow-hidden rounded-[20px] border border-[var(--border)]">
-                <CanvasView
-                  initialNodes={guestTree.nodes}
-                  initialEdges={guestTree.edges}
-                  people={guestPeople}
-                  lang={lang}
-                  readOnly
-                  highlight={guestPath?.view.highlight}
-                  focusId={focusFromQuery(params, guestPeople)}
-                />
-                {guestPath && <RelationshipBanner lang={lang} answer={guestPath.view.oneLine} />}
-              </div>
-            </>
-          ) : (
-            <div className="flex flex-1 items-center justify-center px-4">
-              <div className="max-w-sm rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-8 text-center">
-                <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)]">
-                  <Network className="h-7 w-7" aria-hidden />
-                </span>
-                <h1 className="font-heading text-2xl font-bold text-[var(--foreground)]">
-                  {t("Welcome to the family", "أهلاً بالعائلة")}
-                </h1>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">
-                  {t("No one has been added yet. Sign in to start the tree.", "لم تتم إضافة أحد بعد. سجّل الدخول لبدء الشجرة.")}
-                </p>
-                <Link
-                  href="/login"
-                  className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-[var(--primary)] px-6 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]"
-                >
-                  {t("Sign in to start", "سجّل الدخول للبدء")}
-                </Link>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    );
-  }
-
-  const [{ data: people }, { data: relationships }, { count: storyCount }, { data: profile }] = await Promise.all([
+  const [{ data: peopleRows }, { data: relationships }, { count: storyCount }, { data: profile }] = await Promise.all([
     supabase.from("people").select(TREE_COLUMNS).is("deleted_at", null).order("given_en"),
     supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
     supabase.from("events").select("id", { count: "exact", head: true }).eq("type", "notable_story"),
     supabase.from("profiles").select("role").eq("id", user.id).single(),
   ]);
+  // Photos live in a private bucket: sign them here so the canvas gets ready-to-use URLs.
+  const people = peopleRows ? await withSignedPhotos(supabase, peopleRows) : peopleRows;
   const role = (profile as { role?: string | null } | null)?.role;
   const canEdit = role === "admin" || role === "editor";
 

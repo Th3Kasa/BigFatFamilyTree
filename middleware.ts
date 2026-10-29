@@ -1,6 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { checkLimit } from "@/lib/ratelimit";
+import { env } from "@/lib/env";
+import { isApproved } from "@/lib/members/approval";
+import {
+  APPROVAL_COOKIE,
+  APPROVAL_TTL_SECONDS,
+  decideAccess,
+  isStaticFile,
+  requiresApproval,
+  signApproval,
+  verifyApproval,
+} from "@/lib/auth/gate";
 
 const PUBLIC_PREFIXES = ["/login", "/update-password", "/auth/callback", "/api/auth", "/_next", "/favicon.ico"];
 
@@ -11,7 +22,8 @@ const PUBLIC_FILE_EXT =
 
 export function isPublicPath(pathname: string): boolean {
   // The home route is public: signed-out visitors see the landing page
-  // (rendered by app/page.tsx); family data itself stays behind auth + RLS.
+  // (rendered by app/page.tsx, which loads no family data); the family data
+  // itself stays behind auth + RLS.
   if (pathname === "/") return true;
   if (PUBLIC_FILE_EXT.test(pathname)) return true;
   return PUBLIC_PREFIXES.some(
@@ -41,6 +53,11 @@ function applySecurityHeaders(res: NextResponse) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Static files under /public need no session: skip every network call.
+  if (isStaticFile(pathname)) {
+    return applySecurityHeaders(NextResponse.next());
+  }
+
   if (pathname.startsWith("/login") || pathname.startsWith("/auth/callback")) {
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -55,15 +72,72 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const { response, user } = await updateSession(request);
+  const { response, user, supabase } = await updateSession(request);
 
-  if (!isPublicPath(pathname) && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", pathname);
-    return applySecurityHeaders(NextResponse.redirect(url));
+  // Approval: only asked for signed-in users on app routes. A signed cookie
+  // (5 minutes) means approved members cost zero extra queries; everyone else
+  // costs one read of their own profile row.
+  let approved: boolean | null = null;
+  let cookieToSet: string | null = null;
+  let clearCookie = false;
+  if (user && requiresApproval(pathname)) {
+    const secret = env().SUPABASE_SERVICE_ROLE_KEY;
+    if (await verifyApproval(request.cookies.get(APPROVAL_COOKIE)?.value, user.id, secret)) {
+      approved = true;
+    } else {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role, approved_at")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) {
+        // Routing is a convenience; RLS is the gate. Fail open, don't cache.
+        console.error("[middleware] approval lookup failed:", error.message);
+      } else {
+        approved = isApproved(data);
+        if (approved) cookieToSet = await signApproval(user.id, secret);
+        else clearCookie = true;
+      }
+    }
   }
 
+  const search = request.nextUrl.search;
+  const decision = decideAccess({
+    pathname,
+    search,
+    isPublic: isPublicPath(pathname),
+    signedIn: !!user,
+    approved,
+  });
+
+  if (decision.kind === "login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("next", decision.next);
+    return applySecurityHeaders(NextResponse.redirect(url));
+  }
+  if (decision.kind === "welcome") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/welcome";
+    url.search = "";
+    const redirect = NextResponse.redirect(url);
+    // Carry over any session cookies Supabase just refreshed.
+    for (const c of response.cookies.getAll()) redirect.cookies.set(c);
+    if (clearCookie) redirect.cookies.delete(APPROVAL_COOKIE);
+    return applySecurityHeaders(redirect);
+  }
+
+  if (cookieToSet) {
+    response.cookies.set(APPROVAL_COOKIE, cookieToSet, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: APPROVAL_TTL_SECONDS,
+    });
+  }
+  if (clearCookie) response.cookies.delete(APPROVAL_COOKIE);
   return applySecurityHeaders(response);
 }
 

@@ -52,6 +52,10 @@ export type MemberAccount = {
   createdAt: string;
   role: MemberRole;
   personId: string | null;
+  /** An admin has let this account in (or it is an admin). */
+  approved: boolean;
+  /** The owner account (always an admin). */
+  isSuperAdmin: boolean;
 };
 
 export type MemberRow = MemberAccount & { person: PersonSummary | null };
@@ -67,8 +71,30 @@ export type PendingRequest = {
   personClaimedByOther: boolean;
 };
 
+/** A relative a member says is not on the site yet. */
+export type SuggestionRow = {
+  id: string;
+  createdAt: string;
+  name: string;
+  relation: string;
+  note: string | null;
+  suggestedBy: MemberAccount;
+};
+
+/** What a member sees about their own suggestions. */
+export type MySuggestion = {
+  id: string;
+  name: string;
+  relation: string;
+  status: "pending" | "added" | "already_in_tree" | "dismissed";
+  createdAt: string;
+};
+
 export type MembersAdminData = {
   pending: PendingRequest[];
+  /** Accounts with no request and no approval: waiting for a decision. */
+  waitingAccess: MemberAccount[];
+  suggestions: SuggestionRow[];
   members: MemberRow[];
   people: PersonSummary[];
   /** Set when the member tables could not be read (e.g. migrations not applied yet). */
