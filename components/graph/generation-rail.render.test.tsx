@@ -5,10 +5,9 @@ import { createRoot, type Root } from "react-dom/client";
 let transform: [number, number, number] = [0, 0, 1];
 vi.mock("@xyflow/react", () => ({
   useStore: (sel: (s: { transform: [number, number, number]; height: number }) => unknown) => sel({ transform, height: 2000 }),
-  ViewportPortal: ({ children }: { children: React.ReactNode }) => <div data-portal>{children}</div>,
 }));
 
-const { GenerationRail, BranchLabels } = await import("./GenerationRail");
+const { GenerationRail } = await import("./GenerationRail");
 
 let root: Root;
 let host: HTMLDivElement;
@@ -53,20 +52,5 @@ describe("GenerationRail", () => {
     expect(nav.getAttribute("aria-label")).toBe("الأجيال");
     expect(nav.querySelectorAll("button")).toHaveLength(3);
     expect(nav.querySelector("button")!.style.position).toBe("");
-  });
-});
-
-describe("BranchLabels", () => {
-  const labels = [
-    { key: "a", name: "Mansour", x: 500, y: 0, width: 4000 },
-    { key: "b", name: "Nassif", x: 900, y: 0, width: 160 },
-  ];
-  test("only when zoomed far out, and only branches wide enough for their name", () => {
-    transform = [0, 0, 0.6];
-    act(() => root.render(<BranchLabels labels={labels} />));
-    expect(host.textContent).toBe("");
-    transform = [0, 0, 0.1];
-    act(() => root.render(<BranchLabels labels={[...labels]} />));
-    expect(host.textContent).toBe("Mansour");
   });
 });

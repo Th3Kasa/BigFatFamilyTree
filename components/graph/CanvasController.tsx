@@ -7,15 +7,15 @@ import { toast } from "sonner";
 import { LayoutGrid, LocateFixed, Maximize2, Minus, Plus, Route } from "lucide-react";
 import { FamilyGraph } from "./FamilyGraph";
 import { CanvasOverlay } from "./CanvasOverlay";
-import { BranchLabels, GenerationRail } from "./GenerationRail";
+import { GenerationRail } from "./GenerationRail";
 import { FamilyHub } from "@/components/family/FamilyHub";
 import { FamilyView } from "@/components/family/FamilyView";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { saveCardOffset, autoLayoutAll } from "@/lib/actions/canvas";
 import { clusterMates, manualOffset, nudgeFor } from "@/lib/graph/layout";
-import { branchLabels, collapseGenerations, generationRows } from "@/lib/graph/generations";
+import { collapseGenerations, generationRows } from "@/lib/graph/generations";
 import { buildFamilyModel } from "@/lib/graph/units";
-import { cn, getDisplayName, getNameParts } from "@/lib/utils";
+import { cn, getDisplayName } from "@/lib/utils";
 import { shell } from "@/lib/client/shell-store";
 import { useMediaQuery, DESKTOP_QUERY } from "@/lib/client/use-media-query";
 import { useCurrentPerson } from "@/components/providers/current-person-provider";
@@ -284,10 +284,6 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
   );
   const shownNodes = useMemo(() => collapseGenerations(nodes as unknown as GraphNode[], [], collapsed).nodes, [nodes, collapsed]);
   const rows = useMemo(() => generationRows(nodes as unknown as GraphNode[], collapsed), [nodes, collapsed]);
-  const labels = useMemo(
-    () => branchLabels(shownNodes, (n) => getNameParts(n.data.person, lang).family ?? "", NODE_WIDTH),
-    [shownNodes, lang],
-  );
 
   // ── Viewport ───────────────────────────────────────────────────────────────
   const userMoved = useRef(false);
@@ -640,9 +636,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
           onMoveStart={onMoveStart}
           panOnDrag
           nodesDraggable={canEdit}
-        >
-          {view === "tree" && <BranchLabels labels={labels} />}
-        </FamilyGraph>
+        />
 
         {canEdit && view === "tree" && (
           <EditTools lang={lang} onTidy={() => setTidyConfirm(true)} canTidy={isAdmin} moved={moved} busy={tidying} besidePanel={!!hub && desktop} />

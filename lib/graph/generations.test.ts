@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { ROW_HEIGHT } from "./layout";
-import { branchLabels, COLLAPSED_ROW, collapseGenerations, generationRows } from "./generations";
+import { COLLAPSED_ROW, collapseGenerations, generationRows } from "./generations";
 import type { GraphEdge, GraphNode } from "./transform";
 
 const node = (id: string, row: number, x: number, family: string | null = "Morkos", extra: Partial<GraphNode> = {}): GraphNode => ({
@@ -57,14 +57,5 @@ describe("collapseGenerations", () => {
     const basem = out.nodes.find((n) => n.id === "basem")!;
     expect(basem.position.y).toBe(2 * ROW_HEIGHT - (ROW_HEIGHT - COLLAPSED_ROW));
     expect(out.nodes.find((n) => n.id === "adly")!.position.y).toBe(0);
-  });
-});
-
-describe("branchLabels", () => {
-  test("neighbouring cards with the same family name share one label", () => {
-    const labels = branchLabels(nodes, (n) => n.data.person.family_name_en ?? "", 160);
-    const row2 = labels.filter((l) => l.y === 2 * ROW_HEIGHT);
-    expect(row2).toEqual([{ key: `${2 * ROW_HEIGHT}:basem`, name: "Morkos", x: (0 + 560) / 2, y: 2 * ROW_HEIGHT, width: 560 }]);
-    expect(labels.filter((l) => l.y === 0).map((l) => l.name)).toEqual(["Morkos", "Micheal"]);
   });
 });
