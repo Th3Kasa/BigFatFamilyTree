@@ -39,6 +39,11 @@ export function StepList({ view, ctx, lang }: { view: RelationshipView; ctx: Kin
               <span className="block text-sm text-[var(--muted-foreground)]">
                 {primary ?? (lang === "ar" ? "نقطة البداية" : "Starting point")}
               </span>
+              {step.generationText && (
+                <span className="mt-1 flex w-fit items-center rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs font-semibold text-[var(--foreground)]">
+                  {lang === "ar" ? step.generationText.ar : step.generationText.en}
+                </span>
+              )}
               {secondary && (
                 <span lang={other} dir={other === "ar" ? "rtl" : "ltr"} className="mt-0.5 inline-block max-w-full text-xs text-[var(--muted-foreground)]">
                   {secondary}

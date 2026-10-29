@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { ArrowUpDown, Copy, ExternalLink, GitFork, Network, Route, UserPlus, Users } from "lucide-react";
+import { ArrowUpDown, Copy, ExternalLink, GitFork, Layers, Network, Route, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -146,7 +146,7 @@ export function RelationshipFinder({ people, relationships, nodes, edges, lang, 
   const announcement = pending
     ? t("Finding the connection…", "جارٍ البحث عن الصلة…")
     : view
-      ? `${lang === "ar" ? view.oneLine.ar : view.oneLine.en}. ${(lang === "ar" ? view.explanation.ar : view.explanation.en) ?? ""}`
+      ? `${lang === "ar" ? view.oneLine.ar : view.oneLine.en}. ${lang === "ar" ? view.generation.ar : view.generation.en}. ${(lang === "ar" ? view.explanation.ar : view.explanation.en) ?? ""}`
       : outcome.status === "same"
         ? t("That's the same person.", "هذا هو الشخص نفسه.")
         : outcome.status === "none"
@@ -261,6 +261,18 @@ export function RelationshipFinder({ people, relationships, nodes, edges, lang, 
               {(lang === "ar" ? view.explanation.ar : view.explanation.en) && (
                 <p className="mt-3 text-sm leading-relaxed text-[var(--foreground)]">
                   {lang === "ar" ? view.explanation.ar : view.explanation.en}
+                </p>
+              )}
+
+              <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-[var(--muted)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)]">
+                <Layers className="h-4 w-4 shrink-0 text-[var(--path)]" aria-hidden />
+                {lang === "ar" ? view.generation.ar : view.generation.en}
+              </p>
+
+              {view.nameNote && (
+                <p className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--background)] px-3.5 py-3 text-sm leading-relaxed text-[var(--foreground)]">
+                  <span className="font-semibold">{t("What the name means: ", "معنى التسمية: ")}</span>
+                  {lang === "ar" ? view.nameNote.ar : view.nameNote.en}
                 </p>
               )}
 

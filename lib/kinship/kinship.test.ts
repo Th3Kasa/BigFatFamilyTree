@@ -5,6 +5,7 @@ import {
   findRelationship,
   pathHighlight,
   stepLabel,
+  pathGenerations,
   arabicTerm,
   type Gender,
   type KinPerson,
@@ -139,7 +140,7 @@ group("relationships by marriage", () => {
 
   it("names aunts and uncles by marriage", () => {
     expect(term("layla", "karim")).toMatchObject({ en: "uncle by marriage", ar: "زوج عمّة X" });
-    expect(term("karim", "layla")).toMatchObject({ en: "wife's niece", ar: "ابنة أخي زوجة X" });
+    expect(term("karim", "layla")).toMatchObject({ en: "niece by marriage", ar: "ابنة أخي زوجة X" });
   });
 });
 
@@ -178,5 +179,69 @@ group("presentation helpers", () => {
     expect(h.parentChild).toContainEqual({ parentId: "elias", childId: "layla" });
     expect(h.parentChild).toContainEqual({ parentId: "youssef", childId: "nadia" });
     expect(h.relationshipIds).toEqual(["r-nk"]);
+  });
+});
+
+group("generations, half relations and more in-laws", () => {
+  // Extends the family above:
+  //   Hadi (Omar's half-brother) has Hiba; Layla has Lina; Lina has Yara.
+  //   Tarek marries Salma; Zaid marries Maha; Samir marries Lubna (Omar's stepmother is Huda).
+  const more: KinPerson[] = [
+    ...people,
+    P("hiba", "f", "hadi"),
+    P("lina", "f", null, "layla"),
+    P("yara", "f", null, "lina"),
+    P("salma", "f"),
+    P("maha", "f"),
+  ];
+  const g2 = buildKinGraph(more, [...relationships, R("r-ts", "spouse", "tarek", "salma"), R("r-zm", "spouse", "zaid", "maha")]);
+  const t2 = (a: string, b: string) => {
+    const r = findRelationship(g2, a, b);
+    if (r.kind === "none") throw new Error(`no relationship ${a} → ${b}`);
+    return r.term.en;
+  };
+
+  it("marks half relations beyond siblings", () => {
+    expect(t2("omar", "hiba")).toBe("half-niece");
+    expect(t2("hiba", "omar")).toBe("half-uncle");
+    expect(t2("hiba", "lina")).toBe("half first cousin");
+    expect(t2("hiba", "yara")).toBe("half first cousin once removed");
+    // Full relations stay plain.
+    expect(t2("hadi", "omar")).toBe("half-brother");
+    expect(t2("tarek", "lina")).toBe("first cousin once removed");
+  });
+
+  it("counts degree and removal the standard way", () => {
+    expect(t2("tarek", "yara")).toBe("first cousin twice removed");
+    expect(t2("adam", "tarek")).toBe("first cousin twice removed");
+    expect(t2("adam", "yara")).toBe("second cousin");
+    expect(t2("adam", "lina")).toBe("first cousin once removed");
+    expect(t2("adam", "salma")).toBe("first cousin twice removed's wife");
+    expect(t2("youssef", "yara")).toBe("great-great-granddaughter");
+    expect(t2("yara", "nadia")).toBe("great-great-aunt");
+    expect(t2("lina", "nadia")).toBe("great-aunt");
+    expect(t2("adam", "nadia")).toBe("great-great-aunt");
+  });
+
+  it("names more in-laws and step-relations", () => {
+    expect(t2("salma", "youssef")).toBe("grandfather-in-law");
+    expect(t2("youssef", "maha")).toBe("great-granddaughter-in-law");
+    expect(t2("omar", "maha")).toBe("daughter-in-law");
+    expect(t2("omar", "salma")).toBe("cousin-in-law");
+    expect(t2("salma", "omar")).toBe("cousin-in-law");
+    expect(t2("nadia", "maha")).toBe("grandnephew's wife");
+    expect(t2("elias", "salma")).toBe("niece-in-law");
+    expect(t2("salma", "elias")).toBe("uncle-in-law");
+    expect(t2("zaid", "karim")).toBe("great-uncle by marriage");
+  });
+
+  it("gives every person on the path a generation relative to the first", () => {
+    const r = findRelationship(g2, "adam", "tarek");
+    if (r.kind === "none" || r.kind === "self") throw new Error("expected a path");
+    // adam → zaid → omar → elias → youssef → nadia → tarek
+    expect(pathGenerations(r.links)).toEqual([0, 1, 2, 3, 4, 3, 2]);
+    const m = findRelationship(g2, "omar", "salma");
+    if (m.kind === "none" || m.kind === "self") throw new Error("expected a path");
+    expect(pathGenerations(m.links).at(-1)).toBe(0);
   });
 });

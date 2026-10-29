@@ -10,6 +10,7 @@ import {
   buildKinGraph,
   describe,
   findRelationship,
+  pathGenerations,
   stepLabel,
   type Gender,
   type KinGraph,
@@ -46,6 +47,10 @@ export type StepView = {
   /** "Khaled's father" — how this person relates to the previous one. Null for the first person. */
   en: string | null;
   ar: string | null;
+  /** Generations from the first person: +1 = a parent's generation, -1 = a child's. */
+  generation: number;
+  /** "1 generation above Omar". Null for the first person. */
+  generationText: { en: string; ar: string } | null;
 };
 
 export type RelationshipView = {
@@ -56,6 +61,10 @@ export type RelationshipView = {
   /** The answer as one plain sentence, for the banner and screen readers. */
   oneLine: { en: string; ar: string };
   explanation: { en: string | null; ar: string | null };
+  /** B's generation relative to A, as a number and a sentence. */
+  generation: { gap: number; en: string; ar: string };
+  /** What the name means: "First cousins share grandparents. “Once removed” means…". */
+  nameNote: { en: string; ar: string } | null;
   steps: StepView[];
   highlight: PathHighlight;
 };
@@ -126,6 +135,92 @@ function ancestorWord(up: number, count: number, gender: Gender): { en: string; 
   return { en: "ancestor", ar: "الجدّ الأعلى" };
 }
 
+// ── Generations ──────────────────────────────────────────────────────────
+
+const EN_COUNT = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const enCount = (n: number) => EN_COUNT[n] ?? String(n);
+const enGenerations = (n: number) => `${enCount(n)} generation${n === 1 ? "" : "s"}`;
+/** "جيل واحد" / "جيلين" / "3 أجيال" / "11 جيلًا". */
+function arGenerations(n: number): string {
+  if (n === 1) return "جيل واحد";
+  if (n === 2) return "جيلين";
+  return n <= 10 ? `${n} أجيال` : `${n} جيلًا`;
+}
+
+/** Where someone sits relative to `a`: "1 generation above Omar" / "أعلى من عمر بجيل واحد". */
+export function generationText(gap: number, a: { en: string; ar: string }): { en: string; ar: string } {
+  if (gap === 0) return { en: `Same generation as ${a.en}`, ar: `من جيل ${a.ar} نفسه` };
+  const n = Math.abs(gap);
+  const ar = n === 1 ? "بجيل واحد" : n === 2 ? "بجيلين" : `بـ${arGenerations(n)}`;
+  return gap > 0
+    ? { en: `${enGenerations(n)} above ${a.en}`.replace(/^./, (c) => c.toUpperCase()), ar: `أعلى من ${a.ar} ${ar}` }
+    : { en: `${enGenerations(n)} below ${a.en}`.replace(/^./, (c) => c.toUpperCase()), ar: `أدنى من ${a.ar} ${ar}` };
+}
+
+/** "Tarek is one generation below Zaid" / "طارق أدنى من زيد بجيل واحد". */
+function generationSentence(gap: number, a: { en: string; ar: string }, b: { en: string; ar: string }): { en: string; ar: string } {
+  if (gap === 0) return { en: `${b.en} and ${a.en} are the same generation`, ar: `${b.ar} و${a.ar} من الجيل نفسه` };
+  const t = generationText(gap, a);
+  return { en: `${b.en} is ${t.en.charAt(0).toLowerCase()}${t.en.slice(1)}`, ar: `${b.ar} ${t.ar}` };
+}
+
+const ORDINAL_EN = ["", "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
+
+/**
+ * Why the relationship has the name it has. Cousins: the degree comes from the
+ * shared ancestor (first cousins share grandparents, second cousins
+ * great-grandparents…) and "removed" counts the generations between them.
+ * Half relations: the two lines meet at half siblings.
+ */
+function nameNote(
+  result: Exclude<KinResult, { kind: "none" | "self" }>,
+  ctx: KinContext,
+): RelationshipView["nameNote"] {
+  if (result.kind !== "blood") return null;
+  const up = result.links.findIndex((l) => l.kind !== "parent");
+  if (up <= 0) return null; // direct descendants: the name says it all
+  const down = result.links.length - up;
+  const en: string[] = [];
+  const ar: string[] = [];
+
+  if (up >= 2 && down >= 2) {
+    const degree = Math.min(up, down) - 1;
+    const removed = Math.abs(up - down);
+    const shared = degree === 1 ? "grandparents" : `${"great-".repeat(degree - 1)}grandparents`;
+    en.push(`${ORDINAL_EN[degree] ?? `${degree}th`} cousins share ${shared}.`);
+    if (removed > 0) {
+      const word = removed === 1 ? "Once removed" : removed === 2 ? "Twice removed" : `${removed} times removed`;
+      en.push(`“${word}” means they are ${enGenerations(removed)} apart.`);
+      ar.push(`بينهما فارق ${arGenerations(removed)}، ولذلك يُقال بالإنجليزية «${result.term.en}».`);
+    } else {
+      ar.push(`${degree === 1 ? "يتشاركان في الجدّين" : "يتشاركان في الأجداد أنفسهم"}، ولذلك يُقال بالإنجليزية «${result.term.en}».`);
+    }
+  } else if (down === 0 || up === 0) {
+    return null;
+  } else if (Math.max(up, down) >= 3) {
+    // Great-aunts/uncles and grandnieces/nephews: say which generation the sibling sits in.
+    const older = up > down ? result.path[up - 1] : result.path[up + 1];
+    const enWho = (k: number) => (k === 1 ? "a parent" : k === 2 ? "a grandparent" : `a ${"great-".repeat(k - 2)}grandparent`);
+    if (up > down) {
+      en.push(`${personName(ctx.byId.get(result.path.at(-1)!), "en")} is a sibling of ${personName(ctx.byId.get(older), "en")}, ${enWho(up - 1)} of ${personName(ctx.byId.get(result.path[0]), "en")}.`);
+      ar.push(`${personName(ctx.byId.get(result.path.at(-1)!), "ar")} من إخوة ${personName(ctx.byId.get(older), "ar")}، و${personName(ctx.byId.get(older), "ar")} ${generationText(up - 1, { en: "", ar: personName(ctx.byId.get(result.path[0]), "ar") }).ar}.`);
+    } else {
+      en.push(`${personName(ctx.byId.get(result.path[0]), "en")} is a sibling of ${personName(ctx.byId.get(older), "en")}, ${enWho(down - 1)} of ${personName(ctx.byId.get(result.path.at(-1)!), "en")}.`);
+      ar.push(`${personName(ctx.byId.get(result.path[0]), "ar")} من إخوة ${personName(ctx.byId.get(older), "ar")}، و${personName(ctx.byId.get(older), "ar")} ${generationText(down - 1, { en: "", ar: personName(ctx.byId.get(result.path.at(-1)!), "ar") }).ar}.`);
+    }
+  }
+
+  if (result.half) {
+    const x = result.path[up - 1];
+    const y = result.path[up + 1];
+    const n = (id: string, lang: Lang) => personName(ctx.byId.get(id), lang);
+    en.push(`“Half” because ${n(x, "en")} and ${n(y, "en")} have only one parent in common.`);
+    ar.push(`${n(x, "ar")} و${n(y, "ar")} يشتركان في والد واحد فقط (غير أشقّاء).`);
+  }
+
+  return en.length ? { en: en.join(" "), ar: ar.join(" ") } : null;
+}
+
 function explain(result: Exclude<KinResult, { kind: "none" | "self" }>, ctx: KinContext): RelationshipView["explanation"] {
   const names = (ids: string[], lang: Lang) => joinNames(ids.map((id) => personName(ctx.byId.get(id), lang)), lang);
 
@@ -177,8 +272,10 @@ export function relate(ctx: KinContext, aId: string | null | undefined, bId: str
     ar: describe(result, { a: ar.a, b: ar.b }, b.gender)!.ar,
   };
 
+  const gens = pathGenerations(result.links);
+  const aNames = { en: personName(a, "en"), ar: personName(a, "ar") };
   const steps: StepView[] = result.path.map((id, i) => {
-    if (i === 0) return { personId: id, number: 1, en: null, ar: null };
+    if (i === 0) return { personId: id, number: 1, en: null, ar: null, generation: 0, generationText: null };
     const from = ctx.byId.get(result.path[i - 1]);
     const to = ctx.byId.get(id);
     const label = stepLabel(result.links[i - 1], to?.gender ?? "unknown");
@@ -187,8 +284,11 @@ export function relate(ctx: KinContext, aId: string | null | undefined, bId: str
       number: i + 1,
       en: `${personName(from, "en")}'s ${label.en}`,
       ar: arabicTerm(label, personName(from, "ar")),
+      generation: gens[i],
+      generationText: generationText(gens[i], aNames),
     };
   });
+  const gap = gens[gens.length - 1];
 
   return {
     status: "found",
@@ -201,6 +301,8 @@ export function relate(ctx: KinContext, aId: string | null | undefined, bId: str
       },
       oneLine,
       explanation: explain(result, ctx),
+      generation: { gap, ...generationSentence(gap, { en: en.a, ar: ar.a }, { en: en.b, ar: ar.b }) },
+      nameNote: nameNote(result, ctx),
       steps,
       highlight: toPathHighlight(result),
     },

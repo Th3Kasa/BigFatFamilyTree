@@ -160,3 +160,51 @@ describe("people search", () => {
     expect(searchPeople(list, "", 2)).toHaveLength(2);
   });
 });
+
+describe("generations and what the name means", () => {
+  const more = [
+    ...people,
+    p("z", "Zein", { gender: "f", father_id: "t", given_ar: "زين" }),
+    p("w", "Walid", { gender: "m", father_id: "z", given_ar: "وليد" }),
+  ];
+  const c2 = makeKinContext(more, rels);
+  const found = (a: string, b: string) => {
+    const out = relate(c2, a, b);
+    if (out.status !== "found") throw new Error("expected a result");
+    return out.view;
+  };
+
+  it("says first cousins share grandparents and are the same generation", () => {
+    const v = found("o", "t");
+    expect(v.generation).toEqual({ gap: 0, en: "Tarek and Omar are the same generation", ar: "طارق وعمر من الجيل نفسه" });
+    expect(v.nameNote?.en).toBe("First cousins share grandparents.");
+    expect(v.nameNote?.ar).toContain("«first cousin»");
+  });
+
+  it("explains “once removed” and “twice removed” as generations apart", () => {
+    const once = found("o", "z");
+    expect(once.oneLine.en).toBe("Zein is Omar's first cousin once removed");
+    expect(once.generation.en).toBe("Zein is one generation below Omar");
+    expect(once.generation.ar).toBe("زين أدنى من عمر بجيل واحد");
+    expect(once.nameNote?.en).toBe("First cousins share grandparents. “Once removed” means they are one generation apart.");
+    const twice = found("w", "o");
+    expect(twice.oneLine.en).toBe("Omar is Walid's first cousin twice removed");
+    expect(twice.generation.en).toBe("Omar is two generations above Walid");
+    expect(twice.nameNote?.en).toContain("“Twice removed” means they are two generations apart.");
+    expect(twice.nameNote?.ar).toContain("فارق جيلين");
+  });
+
+  it("labels each step with its generation relative to the first person", () => {
+    const v = found("o", "z");
+    expect(v.steps.map((s) => s.generation)).toEqual([0, 1, 2, 1, 0, -1]);
+    expect(v.steps[0].generationText).toBeNull();
+    expect(v.steps[2].generationText).toEqual({ en: "Two generations above Omar", ar: "أعلى من عمر بجيلين" });
+    expect(v.steps[4].generationText?.en).toBe("Same generation as Omar");
+  });
+
+  it("explains great-aunts and grandnephews through the sibling", () => {
+    const v = found("z", "k");
+    expect(v.oneLine.en).toBe("Khaled is Zein's great-uncle");
+    expect(v.nameNote?.en).toBe("Khaled is a sibling of Salma, a grandparent of Zein.");
+  });
+});
