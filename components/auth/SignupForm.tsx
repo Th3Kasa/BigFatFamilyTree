@@ -8,12 +8,17 @@ import { MIN_DOB } from "@/lib/validation/members";
 
 type Lang = "ar" | "en";
 
-const noopSubscribe = () => () => {};
+// Re-render when the language switch changes <html lang> without a full reload.
+function subscribeToLang(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+  return () => observer.disconnect();
+}
 
 /** The page language set by the server (<html lang>), without a hydration mismatch. */
 export function useDocumentLang(): Lang {
   return useSyncExternalStore<Lang>(
-    noopSubscribe,
+    subscribeToLang,
     () => (document.documentElement.lang === "ar" ? "ar" : "en"),
     () => "en",
   );

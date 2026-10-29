@@ -7,6 +7,8 @@ import { CommandProvider } from "@/components/providers/command-provider";
 import { AppShell } from "@/components/shell/AppShell";
 import { CurrentPersonProvider } from "@/components/providers/current-person-provider";
 import { fetchCurrentPerson } from "@/lib/members/current-person";
+import { countPendingMembers } from "@/lib/members/admin-data";
+import { isApproved } from "@/lib/members/approval";
 import { Toaster } from "@/components/ui/sonner";
 
 const fontSans = Inter({
@@ -42,10 +44,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   } = await supabase.auth.getUser();
 
   const { data: profile } = user
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    ? await supabase.from("profiles").select("role, approved_at").eq("id", user.id).single()
     : { data: null };
-  const role = (profile as { role?: string | null } | null)?.role ?? undefined;
-  const currentPerson = user ? await fetchCurrentPerson(supabase, user.id) : null;
+  const role = profile?.role ?? undefined;
+  // Accounts still waiting for access get no app shell (every link would bounce
+  // them back to /welcome). If the profile can't be read at all, show the shell:
+  // RLS, not this chrome, is what protects the data.
+  const approved = profile ? isApproved(profile) : true;
+  const currentPerson = user && approved ? await fetchCurrentPerson(supabase, user.id) : null;
+  // Admins: how many people/suggestions are waiting, shown as a badge on "Members".
+  const membersBadge = user && role === "admin" ? await countPendingMembers(supabase) : 0;
 
   return (
     <html
@@ -56,8 +64,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="antialiased">
         <CurrentPersonProvider person={currentPerson}>
         <CommandProvider lang={lang}>
-          {user ? (
-            <AppShell user={user} lang={lang} role={role}>
+          {user && approved ? (
+            <AppShell user={user} lang={lang} role={role} membersBadge={membersBadge}>
               {children}
             </AppShell>
           ) : (

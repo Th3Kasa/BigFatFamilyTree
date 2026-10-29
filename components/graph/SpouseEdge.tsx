@@ -1,120 +1,107 @@
 "use client";
 
-import type { EdgeProps } from "@xyflow/react";
+import { useStore, type EdgeProps, type ReactFlowState } from "@xyflow/react";
 import { EDGE_STYLES, GHOST_OPACITY, WIDOWED_GLYPH } from "@/lib/graph/edge-styles";
+import { coupleLine } from "@/lib/graph/geometry";
 import { DIM_OPACITY, type EdgeHighlight } from "@/lib/graph/highlight";
+import { marriageLabel } from "@/lib/graph/family-view";
+import { COMPACT_ZOOM } from "@/lib/graph/viewport";
 
 type SpouseData = {
   edgeKind: "spouse";
-  relationshipId?: string;
   status?: "current" | "divorced" | "widowed";
   /** True when this is a past relationship of a remarried person. */
   ghost?: boolean;
-  /** Marriage order (1st, 2nd, …). */
-  orderIndex?: number;
   /** True when either spouse has more than one marriage. */
   showOrder?: boolean;
+  /** 1st, 2nd … from the perspective of the partner with several marriages. */
+  ordinal?: number | null;
+  /** Co-parents with no recorded marriage: a quiet line, just so the children have a couple to hang from. */
+  implicit?: boolean;
+  /** 0 = neighbours; 1+ = runs under the row past the cards in between. */
+  lane?: number;
+  lang?: "ar" | "en";
   /** Relationship-finder highlight; present only while a path is active. */
   highlight?: EdgeHighlight;
 };
 
-// Renders the marriage line as a guaranteed-horizontal segment.
-// Uses sourceX/Y and targetX/Y from EdgeProps — React Flow keeps these
-// in sync with every drag frame, eliminating the "gap during drag" bug
-// that occurs when reading from useNodes() (which lags behind).
-//
-// The marriage bar sits at Math.max(sourceY, targetY) so it is always
-// horizontal even when spouses are positioned at different heights.
-// FamilyBranchEdge uses the same Math.max formula for its startY, so the
-// T-junction bracket always hangs from exactly this line.
-export function SpouseEdge({ sourceX, sourceY, targetX, targetY, selected, data }: EdgeProps) {
-  const {
-    status = "current",
-    ghost = false,
-    orderIndex,
-    showOrder = false,
-    highlight,
-  } = (data ?? {}) as SpouseData;
+type XY = { x: number; y: number };
+const same = (a: [XY, XY] | null, b: [XY, XY] | null) =>
+  a === b || (!!a && !!b && a[0].x === b[0].x && a[0].y === b[0].y && a[1].x === b[1].x && a[1].y === b[1].y);
+
+/**
+ * Marriage line. Uses the same geometry as the children's bracket, so a
+ * couple's children always hang from the middle of this exact line. Past
+ * marriages are soft (dashed, lighter) and labelled "1st marriage · widowed".
+ */
+export function SpouseEdge({ source, target, data }: EdgeProps) {
+  const { status = "current", ghost = false, showOrder = false, ordinal, implicit = false, lane = 0, lang = "en", highlight } =
+    (data ?? {}) as SpouseData;
+
+  const ends = useStore((s: ReactFlowState): [XY, XY] | null => {
+    const a = s.nodeLookup.get(source);
+    const b = s.nodeLookup.get(target);
+    return a && b ? [a.internals.positionAbsolute, b.internals.positionAbsolute] : null;
+  }, same);
+  const compact = useStore((s: ReactFlowState) => s.transform[2] < COMPACT_ZOOM);
+  if (!ends) return null;
+
   const onPath = !!highlight?.on;
   const dimmed = !!highlight && !highlight.on;
+  const line = coupleLine(ends[0], ends[1], lane);
 
-  // Horizontal marriage bar at the LOWER of the two handle Y coordinates
-  const lineY = Math.max(sourceY, targetY);
-
-  const parts: string[] = [];
-  // Vertical stub from source handle down to lineY (only when source is higher)
-  if (sourceY < lineY) parts.push(`M ${sourceX} ${sourceY} L ${sourceX} ${lineY}`);
-  // Vertical stub from target handle down to lineY (only when target is higher)
-  if (targetY < lineY) parts.push(`M ${targetX} ${targetY} L ${targetX} ${lineY}`);
-  // Horizontal marriage bar
-  parts.push(`M ${sourceX} ${lineY} L ${targetX} ${lineY}`);
-
-  const d = parts.join(" ");
-
-  const style =
-    status === "divorced" ? EDGE_STYLES.coupleDivorced :
-    status === "widowed"  ? EDGE_STYLES.coupleWidowed :
-    EDGE_STYLES.coupleCurrent;
-
-  const midX = (sourceX + targetX) / 2;
+  const style = implicit
+    ? { stroke: EDGE_STYLES.parentChild.stroke, dash: "1 5" }
+    : status === "divorced" ? EDGE_STYLES.coupleDivorced
+    : status === "widowed" ? EDGE_STYLES.coupleWidowed
+    : EDGE_STYLES.coupleCurrent;
   const stroke = onPath ? "var(--path)" : style.stroke;
+  const past = status !== "current";
+  const soft = !onPath && (ghost || past) ? GHOST_OPACITY + 0.15 : 1;
+  const label = !compact && !implicit && (showOrder || past) ? marriageLabel(showOrder ? ordinal : null, status, lang) : "";
 
   return (
-    <g opacity={onPath ? 1 : (ghost ? GHOST_OPACITY : 1) * (dimmed ? DIM_OPACITY : 1)}>
-      {onPath ? (
-        <path d={d} style={{ stroke: "var(--path-soft)", strokeWidth: 10, fill: "none" }} strokeLinecap="round" />
-      ) : null}
-      <path
-        d={d}
-        style={{
-          stroke,
-          strokeWidth: onPath ? 4 : selected ? 3 : 2,
-          fill: "none",
-          strokeDasharray: style.dash,
-        }}
-      />
-      {/* Wider invisible path for easier clicking on a thin line */}
-      <path
-        d={d}
-        style={{ stroke: "transparent", strokeWidth: 14, fill: "none", cursor: "pointer" }}
-      />
-      {status === "widowed" ? (
-        <text
-          x={midX}
-          y={lineY - 5}
-          textAnchor="middle"
-          style={{
-            fill: stroke,
-            fontSize: 12,
-            fontWeight: 600,
-            userSelect: "none",
-            pointerEvents: "none",
-          }}
-        >
+    <g opacity={dimmed ? DIM_OPACITY : 1}>
+      {/* The line itself is soft for past marriages; the label stays full strength so it is readable. */}
+      <g opacity={onPath ? 1 : soft}>
+        {onPath && <path d={line.d} style={{ stroke: "var(--path-soft)", strokeWidth: 10, fill: "none" }} strokeLinecap="round" />}
+        <path
+          d={line.d}
+          style={{ stroke, strokeWidth: onPath ? 4 : implicit ? 1.5 : 2, fill: "none", strokeDasharray: style.dash }}
+          strokeLinejoin="round"
+        />
+      </g>
+      {status === "widowed" && !label && (
+        <text x={line.label.x} y={line.label.y} textAnchor="middle" style={{ fill: stroke, fontSize: 12, fontWeight: 600, pointerEvents: "none" }}>
           {WIDOWED_GLYPH}
         </text>
-      ) : null}
-      {/* Marriage-order badge — only shown when a spouse has >1 marriage,
-          so polygamy / remarriage order is readable on the canvas. */}
-      {showOrder && orderIndex != null ? (
-        <g pointerEvents="none">
-          <circle
-            cx={midX}
-            cy={lineY + 12}
-            r={8}
-            style={{ fill: "var(--background, white)", stroke, strokeWidth: 1.5 }}
-          />
-          <text
-            x={midX}
-            y={lineY + 12}
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={{ fill: stroke, fontSize: 10, fontWeight: 700, userSelect: "none" }}
-          >
-            {orderIndex}
-          </text>
-        </g>
-      ) : null}
+      )}
+      {label && <MarriageLabel x={line.label.x} y={line.label.y} below={line.label.placement === "below"} text={label} color={stroke} lang={lang} />}
     </g>
+  );
+}
+
+/**
+ * Two short lines ("1st marriage" / "widowed") so the label fits in the gap
+ * between partners, on a white backing so it stays readable over other lines.
+ */
+function MarriageLabel({ x, y, below, text, color, lang }: { x: number; y: number; below: boolean; text: string; color: string; lang: "ar" | "en" }) {
+  const lines = text.split(" · ");
+  const lh = 12;
+  const top = below ? y : y - (lines.length - 1) * lh;
+  return (
+    <text
+      x={x}
+      y={top}
+      textAnchor="middle"
+      direction={lang === "ar" ? "rtl" : "ltr"}
+      style={{ fill: color, fontSize: 10.5, fontWeight: 700, paintOrder: "stroke", stroke: "#FFFFFF", strokeWidth: 4, strokeLinejoin: "round", pointerEvents: "none" }}
+    >
+      {lines.map((l, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? 0 : lh}>
+          {l}
+        </tspan>
+      ))}
+    </text>
   );
 }

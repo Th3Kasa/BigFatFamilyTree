@@ -1,6 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { buildPersonSummary, PERSON_SUMMARY_COLUMNS, type PersonRow } from "./summary";
+import { countWaiting, isApproved, needsAccessDecision } from "./approval";
 import type {
   MemberAccount,
   MemberRole,
@@ -8,6 +9,7 @@ import type {
   MemberRow,
   PendingRequest,
   PersonSummary,
+  SuggestionRow,
 } from "./types";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
@@ -21,6 +23,8 @@ type ProfileRow = {
   created_at: string;
   role: MemberRole;
   person_id: string | null;
+  approved_at: string | null;
+  is_super_admin: boolean;
 };
 
 type AuthStatus = { email: string | null; email_confirmed_at: string | null };
@@ -37,15 +41,17 @@ function toAccount(p: ProfileRow, auth: AuthStatus | undefined): MemberAccount {
     createdAt: p.created_at,
     role: p.role,
     personId: p.person_id,
+    approved: isApproved(p),
+    isSuperAdmin: p.is_super_admin,
   };
 }
 
 /** Everything the /admin/members page renders. Caller must already be an admin. */
 export async function loadMembersAdminData(supabase: Client): Promise<MembersAdminData> {
-  const [profilesRes, requestsRes, peopleRes, authRes] = await Promise.all([
+  const [profilesRes, requestsRes, peopleRes, authRes, suggestionsRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, display_name, full_name, email, date_of_birth, created_at, role, person_id")
+      .select("id, display_name, full_name, email, date_of_birth, created_at, role, person_id, approved_at, is_super_admin")
       .order("created_at", { ascending: false }),
     supabase
       .from("link_requests")
@@ -60,6 +66,11 @@ export async function loadMembersAdminData(supabase: Client): Promise<MembersAdm
     // Admin-only SECURITY DEFINER RPC (20260521000018). If it is missing or
     // fails, the page still works and simply shows no confirmation badges.
     supabase.rpc("admin_member_auth_status"),
+    supabase
+      .from("relative_suggestions")
+      .select("id, suggested_by, name, relation, note, created_at")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true }),
   ]);
 
   const loadError = profilesRes.error?.message ?? requestsRes.error?.message ?? peopleRes.error?.message;
@@ -93,14 +104,57 @@ export async function loadMembersAdminData(supabase: Client): Promise<MembersAdm
     });
   }
 
-  return { pending, members, people, loadError };
+  const pendingProfileIds = new Set(pending.map((p) => p.account.id));
+  const waitingAccess = [...accountById.values()].filter((a) => needsAccessDecision(a, pendingProfileIds));
+
+  // A suggestions table that isn't migrated yet must not take the page down.
+  const suggestions: SuggestionRow[] = [];
+  for (const s of suggestionsRes.error ? [] : (suggestionsRes.data ?? [])) {
+    const by = accountById.get(s.suggested_by);
+    if (!by) continue;
+    suggestions.push({
+      id: s.id,
+      createdAt: s.created_at,
+      name: s.name,
+      relation: s.relation,
+      note: s.note,
+      suggestedBy: by,
+    });
+  }
+
+  return { pending, waitingAccess, suggestions, members, people, loadError };
 }
 
-/** Number of requests waiting for review (for a nav badge). Admin only. */
+/** Number of requests waiting for review. Admin only. */
 export async function countPendingLinkRequests(supabase: Client): Promise<number> {
   const { count } = await supabase
     .from("link_requests")
     .select("id", { count: "exact", head: true })
     .eq("status", "pending");
   return count ?? 0;
+}
+
+/**
+ * Everything waiting for an admin, for the "Members" nav badge: pending link
+ * requests, accounts nobody has let in yet (without double-counting those that
+ * already have a request) and suggested relatives. Admin only; never throws.
+ */
+export async function countPendingMembers(supabase: Client): Promise<number> {
+  try {
+    const [requests, unapproved, suggestions] = await Promise.all([
+      supabase.from("link_requests").select("profile_id").eq("status", "pending"),
+      supabase.from("profiles").select("id, role").is("approved_at", null),
+      supabase
+        .from("relative_suggestions")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending"),
+    ]);
+    return countWaiting({
+      pendingRequestProfileIds: (requests.data ?? []).map((r) => r.profile_id),
+      unapproved: (unapproved.data ?? []) as Array<{ id: string; role: MemberRole }>,
+      pendingSuggestions: suggestions.error ? 0 : (suggestions.count ?? 0),
+    });
+  } catch {
+    return 0;
+  }
 }

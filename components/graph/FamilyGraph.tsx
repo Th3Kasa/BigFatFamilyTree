@@ -8,13 +8,11 @@ import {
   type EdgeTypes,
   type Node,
   type Edge,
-  type Connection,
   type NodeMouseHandler,
-  type EdgeMouseHandler,
   type OnNodeDrag,
-  type OnEdgesDelete,
   type OnNodesChange,
   type OnEdgesChange,
+  type OnMoveStart,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { PersonNode } from "./PersonNode";
@@ -22,10 +20,10 @@ import { FamilyBranchEdge } from "./FamilyBranchEdge";
 import { SpouseEdge } from "./SpouseEdge";
 import type { GraphNode, GraphEdge } from "@/lib/graph/transform";
 
-const nodeTypes: NodeTypes = { person: PersonNode };
+const nodeTypes: NodeTypes = { person: PersonNode, personRef: PersonNode };
 const edgeTypes: EdgeTypes = {
   "family-branch": FamilyBranchEdge,
-  "spouse": SpouseEdge,
+  spouse: SpouseEdge,
 };
 
 type Props = {
@@ -34,38 +32,34 @@ type Props = {
   onNodesChange?: OnNodesChange;
   onEdgesChange?: OnEdgesChange;
   onNodeDragStop?: OnNodeDrag;
-  onConnect?: (c: Connection) => void;
-  onNodeContextMenu?: NodeMouseHandler;
-  onEdgeContextMenu?: EdgeMouseHandler;
-  onPaneContextMenu?: (e: React.MouseEvent | MouseEvent) => void;
   onNodeClick?: NodeMouseHandler;
-  onEdgeClick?: EdgeMouseHandler;
   onPaneClick?: () => void;
-  onEdgesDelete?: OnEdgesDelete;
+  onMoveStart?: OnMoveStart;
   panOnDrag?: boolean | number[];
   selectionMode?: boolean;
   nodesDraggable?: boolean;
-  nodesConnectable?: boolean;
+  /** Extra layers inside the flow (e.g. generation labels). */
+  children?: React.ReactNode;
 };
 
+/**
+ * The React Flow surface. People are linked through the family panel, never by
+ * dragging lines, so connecting is off and the handles are invisible anchors.
+ * Each card renders its own button, so the node wrappers are not tab stops.
+ */
 export function FamilyGraph({
   nodes,
   edges,
   onNodesChange,
   onEdgesChange,
   onNodeDragStop,
-  onConnect,
-  onNodeContextMenu,
-  onEdgeContextMenu,
-  onPaneContextMenu,
   onNodeClick,
-  onEdgeClick,
   onPaneClick,
-  onEdgesDelete,
+  onMoveStart,
   panOnDrag = [1, 2],
-  selectionMode = true,
-  nodesDraggable = true,
-  nodesConnectable = true,
+  selectionMode = false,
+  nodesDraggable = false,
+  children,
 }: Props) {
   return (
     <div style={{ width: "100%", height: "100%" }}>
@@ -76,35 +70,23 @@ export function FamilyGraph({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-
-        minZoom={0.1}
+        minZoom={0.05}
         maxZoom={2.5}
         nodesDraggable={nodesDraggable}
-        nodesConnectable={nodesConnectable}
+        nodesConnectable={false}
+        nodesFocusable={false}
+        edgesFocusable={false}
         onNodeDragStop={onNodeDragStop}
-        onConnect={onConnect}
-        onNodeContextMenu={onNodeContextMenu}
-        onEdgeContextMenu={onEdgeContextMenu}
-        onPaneContextMenu={onPaneContextMenu}
         onNodeClick={onNodeClick}
-        onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
-        onEdgesDelete={onEdgesDelete}
+        onMoveStart={onMoveStart}
         panOnDrag={panOnDrag}
         selectionOnDrag={selectionMode}
         deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
-        defaultEdgeOptions={{
-          style: { stroke: "#9A8A8C", strokeWidth: 1.5 },
-          animated: false,
-        }}
       >
-        <Background
-          gap={24}
-          size={1.2}
-          color="#E7DCD8"
-          variant={BackgroundVariant.Dots}
-        />
+        <Background gap={24} size={1.2} color="#E7DCD8" variant={BackgroundVariant.Dots} />
+        {children}
       </ReactFlow>
     </div>
   );

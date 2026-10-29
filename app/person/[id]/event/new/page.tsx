@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { withSignedPhotos } from "@/lib/storage/photos";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -42,8 +43,9 @@ export default async function NewEventPage({
   const personQuery = UUID_RE.test(id)
     ? supabase.from("people").select(columns).eq("id", id).is("deleted_at", null).single()
     : supabase.from("people").select(columns).eq("slug", id).is("deleted_at", null).single();
-  const { data: person } = await personQuery;
-  if (!person) notFound();
+  const { data: rawPerson } = await personQuery;
+  if (!rawPerson) notFound();
+  const person = (await withSignedPhotos(supabase, [rawPerson]))[0];
 
   const returnHref = `/person/${encodeURIComponent(person.slug ?? person.id)}`;
   if (role !== "admin" && role !== "editor") redirect(returnHref);

@@ -22,6 +22,8 @@ type ShellState = {
   pagePerson: ContextPerson | null;
   /** Person selected on the tree canvas. */
   canvasPerson: ContextPerson | null;
+  /** The welcome tour, opened from "Replay the tour" in the user menu. */
+  tourOpen: boolean;
 };
 
 let state: ShellState = {
@@ -29,6 +31,7 @@ let state: ShellState = {
   peopleSheetOpen: false,
   pagePerson: null,
   canvasPerson: null,
+  tourOpen: false,
 };
 
 const listeners = new Set<() => void>();
@@ -50,6 +53,7 @@ const serverState: ShellState = {
   peopleSheetOpen: false,
   pagePerson: null,
   canvasPerson: null,
+  tourOpen: false,
 };
 
 export function useShell<T>(selector: (s: ShellState) => T): T {
@@ -69,6 +73,9 @@ export const shell = {
   },
   openAdd() {
     set({ addOpen: true, peopleSheetOpen: false });
+  },
+  setTourOpen(open: boolean) {
+    set({ tourOpen: open });
   },
   setPeopleSheetOpen(open: boolean) {
     set({ peopleSheetOpen: open });

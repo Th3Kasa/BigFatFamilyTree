@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildGraphElements, autoLayoutPositions } from "@/lib/graph/transform";
+import { buildGraphElements } from "@/lib/graph/transform";
+import { layoutFamily } from "@/lib/graph/layout";
 
 const people = [
   {
@@ -60,7 +61,7 @@ describe("buildGraphElements", () => {
     expect(edges.find((e) => e.id === "s-r1")).toBeDefined();
   });
 
-  it("dagre assigns numeric positions to all nodes", () => {
+  it("the layout assigns numeric positions to all nodes", () => {
     const { nodes } = buildGraphElements(people, relationships, "en");
     for (const n of nodes) {
       expect(typeof n.position.x).toBe("number");
@@ -75,17 +76,23 @@ describe("buildGraphElements", () => {
     expect(edges).toHaveLength(0);
   });
 
-  it("honors stored positions when present", () => {
-    const people = [
-      { id: "p1", slug: null, given_en: "A", given_ar: null, family_name_en: null, family_name_ar: null,
-        father_id: null, mother_id: null, gender: "m" as const, is_placeholder: false, photo_url: null,
-        pos_x: 100, pos_y: 200 },
-    ];
-    const { nodes } = buildGraphElements(people, [], "en");
-    expect(nodes[0].position).toEqual({ x: 100, y: 200 });
+  const one = (pos_x: number | null, pos_y: number | null) => [
+    { id: "p1", slug: null, given_en: "A", given_ar: null, family_name_en: null, family_name_ar: null,
+      father_id: null, mother_id: null, gender: "m" as const, is_placeholder: false, photo_url: null,
+      pos_x, pos_y },
+  ];
+
+  it("applies a saved sideways nudge (pos_x offset, no pos_y) and keeps the generation row", () => {
+    const { nodes } = buildGraphElements(one(100, null), [], "en");
+    expect(nodes[0].position).toEqual({ x: 100, y: 0 });
   });
 
-  it("autoLayoutPositions returns dagre coords for every person", () => {
+  it("ignores absolute positions saved by the old layout", () => {
+    const { nodes } = buildGraphElements(one(100, 200), [], "en");
+    expect(nodes[0].position).toEqual({ x: 0, y: 0 });
+  });
+
+  it("layoutFamily places every person, parents above children", () => {
     const people = [
       { id: "p1", slug: null, given_en: "Parent", given_ar: null, family_name_en: null, family_name_ar: null,
         father_id: null, mother_id: null, gender: "m" as const, is_placeholder: false, photo_url: null,
@@ -94,10 +101,8 @@ describe("buildGraphElements", () => {
         father_id: "p1", mother_id: null, gender: "f" as const, is_placeholder: false, photo_url: null,
         pos_x: null, pos_y: null },
     ];
-    const layout = autoLayoutPositions(people);
+    const layout = layoutFamily(people, []).positions;
     expect(layout.size).toBe(2);
-    expect(layout.get("p1")).toBeDefined();
-    expect(layout.get("p2")).toBeDefined();
     expect(layout.get("p1")!.y).toBeLessThan(layout.get("p2")!.y);
   });
 });

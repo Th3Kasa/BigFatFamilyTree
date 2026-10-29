@@ -20,5 +20,7 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return { response, user };
+  // `supabase` is returned so the caller can make one more user-scoped query
+  // (the approval lookup) without building a second client.
+  return { response, user, supabase };
 }

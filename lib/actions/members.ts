@@ -1,15 +1,31 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getLang, type Lang } from "@/lib/lang/server";
 import { checkLimit } from "@/lib/ratelimit";
-import { getAdminContext, getSignedInUserId, type AdminContext } from "@/lib/members/auth";
+import { getAdminContext, getSignedInUserId, getSuperAdminContext, type AdminContext } from "@/lib/members/auth";
+import { deleteAccount, inviteAccount, inviteRedirectUrl } from "@/lib/members/account-admin";
+import {
+  canActOn,
+  confirmationMatches,
+  confirmationName,
+  isSuperAdminGuardError,
+} from "@/lib/members/permissions";
 import { dobToBirthDateText, hasArabic, splitFullName } from "@/lib/members/match";
 import { searchClaimCandidates } from "@/lib/members/search";
+import { ClaimSearchLimitError } from "@/lib/members/claim-query";
 import { canTransitionRequest, isLastAdminError } from "@/lib/members/rules";
+import { canRemoveAccess } from "@/lib/members/approval";
+import { buildRequestNote } from "@/lib/members/request-note";
+import { resolveSuggestionSchema, suggestRelativeSchema, type SuggestRelativeInput } from "@/lib/members/suggestions";
+import { notifyAdminsOfRequest, notifyAdminsOfSuggestion, notifyMemberApproved } from "@/lib/notify/email";
 import type { ClaimCandidate, MemberActionResult, MemberRole } from "@/lib/members/types";
 import {
   addFamilyMemberSchema,
+  deleteMemberSchema,
+  inviteMemberSchema,
+  type InviteMemberInput,
   linkProfileSchema,
   linkRequestToPersonSchema,
   memberRoleSchema,
@@ -100,9 +116,17 @@ async function linkProfile(
     );
   }
 
+  // Linking someone to a person also lets them in (if an admin hasn't already).
+  const { data: current } = await supabase
+    .from("profiles")
+    .select("approved_at")
+    .eq("id", profileId)
+    .maybeSingle();
+  const newlyApproved = !!current && (current as { approved_at: string | null }).approved_at === null;
+
   const { data: updated, error } = await supabase
     .from("profiles")
-    .update({ person_id: personId })
+    .update(newlyApproved ? { person_id: personId, approved_at: new Date().toISOString() } : { person_id: personId })
     .eq("id", profileId)
     .select("id");
   if (error) {
@@ -123,6 +147,10 @@ async function linkProfile(
     .eq("profile_id", profileId)
     .eq("status", "pending");
 
+  if (newlyApproved) {
+    const lang = await getLang();
+    after(() => notifyMemberApproved(profileId, lang));
+  }
   refresh();
   return { ok: true };
 }
@@ -153,11 +181,23 @@ export async function searchClaimCandidatesAction(
     .eq("id", ctx.userId)
     .maybeSingle();
 
-  const results = await searchClaimCandidates(ctx.supabase, {
-    query: parsed.data.query,
-    dob: (profile as { date_of_birth: string | null } | null)?.date_of_birth ?? null,
-  });
-  return { ok: true, data: results };
+  try {
+    const results = await searchClaimCandidates(ctx.supabase, {
+      query: parsed.data.query,
+      dob: (profile as { date_of_birth: string | null } | null)?.date_of_birth ?? null,
+    });
+    return { ok: true, data: results };
+  } catch (e) {
+    if (e instanceof ClaimSearchLimitError) {
+      return fail(
+        t(
+          "You've used today's searches. Ask the family admins to add you, or try again tomorrow.",
+          "استخدمت عمليات البحث لهذا اليوم. اطلب من مشرفي العائلة إضافتك أو حاول غدًا.",
+        ),
+      );
+    }
+    throw e;
+  }
 }
 
 /** "This is me" (personId set) or "I'm not in the tree yet" (personId null). */
@@ -186,18 +226,19 @@ export async function submitLinkRequest(input: SubmitLinkRequestInput): Promise<
     return fail(t("You're already linked to the family tree.", "حسابك مرتبط بالفعل بشجرة العائلة."));
   }
 
-  const { personId, parentsNote } = parsed.data;
+  const { personId } = parsed.data;
+  // The extra "not in the tree" details all travel in one note for the admin.
+  const note = personId
+    ? null
+    : buildRequestNote({
+        fatherName: parsed.data.fatherName,
+        motherName: parsed.data.motherName,
+        invitedBy: parsed.data.invitedBy,
+      }) ?? parsed.data.parentsNote;
 
   if (personId) {
-    const { data: person } = await supabase
-      .from("people")
-      .select("id")
-      .eq("id", personId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!person) {
-      return fail(t("That person is no longer in the tree.", "هذا الشخص لم يعد في الشجرة."));
-    }
+    // An account waiting for access cannot read `people`, so existence is checked
+    // by the foreign key on insert (23503) instead of a lookup.
     const { data: claimedData } = await supabase.rpc("claimed_person_ids");
     if (((claimedData as string[] | null) ?? []).includes(personId)) {
       return fail(
@@ -212,10 +253,13 @@ export async function submitLinkRequest(input: SubmitLinkRequestInput): Promise<
   const { error } = await supabase.from("link_requests").insert({
     profile_id: userId,
     person_id: personId,
-    parents_note: personId ? null : parentsNote,
+    parents_note: note,
     status: "pending",
   });
   if (error) {
+    if (error.code === "23503") {
+      return fail(t("That person is no longer in the tree.", "هذا الشخص لم يعد في الشجرة."));
+    }
     if (error.code === "23505") {
       return fail(
         t(
@@ -227,6 +271,7 @@ export async function submitLinkRequest(input: SubmitLinkRequestInput): Promise<
     return fail(t("Couldn't send your request. Please try again.", "تعذّر إرسال طلبك. حاول مرة أخرى."));
   }
 
+  after(() => notifyAdminsOfRequest({ profileId: userId, personId }));
   refresh();
   return { ok: true };
 }
@@ -368,7 +413,7 @@ export async function addToTreeAndLink(input: { requestId: string }): Promise<Me
   const arabic = hasArabic(fullName);
   const notes = [
     `Self-registered as "${fullName}".`,
-    request.parents_note ? `Parents, in their words: ${request.parents_note}` : null,
+    request.parents_note ? `In their words:\n${request.parents_note}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -441,6 +486,33 @@ export async function changeMemberRole(
   if (!parsed.success) return BAD_INPUT(t);
   const { profileId, role } = parsed.data;
 
+  // Normal admins can switch Viewer <-> Editor; anything to or from Admin is the
+  // owner's call (the database guard enforces the same rule).
+  const { data: target } = await ctx.supabase
+    .from("profiles")
+    .select("id, role, is_super_admin")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (!target) return fail(t("That member no longer exists.", "هذا العضو لم يعد موجودًا."));
+  const verdict = canActOn(
+    ctx.isSuperAdmin ? "super_admin" : "admin",
+    ctx.userId,
+    "change_role",
+    { id: target.id, role: target.role, isSuperAdmin: target.is_super_admin },
+    role,
+  );
+  if (!verdict.ok) {
+    if (verdict.reason === "super_admin") {
+      return fail(t("The owner's account can't be changed.", "لا يمكن تغيير حساب المالك."));
+    }
+    if (verdict.reason === "forbidden") {
+      return fail(
+        t("Only the owner can make or remove admins.", "المالك وحده يستطيع تعيين المشرفين أو إزالتهم."),
+      );
+    }
+    return fail(t("That's already their permission.", "هذه صلاحيتهم الحالية بالفعل."));
+  }
+
   // No read-then-write pre-check: the profiles_guard trigger decides, under an
   // advisory lock, so two admins demoting each other at once can't both win.
   const { data, error } = await ctx.supabase
@@ -456,11 +528,301 @@ export async function changeMemberRole(
       ),
     );
   }
+  if (isSuperAdminGuardError(error)) {
+    return fail(
+      t("Only the owner can make or remove admins.", "المالك وحده يستطيع تعيين المشرفين أو إزالتهم."),
+    );
+  }
   if (error || !data || data.length === 0) {
     return fail(t("Couldn't change the role. Please try again.", "تعذّر تغيير الصلاحية. حاول مرة أخرى."));
   }
   refresh();
   return { ok: true, message: t("Permissions updated.", "تم تحديث الصلاحيات.") };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Owner-only: add a member, delete an account. Each re-reads is_super_admin from
+// the database; the service-role work lives in lib/members/account-admin.ts.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const OWNER_ONLY = (t: Translate) =>
+  fail(t("Only the owner can do that.", "هذا الإجراء للمالك فقط."));
+
+export type InviteMemberResult =
+  | { ok: true; message: string; profileId: string }
+  | { ok: false; error: string; existingProfileId?: string | null };
+
+/** Add a member by email: sends Supabase's invite, then sets role, approval and link. */
+export async function inviteMember(input: InviteMemberInput): Promise<InviteMemberResult> {
+  const t = translator(await getLang());
+  const ctx = await getSuperAdminContext();
+  if (!ctx) return OWNER_ONLY(t);
+  const parsed = inviteMemberSchema.safeParse(input);
+  if (!parsed.success) {
+    const field = parsed.error.issues[0]?.path[0];
+    return fail(
+      field === "email"
+        ? t("Enter a valid email address.", "أدخل بريدًا إلكترونيًا صحيحًا.")
+        : field === "dateOfBirth"
+          ? t("Enter a valid date of birth, or leave it empty.", "أدخل تاريخ ميلاد صحيحًا أو اتركه فارغًا.")
+          : field === "fullName"
+            ? t("Enter their full name.", "أدخل اسمه الكامل.")
+            : t("Something looked wrong with that form.", "حدث خطأ في بيانات النموذج."),
+    );
+  }
+
+  const limit = await checkLimit("generic", `members-invite:${ctx.userId}`);
+  if (!limit.success) return fail(t("Slow down a moment and try again.", "تمهّل قليلًا ثم حاول مرة أخرى."));
+
+  const d = parsed.data;
+  if (d.personId) {
+    const { data: person } = await ctx.supabase
+      .from("people")
+      .select("id")
+      .eq("id", d.personId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!person) return fail(t("That person is no longer in the tree.", "هذا الشخص لم يعد في الشجرة."));
+    const { data: owner } = await ctx.supabase.from("profiles").select("id").eq("person_id", d.personId).maybeSingle();
+    if (owner) {
+      return fail(
+        t("That person is already linked to an account.", "هذا الشخص مرتبط بحساب بالفعل."),
+      );
+    }
+  }
+
+  const result = await inviteAccount({
+    adminId: ctx.userId,
+    email: d.email,
+    fullName: d.fullName,
+    dateOfBirth: d.dateOfBirth,
+    role: d.role,
+    approveNow: d.approveNow,
+    personId: d.personId,
+    redirectTo: inviteRedirectUrl(),
+  });
+  if (!result.ok) {
+    if (result.reason === "exists") {
+      return {
+        ok: false,
+        error: t("There's already an account with that email.", "يوجد حساب بهذا البريد بالفعل."),
+        existingProfileId: result.profileId,
+      };
+    }
+    return fail(
+      t(
+        "Couldn't send the invitation. Check the email address and try again.",
+        "تعذّر إرسال الدعوة. تحقق من البريد وحاول مرة أخرى.",
+      ),
+    );
+  }
+  refresh();
+  if (result.setupWarning) {
+    return {
+      ok: true,
+      profileId: result.profileId,
+      message: t(
+        "Invitation sent, but some settings didn't save. Check their row in All members.",
+        "أُرسلت الدعوة لكن بعض الإعدادات لم تُحفظ. راجع صفّه في كل الأعضاء.",
+      ),
+    };
+  }
+  return {
+    ok: true,
+    profileId: result.profileId,
+    message: t(`Invitation sent to ${d.email}.`, `أُرسلت الدعوة إلى ${d.email}.`),
+  };
+}
+
+/** Delete an account for good. The person in the tree stays, just unlinked. */
+export async function deleteMember(input: { profileId: string; confirmName: string }): Promise<MemberActionResult> {
+  const t = translator(await getLang());
+  const ctx = await getSuperAdminContext();
+  if (!ctx) return OWNER_ONLY(t);
+  const parsed = deleteMemberSchema.safeParse(input);
+  if (!parsed.success) return BAD_INPUT(t);
+
+  const { data: target } = await ctx.supabase
+    .from("profiles")
+    .select("id, role, is_super_admin, full_name, display_name, email, person_id")
+    .eq("id", parsed.data.profileId)
+    .maybeSingle();
+  if (!target) return fail(t("That member no longer exists.", "هذا العضو لم يعد موجودًا."));
+
+  const verdict = canActOn(
+    "super_admin",
+    ctx.userId,
+    "delete_account",
+    { id: target.id, role: target.role, isSuperAdmin: target.is_super_admin },
+  );
+  if (!verdict.ok) {
+    return fail(
+      verdict.reason === "self"
+        ? t("You can't delete your own account here.", "لا يمكنك حذف حسابك من هنا.")
+        : t("The owner's account can't be deleted.", "لا يمكن حذف حساب المالك."),
+    );
+  }
+  if (!confirmationMatches(parsed.data.confirmName, confirmationName(target))) {
+    return fail(t("The name you typed doesn't match.", "الاسم الذي كتبته غير مطابق."));
+  }
+
+  const result = await deleteAccount({
+    adminId: ctx.userId,
+    profileId: target.id,
+    // No email or date of birth in the audit trail.
+    snapshot: { full_name: target.full_name, role: target.role, person_id: target.person_id },
+  });
+  if (!result.ok) {
+    return fail(t("Couldn't delete that account. Please try again.", "تعذّر حذف الحساب. حاول مرة أخرى."));
+  }
+  refresh();
+  return { ok: true, message: t("Account deleted.", "تم حذف الحساب.") };
+}
+
+// ── Access: let in without linking / remove access ─────────────────────────
+
+/** "Let in without linking": approve the account without tying it to a person. */
+export async function letInMember(input: { profileId: string }): Promise<MemberActionResult> {
+  const t = translator(await getLang());
+  const ctx = await getAdminContext();
+  if (!ctx) return FORBIDDEN(t);
+  const parsed = unlinkProfileSchema.safeParse(input);
+  if (!parsed.success) return BAD_INPUT(t);
+
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .update({ approved_at: new Date().toISOString() })
+    .eq("id", parsed.data.profileId)
+    .is("approved_at", null)
+    .select("id");
+  if (error) return fail(t("Couldn't let them in. Please try again.", "تعذّر السماح لهم بالدخول. حاول مرة أخرى."));
+  if (!data || data.length === 0) {
+    return fail(t("That member was already let in.", "تم السماح لهذا العضو بالدخول بالفعل."));
+  }
+  const lang = await getLang();
+  after(() => notifyMemberApproved(parsed.data.profileId, lang));
+  refresh();
+  return { ok: true, message: t("They're in.", "تم السماح لهم بالدخول.") };
+}
+
+/** "Remove access": back to waiting. Refused for admins; also unlinks the person. */
+export async function removeMemberAccess(input: { profileId: string }): Promise<MemberActionResult> {
+  const t = translator(await getLang());
+  const ctx = await getAdminContext();
+  if (!ctx) return FORBIDDEN(t);
+  const parsed = unlinkProfileSchema.safeParse(input);
+  if (!parsed.success) return BAD_INPUT(t);
+
+  const { data: target } = await ctx.supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", parsed.data.profileId)
+    .maybeSingle();
+  if (!target) return fail(t("That member no longer exists.", "هذا العضو لم يعد موجودًا."));
+  if (!canRemoveAccess((target as { role: MemberRole }).role)) {
+    return fail(
+      t(
+        "Admins always have access. Change their role first.",
+        "للمشرفين صلاحية دائمة. غيّر دورهم أولًا.",
+      ),
+    );
+  }
+
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .update({ approved_at: null, person_id: null })
+    .eq("id", parsed.data.profileId)
+    .select("id");
+  if (error || !data || data.length === 0) {
+    return fail(t("Couldn't remove access. Please try again.", "تعذّرت إزالة الوصول. حاول مرة أخرى."));
+  }
+  refresh();
+  return { ok: true, message: t("Access removed.", "تمت إزالة الوصول.") };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Suggested relatives
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** "Suggest a relative": any signed-in account, including one still waiting for access. */
+export async function suggestRelative(input: SuggestRelativeInput): Promise<MemberActionResult> {
+  const t = translator(await getLang());
+  const parsed = suggestRelativeSchema.safeParse(input);
+  if (!parsed.success) {
+    return fail(
+      t(
+        "Please add their name and how they're related to you.",
+        "يرجى إدخال اسمه وصلة قرابته بك.",
+      ),
+    );
+  }
+  const ctx = await getSignedInUserId();
+  if (!ctx) return fail(t("Please sign in again.", "يرجى تسجيل الدخول مرة أخرى."));
+
+  const limit = await checkLimit("generic", `members-suggest:${ctx.userId}`);
+  if (!limit.success) {
+    return fail(t("Slow down a moment and try again.", "تمهّل قليلًا ثم حاول مرة أخرى."));
+  }
+
+  const { name, relation, note } = parsed.data;
+  const { error } = await ctx.supabase
+    .from("relative_suggestions")
+    .insert({ suggested_by: ctx.userId, name, relation, note, status: "pending" });
+  if (error) {
+    if (error.hint === "suggestion_limit") {
+      return fail(
+        t(
+          "That's plenty for today. Please try again tomorrow.",
+          "هذا يكفي لليوم. حاول مرة أخرى غدًا.",
+        ),
+      );
+    }
+    return fail(t("Couldn't send that. Please try again.", "تعذّر الإرسال. حاول مرة أخرى."));
+  }
+
+  after(() => notifyAdminsOfSuggestion({ profileId: ctx.userId, relativeName: name, relation }));
+  refresh();
+  return { ok: true, message: t("Thanks! An admin will take a look.", "شكرًا لك! سيطّلع عليه المشرف.") };
+}
+
+/** Admin: "Already in tree" or "Dismiss". ("Add to tree" is handled by addFamilyMember.) */
+export async function resolveSuggestion(
+  input: { suggestionId: string; outcome: "already_in_tree" | "dismissed" },
+): Promise<MemberActionResult> {
+  const t = translator(await getLang());
+  const ctx = await getAdminContext();
+  if (!ctx) return FORBIDDEN(t);
+  const parsed = resolveSuggestionSchema.safeParse(input);
+  if (!parsed.success || (input.outcome !== "already_in_tree" && input.outcome !== "dismissed")) {
+    return BAD_INPUT(t);
+  }
+  const { data, error } = await ctx.supabase
+    .from("relative_suggestions")
+    .update({ status: input.outcome })
+    .eq("id", parsed.data.suggestionId)
+    .eq("status", "pending")
+    .select("id");
+  if (error) return fail(t("Couldn't save that. Please try again.", "تعذّر الحفظ. حاول مرة أخرى."));
+  if (!data || data.length === 0) {
+    return fail(t("Someone already handled this suggestion.", "تمت معالجة هذا الاقتراح بالفعل."));
+  }
+  refresh();
+  return {
+    ok: true,
+    message:
+      input.outcome === "dismissed" ? t("Dismissed.", "تم الاستبعاد.") : t("Marked as already in the tree.", "تم تسجيله كموجود في الشجرة."),
+  };
+}
+
+/** Close the "finish your profile" card for good. */
+export async function dismissProfileChecklist(): Promise<MemberActionResult> {
+  const t = translator(await getLang());
+  const ctx = await getSignedInUserId();
+  if (!ctx) return fail(t("Please sign in again.", "يرجى تسجيل الدخول مرة أخرى."));
+  const { error } = await ctx.supabase.rpc("dismiss_checklist");
+  if (error) return fail(t("Couldn't hide that. Please try again.", "تعذّر الإخفاء. حاول مرة أخرى."));
+  revalidatePath("/");
+  return { ok: true };
 }
 
 // ── Add a family member (no account) ─────────────────────────────────────────
@@ -559,6 +921,15 @@ export async function addFamilyMember(
       error: created?.error ?? t("Couldn't add this person.", "تعذّرت إضافة هذا الشخص."),
       values,
     };
+  }
+  // Added from a suggested relative: mark that suggestion as handled.
+  const suggestionId = text("suggestion_id");
+  if (suggestionId && /^[0-9a-f-]{36}$/i.test(suggestionId)) {
+    await ctx.supabase
+      .from("relative_suggestions")
+      .update({ status: "added", person_id: created.personId })
+      .eq("id", suggestionId)
+      .eq("status", "pending");
   }
   refresh();
   return {

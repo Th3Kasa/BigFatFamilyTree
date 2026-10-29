@@ -111,6 +111,47 @@ describe("marriage order", () => {
 });
 
 // ---------------------------------------------------------------------------
+// One bracket per couple (the Ezzat & Hanan report)
+// ---------------------------------------------------------------------------
+describe("children of a married couple", () => {
+  const ezzat = person("ezzat", { gender: "m", pos_x: null, pos_y: null });
+  const hanan = person("hanan", { gender: "f", pos_x: null, pos_y: null });
+  const married = spouse("r1", "ezzat", "hanan");
+
+  test("father = A and mother = B (spouses): exactly one bracket, from the couple's line, and nothing else to the child", () => {
+    const basem = person("basem", { father_id: "ezzat", mother_id: "hanan", pos_x: null, pos_y: null });
+    const { edges } = buildGraphElements([ezzat, hanan, basem], [married], "en");
+    const toBasem = edges.filter((e) => e.target === "basem" || e.data?.childIds?.includes("basem"));
+    expect(toBasem).toHaveLength(1);
+    expect(toBasem[0].data?.edgeKind).toBe("family-branch");
+    expect([...(toBasem[0].data?.partnerNodeIds ?? [])].sort()).toEqual(["ezzat", "hanan"]);
+  });
+
+  test("a couple with no shared children has no bracket at all (no dangling drop)", () => {
+    const basem = person("basem", { father_id: "ezzat", pos_x: null, pos_y: null });
+    const { edges } = buildGraphElements([ezzat, hanan, basem], [married], "en");
+    const branches = edges.filter((e) => e.data?.edgeKind === "family-branch");
+    expect(branches).toHaveLength(1);
+    // Basem's line comes from Ezzat alone until Hanan is linked as his mother.
+    expect(branches[0].data?.partnerNodeIds).toEqual(["ezzat", null]);
+  });
+
+  test("a child of an earlier marriage stays under that marriage's bracket", () => {
+    const first = person("first", { gender: "f", pos_x: null, pos_y: null });
+    const older = person("older", { father_id: "ezzat", mother_id: "first", pos_x: null, pos_y: null });
+    const younger = person("younger", { father_id: "ezzat", mother_id: "hanan", pos_x: null, pos_y: null });
+    const { edges } = buildGraphElements(
+      [ezzat, hanan, first, older, younger],
+      [spouse("r0", "ezzat", "first", "divorced", 1), spouse("r1", "ezzat", "hanan", "current", 2)],
+      "en",
+    );
+    const branchOf = (id: string) => edges.find((e) => e.data?.edgeKind === "family-branch" && e.data.childIds?.includes(id))!;
+    expect([...(branchOf("older").data?.partnerNodeIds ?? [])].sort()).toEqual(["ezzat", "first"]);
+    expect([...(branchOf("younger").data?.partnerNodeIds ?? [])].sort()).toEqual(["ezzat", "hanan"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Family-branch grouping
 // ---------------------------------------------------------------------------
 describe("family branch groups", () => {

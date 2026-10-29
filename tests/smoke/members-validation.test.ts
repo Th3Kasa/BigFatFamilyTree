@@ -46,15 +46,24 @@ describe("sign-up profile validation", () => {
 describe("link request input", () => {
   it("allows a claim on a person, with the parents note dropped", () => {
     const r = submitLinkRequestSchema.parse({ personId: UUID });
-    expect(r).toEqual({ personId: UUID, parentsNote: null });
+    expect(r).toEqual({ personId: UUID, parentsNote: null, fatherName: null, motherName: null, invitedBy: null });
   });
 
   it("allows 'not in the tree' with an optional, trimmed note", () => {
     expect(submitLinkRequestSchema.parse({ personId: null, parentsNote: "  Samir and Dina " })).toEqual({
       personId: null,
       parentsNote: "Samir and Dina",
+      fatherName: null,
+      motherName: null,
+      invitedBy: null,
     });
     expect(submitLinkRequestSchema.parse({ personId: null, parentsNote: "   " }).parentsNote).toBeNull();
+  });
+
+  it("keeps the optional father, mother and invited-by details, trimmed", () => {
+    const r = submitLinkRequestSchema.parse({ personId: null, fatherName: " Samir ", motherName: "", invitedBy: "Aunt Dina" });
+    expect(r).toMatchObject({ fatherName: "Samir", motherName: null, invitedBy: "Aunt Dina" });
+    expect(submitLinkRequestSchema.safeParse({ personId: null, fatherName: "x".repeat(121) }).success).toBe(false);
   });
 
   it("rejects a non-uuid person and an over-long note", () => {

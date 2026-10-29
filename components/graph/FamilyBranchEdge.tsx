@@ -1,153 +1,87 @@
 "use client";
 
-import { useInternalNode, useStore, type EdgeProps } from "@xyflow/react";
+import { useStore, type EdgeProps, type ReactFlowState } from "@xyflow/react";
 import { EDGE_STYLES } from "@/lib/graph/edge-styles";
+import { coupleLine, soloAnchor, type Rect } from "@/lib/graph/geometry";
 import { DIM_OPACITY, type EdgeHighlight } from "@/lib/graph/highlight";
-import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graph/node-size";
+import { NODE_WIDTH } from "@/lib/graph/node-size";
 
 type FamilyBranchData = {
   edgeKind: "family-branch";
-  fatherId: string | null;
-  motherId: string | null;
   childIds: string[];
+  /** The couple (or single parent) these children belong to; may include a reference card. */
+  partnerNodeIds: [string, string | null];
+  lane?: number;
   /** Relationship-finder highlight; present only while a path is active. */
   highlight?: EdgeHighlight;
 };
 
-function posEq(
-  a: Record<string, { x: number; y: number }>,
-  b: Record<string, { x: number; y: number }>,
-): boolean {
+type Positions = Record<string, Rect>;
+
+function rectsEqual(a: Positions, b: Positions): boolean {
   const ak = Object.keys(a);
   if (ak.length !== Object.keys(b).length) return false;
-  for (const id of ak) {
-    if (a[id].x !== b[id]?.x || a[id].y !== b[id]?.y) return false;
-  }
-  return true;
+  return ak.every((k) => a[k].x === b[k]?.x && a[k].y === b[k]?.y);
 }
 
-export function FamilyBranchEdge({ data, sourceX, sourceY, targetX, targetY }: EdgeProps) {
-  const { fatherId = null, motherId = null, childIds = [], highlight } = (data ?? {}) as Partial<FamilyBranchData>;
+/**
+ * Children's bracket for one family unit: a drop from the middle of the
+ * couple's own line (or a single parent's card), a bar across, and a drop to
+ * each child. Reads absolute positions live so it follows cards while dragging.
+ */
+export function FamilyBranchEdge({ data }: EdgeProps) {
+  const { childIds = [], partnerNodeIds, lane = 0, highlight } = (data ?? {}) as Partial<FamilyBranchData>;
+  const ids: string[] = [...childIds];
+  for (const id of partnerNodeIds ?? []) if (id) ids.push(id);
 
-  // Subscribe to the two recorded-parent positions individually.
-  // Each useInternalNode re-renders only when THAT specific node moves,
-  // rather than the entire node array (which is what useNodes() would do).
-  const fatherNode = useInternalNode(fatherId ?? "");
-  const motherNode = useInternalNode(motherId ?? "");
-
-  // For sibling children (beyond childIds[0] which uses lag-free EdgeProps),
-  // subscribe to only those specific positions via a narrow store selector.
-  const siblingChildIds = childIds.slice(1);
-  const siblingPositions = useStore(
-    (s) => {
-      const map: Record<string, { x: number; y: number }> = {};
-      for (const node of s.nodes) {
-        if (siblingChildIds.includes(node.id)) {
-          map[node.id] = node.position;
-        }
-      }
-      return map;
-    },
-    posEq,
-  );
-
-  // ── source parent (lag-free via EdgeProps) ───────────────────
-  const srcCentreX = sourceX;
-  const srcMidY    = sourceY - NODE_HEIGHT / 2;
-  const MID_Y      = NODE_HEIGHT / 2;
-
-  // ── marriage-line start point ─────────────────────────────────
-  let startX: number;
-  let startY: number;
-
-  if (fatherNode && motherNode) {
-    startX = (srcCentreX + motherNode.position.x + NODE_WIDTH / 2) / 2;
-    startY = Math.max(srcMidY, motherNode.position.y + MID_Y);
-  } else if (fatherNode || motherNode) {
-    // Only one parent is RECORDED. Hang the line from that parent's own
-    // handle — never from the midpoint with their current spouse, which
-    // would falsely imply the spouse is the other parent.
-    startX = srcCentreX;
-    startY = sourceY;
-  } else {
-    return null;
-  }
-
-  // ── child positions ───────────────────────────────────────────
-  const targetChildId = childIds[0];
-  const childCenterXs: number[] = [];
-  const childTopYs: number[] = [];
-  const placedChildIds: string[] = [];
-
-  for (const id of childIds) {
-    if (id === targetChildId) {
-      childCenterXs.push(targetX);
-      childTopYs.push(targetY);
-      placedChildIds.push(id);
-    } else {
-      const pos = siblingPositions[id];
-      if (pos) {
-        childCenterXs.push(pos.x + NODE_WIDTH / 2);
-        childTopYs.push(pos.y);
-        placedChildIds.push(id);
-      }
+  const rects = useStore((s: ReactFlowState) => {
+    const out: Positions = {};
+    for (const id of ids) {
+      const n = s.nodeLookup.get(id);
+      if (n) out[id] = { x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y };
     }
-  }
+    return out;
+  }, rectsEqual);
 
-  if (childCenterXs.length === 0) return null;
+  const [aId, bId] = partnerNodeIds ?? [null, null];
+  const a = aId ? rects[aId] : undefined;
+  const b = bId ? rects[bId] : undefined;
+  if (!a) return null;
+  const start = b ? coupleLine(a, b, lane).anchor : soloAnchor(a);
 
-  const minChildTopY = Math.min(...childTopYs);
-  const gap          = minChildTopY - startY;
-  // Clamp junctionY so it never overshoots the topmost child. Without this,
-  // dragging a child close to its parent makes junctionY exceed minChildTopY,
-  // causing the drop line to render upward through the parent node.
-  const junctionY = gap > 0
-    ? Math.min(startY + Math.max(gap * 0.5, 20), minChildTopY - 2)
-    : (startY + minChildTopY) / 2;
-  const minChildX    = Math.min(...childCenterXs);
-  const maxChildX    = Math.max(...childCenterXs);
+  const kids = childIds.map((id) => ({ id, r: rects[id] })).filter((k): k is { id: string; r: Rect } => !!k.r);
+  if (kids.length === 0) return null;
+  const xs = kids.map((k) => k.r.x + NODE_WIDTH / 2);
+  const tops = kids.map((k) => k.r.y);
+  const minTop = Math.min(...tops);
+  const gap = minTop - start.y;
+  // Never let the bar overshoot the topmost child, or the drop renders upward through a card.
+  const junctionY = gap > 0 ? Math.min(start.y + Math.max(gap * 0.5, 20), minTop - 2) : (start.y + minTop) / 2;
 
-  // ── build SVG path ────────────────────────────────────────────
-  const parts: string[] = [
-    `M ${startX} ${startY} L ${startX} ${junctionY}`,
-  ];
-
-  if (childCenterXs.length > 1) {
-    const barLeft  = Math.min(startX, minChildX);
-    const barRight = Math.max(startX, maxChildX);
-    parts.push(`M ${barLeft} ${junctionY} L ${barRight} ${junctionY}`);
-  }
-
-  for (let i = 0; i < childCenterXs.length; i++) {
-    parts.push(`M ${childCenterXs[i]} ${junctionY} L ${childCenterXs[i]} ${childTopYs[i]}`);
-  }
+  const parts = [`M ${start.x} ${start.y} L ${start.x} ${junctionY}`];
+  const barLeft = Math.min(start.x, ...xs);
+  const barRight = Math.max(start.x, ...xs);
+  if (barRight > barLeft) parts.push(`M ${barLeft} ${junctionY} L ${barRight} ${junctionY}`);
+  kids.forEach((_, i) => parts.push(`M ${xs[i]} ${junctionY} L ${xs[i]} ${tops[i]}`));
 
   const base = (
     <path
       d={parts.join(" ")}
-      style={{
-        stroke: EDGE_STYLES.parentChild.stroke,
-        strokeWidth: 2,
-        fill: "none",
-        opacity: highlight ? DIM_OPACITY : 1,
-      }}
+      style={{ stroke: EDGE_STYLES.parentChild.stroke, strokeWidth: 2, fill: "none", opacity: highlight ? DIM_OPACITY : 1 }}
       strokeLinejoin="round"
     />
   );
 
-  // Relationship finder: redraw ONLY the route — parent drop, then the bar out
-  // to each lit child, then that child's drop — never the whole bracket.
+  // Relationship finder: redraw ONLY the route — parent drop, the bar out to
+  // each lit child, then that child's drop — never the whole bracket.
   const lit = new Set(highlight?.childIds ?? []);
   if (!highlight?.on || lit.size === 0) return base;
-
-  const route: string[] = [`M ${startX} ${startY} L ${startX} ${junctionY}`];
-  placedChildIds.forEach((id, i) => {
-    if (!lit.has(id)) return;
-    route.push(`M ${startX} ${junctionY} L ${childCenterXs[i]} ${junctionY}`);
-    route.push(`M ${childCenterXs[i]} ${junctionY} L ${childCenterXs[i]} ${childTopYs[i]}`);
+  const route: string[] = [`M ${start.x} ${start.y} L ${start.x} ${junctionY}`];
+  kids.forEach((k, i) => {
+    if (!lit.has(k.id)) return;
+    route.push(`M ${start.x} ${junctionY} L ${xs[i]} ${junctionY}`, `M ${xs[i]} ${junctionY} L ${xs[i]} ${tops[i]}`);
   });
   const routeD = route.join(" ");
-
   return (
     <g>
       {base}
