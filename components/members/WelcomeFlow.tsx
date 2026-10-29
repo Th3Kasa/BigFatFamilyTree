@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Clock, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   cancelMyLinkRequest,
@@ -10,8 +11,10 @@ import {
   submitLinkRequest,
 } from "@/lib/actions/members";
 import { formatPersonSubline } from "@/lib/members/match";
-import type { ClaimCandidate, CurrentPerson, PersonSummary } from "@/lib/members/types";
+import type { JourneyScreen } from "@/lib/members/journey";
+import type { ClaimCandidate, CurrentPerson, MySuggestion, PersonSummary } from "@/lib/members/types";
 import { cn, getDisplayName } from "@/lib/utils";
+import { InviteCard, SuggestRelativeCard } from "./JourneyCards";
 import { cardClass, displayFont, fieldClass, Initials, pill, Spinner } from "./primitives";
 
 /**
@@ -34,34 +37,81 @@ type Props = {
   pending: PendingClaim | null;
   /** Already confirmed as someone in the tree. */
   linked: CurrentPerson | null;
+  /** From journeyScreen(): decides the first screen. */
+  screen: JourneyScreen;
+  /** An admin has let this account in. Unapproved accounts get no "explore" shortcuts. */
+  approved: boolean;
+  suggestions: MySuggestion[];
+  /** First admin's display name, shown after a declined request. */
+  adminName: string | null;
 };
 
-type Step = "find" | "sent" | "linked";
+type Step = "find" | "sent" | "linked" | "declined";
 
-function Progress({ step, label }: { step: 1 | 2; label: string }) {
+/** Find yourself → Admin confirms → Explore. */
+function Progress({ current, lang }: { current: 1 | 2 | 3; lang: Lang }) {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const steps = [t("Find yourself", "اعثر على نفسك"), t("Admin confirms", "المشرف يؤكد"), t("Explore", "استكشف")];
   return (
-    <div className="flex gap-1.5" role="img" aria-label={label}>
-      <span className="h-1 flex-1 rounded-sm bg-[var(--primary)]" />
-      <span className={cn("h-1 flex-1 rounded-sm", step === 2 ? "bg-[var(--primary)]" : "bg-[#E2D6D2]")} />
-    </div>
+    <ol
+      className="m-0 flex list-none gap-1.5 p-0"
+      aria-label={t(`Step ${current} of 3`, `الخطوة ${current} من 3`)}
+    >
+      {steps.map((label, i) => {
+        const n = i + 1;
+        return (
+          <li key={label} className="flex flex-1 flex-col gap-1" aria-current={n === current ? "step" : undefined}>
+            <span className={cn("h-1 rounded-sm", n <= current ? "bg-[var(--primary)]" : "bg-[#E2D6D2]")} />
+            <span
+              className={cn(
+                "text-xs",
+                n === current ? "font-bold text-[#241517]" : "font-medium text-[var(--muted-foreground)]",
+              )}
+            >
+              {label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
-export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }: Props) {
+function initialStep(p: Pick<Props, "linked" | "pending" | "screen">): Step {
+  if (p.linked) return "linked";
+  if (p.pending) return "sent";
+  if (p.screen === "declined") return "declined";
+  return "find";
+}
+
+export function WelcomeFlow({
+  lang,
+  fullName,
+  initialResults,
+  pending,
+  linked,
+  screen,
+  approved,
+  suggestions,
+  adminName,
+}: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const router = useRouter();
   const firstName = fullName.trim().split(/\s+/)[0] ?? "";
 
-  const [step, setStep] = useState<Step>(linked ? "linked" : pending ? "sent" : "find");
+  const [step, setStep] = useState<Step>(initialStep({ linked, pending, screen }));
   const [sentFor, setSentFor] = useState<PersonSummary | null>(pending?.person ?? null);
 
   const [query, setQuery] = useState(fullName);
   const [results, setResults] = useState<ClaimCandidate[]>(initialResults);
-  const [searched, setSearched] = useState(true); // initial results came from the server
+  const [searched, setSearched] = useState(initialResults.length > 0 || fullName.length > 0); // initial results came from the server
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const [notInTree, setNotInTree] = useState(false);
-  const [parentsNote, setParentsNote] = useState("");
+  const [fatherName, setFatherName] = useState("");
+  const [motherName, setMotherName] = useState("");
+  const [invitedBy, setInvitedBy] = useState("");
   const [busyId, setBusyId] = useState<string | "none" | null>(null);
   const [cancelling, startCancel] = useTransition();
 
@@ -102,12 +152,21 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, step, retryTick]);
 
+  // While waiting, quietly check whether an admin has answered.
+  useEffect(() => {
+    if (step !== "sent") return;
+    const id = setInterval(() => router.refresh(), 45_000);
+    return () => clearInterval(id);
+  }, [step, router]);
+
   async function send(personId: string | null, person: PersonSummary | null) {
     setBusyId(personId ?? "none");
     try {
       const res = await submitLinkRequest({
         personId,
-        parentsNote: personId ? null : parentsNote,
+        fatherName: personId ? null : fatherName,
+        motherName: personId ? null : motherName,
+        invitedBy: personId ? null : invitedBy,
       });
       if (res.ok) {
         setSentFor(person);
@@ -140,11 +199,12 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
     });
   }
 
-  // ── already linked ─────────────────────────────────────────────────────────
+  // ── already linked (approved) ──────────────────────────────────────────────
   if (step === "linked" && linked) {
     const name = getDisplayName(linked, lang);
     return (
       <main className="mx-auto flex w-full max-w-lg flex-col gap-5 px-5 pb-10 pt-8">
+        <Progress current={3} lang={lang} />
         <SuccessBadge />
         <h1 className="text-center text-[26px] font-bold leading-tight" style={displayFont(lang)}>
           {t(`You're in the tree as ${name}`, `أنت في الشجرة باسم ${name}`)}
@@ -158,17 +218,28 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
         <Link href={ONBOARDING_TOUR_HREF} className={cn(pill.primary, "min-h-[52px] text-base")}>
           {t("Explore the family tree", "استكشف شجرة العائلة")}
         </Link>
+        <InviteCard lang={lang} />
+        <SuggestRelativeCard lang={lang} initial={suggestions} />
       </main>
     );
   }
 
-  // ── request sent ───────────────────────────────────────────────────────────
+  // ── request sent: waiting for an admin ─────────────────────────────────────
   if (step === "sent") {
     const name = sentFor ? getDisplayName(sentFor, lang) : null;
+    const timeline: Array<{ state: "done" | "now" | "next"; label: string; detail?: string }> = [
+      { state: "done", label: t("Request sent", "تم إرسال الطلب") },
+      {
+        state: "now",
+        label: t("An admin confirms", "المشرف يؤكد"),
+        detail: t("Usually within a day. We'll email you when you're in.", "عادةً خلال يوم. سنراسلك بالبريد عندما تدخل."),
+      },
+      { state: "next", label: t("Explore the family tree", "استكشف شجرة العائلة") },
+    ];
     return (
       <main className="mx-auto flex w-full max-w-lg flex-col gap-4 px-5 pb-10 pt-7">
-        <Progress step={2} label={t("Step 2 of 2", "الخطوة 2 من 2")} />
-        <div className="mt-8">
+        <Progress current={2} lang={lang} />
+        <div className="mt-6">
           <SuccessBadge />
         </div>
         <h1
@@ -180,18 +251,86 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
             ? t(`Thanks! An admin will confirm you're ${name}`, `شكرًا لك! سيؤكد المشرف أنك ${name}`)
             : t("Thanks! An admin will add you to the tree", "شكرًا لك! سيضيفك المشرف إلى الشجرة")}
         </h1>
-        <p className="text-center text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-          {t(
-            "It usually takes about a day. Until then you can explore the tree and read family stories.",
-            "عادةً يستغرق الأمر يومًا تقريبًا. حتى ذلك الحين يمكنك استكشاف الشجرة وقراءة قصص العائلة.",
-          )}
-        </p>
-        <Link href={ONBOARDING_TOUR_HREF} className={cn(pill.primary, "mt-4 min-h-[52px] text-base")}>
-          {t("Explore the family tree", "استكشف شجرة العائلة")}
-        </Link>
+
+        <ol className={cn(cardClass, "m-0 flex list-none flex-col gap-3 p-4")}>
+          {timeline.map((s) => (
+            <li key={s.label} className="flex items-start gap-3">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full",
+                  s.state === "done" && "bg-[#E3EEDF] text-[#2F5A27]",
+                  s.state === "now" && "bg-[#FFF4EC] text-[#9A3412]",
+                  s.state === "next" && "border-2 border-[#C9B8B3] text-transparent",
+                )}
+              >
+                {s.state === "done" ? <Check className="size-4" strokeWidth={3} /> : null}
+                {s.state === "now" ? <Clock className="size-4" /> : null}
+              </span>
+              <span className="min-w-0">
+                <span className={cn("block text-[15px] font-bold", s.state === "next" && "text-[var(--muted-foreground)]")}>
+                  {s.label}
+                  <span className="sr-only">
+                    {s.state === "done" ? t(" (done)", " (تم)") : s.state === "now" ? t(" (in progress)", " (جارٍ)") : t(" (next)", " (التالي)")}
+                  </span>
+                </span>
+                {s.detail ? <span className="block text-[13px] text-[var(--muted-foreground)]">{s.detail}</span> : null}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        {approved ? (
+          <Link href={ONBOARDING_TOUR_HREF} className={cn(pill.primary, "min-h-[52px] text-base")}>
+            {t("Explore the family tree", "استكشف شجرة العائلة")}
+          </Link>
+        ) : null}
+
+        <InviteCard lang={lang} />
+        <SuggestRelativeCard lang={lang} initial={suggestions} />
+
         <button type="button" onClick={wrongPerson} disabled={cancelling} className={cn(pill.link, "self-center")}>
           {cancelling ? <Spinner /> : null}
           {t("I picked the wrong person", "اخترت الشخص الخطأ")}
+        </button>
+      </main>
+    );
+  }
+
+  // ── declined: kind message, who to ask, try again ──────────────────────────
+  if (step === "declined") {
+    return (
+      <main className="mx-auto flex w-full max-w-lg flex-col gap-4 px-5 pb-10 pt-7">
+        <Progress current={1} lang={lang} />
+        <h1 className="mt-6 text-[26px] font-bold leading-tight" style={displayFont(lang)}>
+          {t("We couldn't match that request", "لم نتمكن من مطابقة هذا الطلب")}
+        </h1>
+        <p className="text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+          {t(
+            "That's okay. It usually means the name didn't quite line up with the tree. You can try again with another spelling, or pick a different person.",
+            "لا بأس. غالبًا لم يتطابق الاسم تمامًا مع الشجرة. يمكنك المحاولة بكتابة أخرى، أو اختيار شخص مختلف.",
+          )}
+        </p>
+        <p className={cn(cardClass, "p-4 text-[15px] leading-relaxed")}>
+          {adminName
+            ? t(
+                `Not sure why? Ask ${adminName}, the family admin. They can sort it out in a minute.`,
+                `لست متأكدًا من السبب؟ اسأل ${adminName}، مشرف العائلة. يمكنه حلّها خلال دقيقة.`,
+              )
+            : t(
+                "Not sure why? Ask the family admin. They can sort it out in a minute.",
+                "لست متأكدًا من السبب؟ اسأل مشرف العائلة. يمكنه حلّها خلال دقيقة.",
+              )}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setStep("find");
+            window.scrollTo({ top: 0 });
+          }}
+          className={cn(pill.primary, "min-h-[52px] text-base")}
+        >
+          {t("Try again", "حاول مرة أخرى")}
         </button>
       </main>
     );
@@ -211,7 +350,7 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
 
   return (
     <main className="mx-auto flex w-full max-w-lg flex-col gap-4 px-5 pb-10 pt-7">
-      <Progress step={1} label={t("Step 1 of 2", "الخطوة 1 من 2")} />
+      <Progress current={1} lang={lang} />
 
       <div>
         {firstName ? (
@@ -328,10 +467,13 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
         className="mt-2 flex flex-col gap-2.5 rounded-[18px] border border-dashed border-[#C9B8B3] bg-white p-4"
       >
         <h2 id={`${uid}-nit`} className="text-[15px] font-bold">
-          {t("Not in the tree yet?", "لست في الشجرة بعد؟")}
+          {t("I'm not in the tree yet", "لست في الشجرة بعد")}
         </h2>
         <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-          {t("Tell us who your parents are and an admin will add you.", "أخبرنا من هما والداك وسيضيفك المشرف.")}
+          {t(
+            "Tell us a little about your family and an admin will add you. Everything below is optional.",
+            "أخبرنا قليلًا عن عائلتك وسيضيفك المشرف. كل ما يلي اختياري.",
+          )}
         </p>
 
         {notInTree ? (
@@ -342,20 +484,15 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
               void send(null, null);
             }}
           >
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor={`${uid}-parents`} className="text-sm font-semibold">
-                {t("Your parents' names (optional)", "اسما والديك (اختياري)")}
-              </label>
-              <textarea
-                id={`${uid}-parents`}
-                value={parentsNote}
-                onChange={(e) => setParentsNote(e.target.value)}
-                maxLength={500}
-                rows={3}
-                placeholder={t("e.g. Samir Haddad and Dina", "مثال: سمير حداد ودينا")}
-                className={cn(fieldClass, "min-h-24 resize-none py-3")}
-              />
-            </div>
+            <NoteField id={`${uid}-father`} label={t("Your father's name", "اسم والدك")} value={fatherName} onChange={setFatherName} />
+            <NoteField id={`${uid}-mother`} label={t("Your mother's name", "اسم والدتك")} value={motherName} onChange={setMotherName} />
+            <NoteField
+              id={`${uid}-invited`}
+              label={t("Who invited you?", "من دعاك؟")}
+              value={invitedBy}
+              onChange={setInvitedBy}
+              placeholder={t("e.g. Aunt Dina", "مثال: عمتي دينا")}
+            />
             <div className="flex flex-wrap gap-2">
               <button type="submit" disabled={busyId !== null} className={pill.primary}>
                 {busyId === "none" ? <Spinner /> : null}
@@ -373,10 +510,43 @@ export function WelcomeFlow({ lang, fullName, initialResults, pending, linked }:
         )}
       </section>
 
-      <Link href={ONBOARDING_TOUR_HREF} className={cn(pill.link, "self-center")}>
-        {t("Skip for now, just look around", "تخطَّ الآن، أريد التجوّل فقط")}
-      </Link>
+      {approved ? (
+        <Link href={ONBOARDING_TOUR_HREF} className={cn(pill.link, "self-center")}>
+          {t("Skip for now, just look around", "تخطَّ الآن، أريد التجوّل فقط")}
+        </Link>
+      ) : null}
     </main>
+  );
+}
+
+function NoteField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-semibold">
+        {label}
+      </label>
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={120}
+        autoComplete="off"
+        placeholder={placeholder}
+        className={fieldClass}
+      />
+    </div>
   );
 }
 

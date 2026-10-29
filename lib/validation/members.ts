@@ -48,6 +48,10 @@ export const submitLinkRequestSchema = z.object({
     .max(500)
     .nullish()
     .transform((v) => (v ? v : null)),
+  // "I'm not in the tree yet": optional facts, merged into one note (lib/members/request-note.ts).
+  fatherName: z.string().trim().max(120).nullish().transform((v) => (v ? v : null)),
+  motherName: z.string().trim().max(120).nullish().transform((v) => (v ? v : null)),
+  invitedBy: z.string().trim().max(120).nullish().transform((v) => (v ? v : null)),
 });
 export type SubmitLinkRequestInput = z.input<typeof submitLinkRequestSchema>;
 
@@ -95,3 +99,27 @@ export const addFamilyMemberSchema = z
     path: ["given_en"],
   });
 export type AddFamilyMemberInput = z.infer<typeof addFamilyMemberSchema>;
+
+// ── super admin: add / remove a member ───────────────────────────────────────
+
+/** Add a member by email (service-role invite). DOB, person link and approval are optional. */
+export const inviteMemberSchema = z.object({
+  fullName: fullNameSchema,
+  email: z.string().trim().toLowerCase().max(254).email("Enter a valid email address."),
+  dateOfBirth: z
+    .string()
+    .trim()
+    .nullish()
+    .transform((v) => (v ? v : null))
+    .refine((v) => v === null || (isRealIsoDate(v) && v >= MIN_DOB && v <= todayIso()), "Enter a valid date of birth."),
+  personId: optionalUuid,
+  role: z.enum(["viewer", "editor", "admin"]),
+  approveNow: z.boolean().default(true),
+});
+export type InviteMemberInput = z.input<typeof inviteMemberSchema>;
+
+/** Delete an account: the typed name is re-checked on the server. */
+export const deleteMemberSchema = z.object({
+  profileId: uuid,
+  confirmName: z.string().trim().min(1).max(200),
+});

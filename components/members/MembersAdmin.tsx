@@ -10,10 +10,15 @@ import {
   approveLinkRequest,
   changeMemberRole,
   declineLinkRequest,
+  deleteMember,
+  letInMember,
   linkMemberToPerson,
   linkRequestToPerson,
+  removeMemberAccess,
+  resolveSuggestion,
   unlinkMember,
 } from "@/lib/actions/members";
+import { canActOn, callerOf, confirmationName } from "@/lib/members/permissions";
 import { formatPersonSubline } from "@/lib/members/match";
 import { ROLE_ORDER, roleLabel, wouldRemoveLastAdmin } from "@/lib/members/rules";
 import type {
@@ -23,14 +28,16 @@ import type {
   MembersAdminData,
   PendingRequest,
   PersonSummary,
+  SuggestionRow,
 } from "@/lib/members/types";
 import { cn, getDisplayName } from "@/lib/utils";
-import { AddFamilyMemberForm } from "./AddFamilyMemberForm";
+import { AddFamilyMemberForm, type SuggestionPrefill } from "./AddFamilyMemberForm";
+import { DeleteMemberDialog, InviteMemberForm, type DeleteTarget } from "./SuperAdminPanels";
 import { PickPersonDialog } from "./PickPersonDialog";
 import { cardClass, fieldClass, Initials, pill, Spinner } from "./primitives";
 
 type Lang = "ar" | "en";
-type TabKey = "waiting" | "all" | "add";
+type TabKey = "waiting" | "suggestions" | "all" | "add" | "invite";
 
 type Picker =
   | { kind: "request"; requestId: string; who: string }
@@ -40,6 +47,8 @@ type Props = {
   lang: Lang;
   data: MembersAdminData;
   currentUserId: string;
+  /** The owner: sees "Invite a member", "Delete account" and the Admin role. */
+  isSuperAdmin: boolean;
   initialTab: TabKey;
 };
 
@@ -73,7 +82,7 @@ function UnconfirmedBadge({ confirmed, lang }: { confirmed: boolean | null; lang
   );
 }
 
-export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
+export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialTab }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const router = useRouter();
   const uid = useId();
@@ -83,12 +92,28 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
   const [picker, setPicker] = useState<Picker | null>(null);
   const [filter, setFilter] = useState("");
   const [roleDraft, setRoleDraft] = useState<Record<string, MemberRole>>({});
-  const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({ waiting: null, all: null, add: null });
+  const [prefill, setPrefill] = useState<SuggestionPrefill | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({
+    waiting: null,
+    suggestions: null,
+    all: null,
+    add: null,
+    invite: null,
+  });
+
+  const caller = callerOf({ role: "admin", is_super_admin: isSuperAdmin });
+  const waitingCount = data.pending.length + data.waitingAccess.length;
 
   const tabs: Array<{ key: TabKey; label: string }> = [
-    { key: "waiting", label: t(`Waiting for you (${data.pending.length})`, `بانتظارك (${data.pending.length})`) },
+    { key: "waiting", label: t(`Waiting for you (${waitingCount})`, `بانتظارك (${waitingCount})`) },
+    {
+      key: "suggestions",
+      label: t(`Suggested relatives (${data.suggestions.length})`, `أقارب مقترحون (${data.suggestions.length})`),
+    },
     { key: "all", label: t(`All members (${data.members.length})`, `كل الأعضاء (${data.members.length})`) },
     { key: "add", label: t("Add a family member", "أضف فردًا من العائلة") },
+    ...(isSuperAdmin ? [{ key: "invite" as const, label: t("Invite a member", "ادعُ عضوًا") }] : []),
   ];
 
   function onTabKey(e: React.KeyboardEvent, index: number) {
@@ -180,7 +205,7 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
 
       {/* ── Waiting for you ─────────────────────────────────────────────── */}
       <div role="tabpanel" id={`${uid}-panel-waiting`} aria-labelledby={`${uid}-tab-waiting`} hidden={tab !== "waiting"}>
-        {data.pending.length === 0 ? (
+        {waitingCount === 0 ? (
           <div className={cn(cardClass, "flex flex-col items-center gap-3 px-6 py-12 text-center")}>
             <span className="flex size-16 items-center justify-center rounded-full bg-[#E3EEDF] text-[#2F5A27]">
               <Check aria-hidden="true" className="size-8" strokeWidth={2.4} />
@@ -194,6 +219,8 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
             </p>
           </div>
         ) : (
+          <div className="flex flex-col gap-6">
+          {data.pending.length > 0 ? (
           <ul className="flex list-none flex-col gap-3 p-0" aria-label={t("Requests waiting for review", "طلبات بانتظار المراجعة")}>
             {data.pending.map((r) => (
               <RequestCard
@@ -205,6 +232,75 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                 onPickOther={() => setPicker({ kind: "request", requestId: r.id, who: r.account.fullName })}
                 onDecline={() => run(`decline:${r.id}`, () => declineLinkRequest({ requestId: r.id }))}
                 onAddToTree={() => run(`add:${r.id}`, () => addToTreeAndLink({ requestId: r.id }))}
+              />
+            ))}
+          </ul>
+          ) : null}
+
+          {data.waitingAccess.length > 0 ? (
+            <section aria-labelledby={`${uid}-wa-h`} className="flex flex-col gap-3">
+              <div>
+                <h2 id={`${uid}-wa-h`} className="text-base font-bold">
+                  {t("Waiting for access", "بانتظار السماح بالدخول")}
+                </h2>
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  {t(
+                    "These accounts signed up but haven't asked to be linked to anyone. Let them in, link them to a person, or leave them waiting.",
+                    "سجّلت هذه الحسابات لكنها لم تطلب الارتباط بأحد. اسمح لهم بالدخول أو اربطهم بشخص أو اتركهم بالانتظار.",
+                  )}
+                </p>
+              </div>
+              <ul className="flex list-none flex-col gap-3 p-0">
+                {data.waitingAccess.map((a) => (
+                  <WaitingCard
+                    key={a.id}
+                    a={a}
+                    lang={lang}
+                    busy={busy}
+                    canDelete={isSuperAdmin && a.id !== currentUserId}
+                    onLetIn={() => run(`letin:${a.id}`, () => letInMember({ profileId: a.id }))}
+                    onLink={() => setPicker({ kind: "member", profileId: a.id, who: a.fullName, relink: false })}
+                    onDelete={() => setDeleteTarget(toDeleteTarget(a, null))}
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          </div>
+        )}
+      </div>
+
+      {/* ── Suggested relatives ─────────────────────────────────────────── */}
+      <div
+        role="tabpanel"
+        id={`${uid}-panel-suggestions`}
+        aria-labelledby={`${uid}-tab-suggestions`}
+        hidden={tab !== "suggestions"}
+      >
+        {data.suggestions.length === 0 ? (
+          <div className={cn(cardClass, "flex flex-col items-center gap-3 px-6 py-12 text-center")}>
+            <p className="text-lg font-bold">{t("No suggestions right now", "لا توجد اقتراحات حاليًا")}</p>
+            <p className="max-w-sm text-sm text-[var(--muted-foreground)]">
+              {t(
+                "When a member says a relative is missing from the tree, it shows up here.",
+                "عندما يذكر عضو أن قريبًا ينقص الشجرة، سيظهر هنا.",
+              )}
+            </p>
+          </div>
+        ) : (
+          <ul className="flex list-none flex-col gap-3 p-0" aria-label={t("Suggested relatives", "الأقارب المقترحون")}>
+            {data.suggestions.map((sg) => (
+              <SuggestionCard
+                key={sg.id}
+                sg={sg}
+                lang={lang}
+                busy={busy}
+                onAdd={() => {
+                  setPrefill({ suggestionId: sg.id, name: sg.name, relation: sg.relation, by: sg.suggestedBy.fullName });
+                  setTab("add");
+                }}
+                onAlready={() => run(`sg-in:${sg.id}`, () => resolveSuggestion({ suggestionId: sg.id, outcome: "already_in_tree" }))}
+                onDismiss={() => run(`sg-no:${sg.id}`, () => resolveSuggestion({ suggestionId: sg.id, outcome: "dismissed" }))}
               />
             ))}
           </ul>
@@ -260,6 +356,11 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                   {filteredMembers.map((m) => {
                     const role = roleDraft[m.id] ?? m.role;
                     const soleAdmin = wouldRemoveLastAdmin(adminProfiles, m.id, "viewer");
+                    const target = { id: m.id, role: m.role, isSuperAdmin: m.isSuperAdmin };
+                    // A normal admin can only switch Viewer <-> Editor; the Admin role is the owner's call.
+                    const roleLocked = m.isSuperAdmin || (m.role === "admin" && !isSuperAdmin);
+                    const canRemoveAccessHere = !m.isSuperAdmin && canActOn(caller, currentUserId, "remove_access", target).ok && m.approved;
+                    const canDeleteHere = canActOn(caller, currentUserId, "delete_account", target).ok;
                     const roleId = `${uid}-role-${m.id}`;
                     return (
                       <tr key={m.id} className="border-t border-[#ECE2DE] align-middle">
@@ -272,6 +373,16 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                                 {m.id === currentUserId ? (
                                   <span className="ms-2 rounded-full bg-[#F7E7EB] px-2 py-0.5 text-xs font-semibold text-[var(--primary)]">
                                     {t("You", "أنت")}
+                                  </span>
+                                ) : null}
+                                {m.isSuperAdmin ? (
+                                  <span className="ms-2 whitespace-nowrap rounded-full bg-[var(--primary)] px-2 py-0.5 text-xs font-semibold text-white">
+                                    {t("Super admin", "مشرف عام")}
+                                  </span>
+                                ) : null}
+                                {!m.approved ? (
+                                  <span className="ms-2 whitespace-nowrap rounded-full border border-[#F6D3BC] bg-[#FFF4EC] px-2 py-0.5 text-xs font-semibold text-[#9A3412]">
+                                    {t("Waiting for access", "بانتظار الدخول")}
                                   </span>
                                 ) : null}
                               </div>
@@ -298,6 +409,11 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                           <label htmlFor={roleId} className="sr-only">
                             {t(`Permissions for ${m.fullName}`, `صلاحيات ${m.fullName}`)}
                           </label>
+                          {roleLocked ? (
+                            <span id={roleId} className="inline-flex min-h-11 items-center text-sm font-medium">
+                              {roleLabel(m.role, lang)}
+                            </span>
+                          ) : (
                           <div className="flex items-center gap-2">
                             <select
                               id={roleId}
@@ -311,7 +427,7 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                               onChange={(e) => changeRole(m, e.target.value as MemberRole)}
                               className="min-h-11 rounded-xl border border-[#E2D6D2] bg-white px-3 text-sm disabled:opacity-60"
                             >
-                              {ROLE_ORDER.map((r) => (
+                              {ROLE_ORDER.filter((r) => isSuperAdmin || r !== "admin").map((r) => (
                                 <option key={r} value={r}>
                                   {roleLabel(r, lang)}
                                 </option>
@@ -319,7 +435,8 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                             </select>
                             {busy === `role:${m.id}` ? <Spinner className="text-[var(--muted-foreground)]" /> : null}
                           </div>
-                          {soleAdmin ? (
+                          )}
+                          {soleAdmin && !roleLocked ? (
                             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                               {t("Only admin, keep at least one", "المشرف الوحيد، يجب بقاء واحد")}
                             </p>
@@ -366,6 +483,48 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
                                 {t("Link to tree", "اربط بالشجرة")}
                               </button>
                             )}
+                            {!m.approved && !m.person ? (
+                              <button
+                                type="button"
+                                className={pill.outline}
+                                disabled={busy === `letin:${m.id}`}
+                                onClick={() => run(`letin:${m.id}`, () => letInMember({ profileId: m.id }))}
+                              >
+                                {busy === `letin:${m.id}` ? <Spinner /> : null}
+                                {t("Let in", "اسمح بالدخول")}
+                              </button>
+                            ) : null}
+                            {canRemoveAccessHere ? (
+                              <button
+                                type="button"
+                                className={pill.ghost}
+                                disabled={busy === `access:${m.id}`}
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      t(
+                                        `Remove ${m.fullName}'s access? They go back to waiting and lose their link to the tree.`,
+                                        `إزالة وصول ${m.fullName}؟ سيعودون إلى الانتظار ويفقدون ارتباطهم بالشجرة.`,
+                                      ),
+                                    )
+                                  ) {
+                                    void run(`access:${m.id}`, () => removeMemberAccess({ profileId: m.id }));
+                                  }
+                                }}
+                              >
+                                {busy === `access:${m.id}` ? <Spinner /> : null}
+                                {t("Remove access", "أزل الوصول")}
+                              </button>
+                            ) : null}
+                            {isSuperAdmin && canDeleteHere ? (
+                              <button
+                                type="button"
+                                className="inline-flex min-h-11 items-center justify-center rounded-full px-4 text-sm font-semibold text-[var(--destructive)] hover:bg-[#FDECEA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--destructive)]"
+                                onClick={() => setDeleteTarget(toDeleteTarget(m, m.person))}
+                              >
+                                {t("Delete account", "احذف الحساب")}
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -380,8 +539,33 @@ export function MembersAdmin({ lang, data, currentUserId, initialTab }: Props) {
 
       {/* ── Add a family member ─────────────────────────────────────────── */}
       <div role="tabpanel" id={`${uid}-panel-add`} aria-labelledby={`${uid}-tab-add`} hidden={tab !== "add"}>
-        <AddFamilyMemberForm lang={lang} people={data.people} />
+        <AddFamilyMemberForm lang={lang} people={data.people} prefill={prefill} onClearPrefill={() => setPrefill(null)} />
       </div>
+
+      {/* ── Invite a member (owner only) ────────────────────────────────── */}
+      {isSuperAdmin ? (
+        <div role="tabpanel" id={`${uid}-panel-invite`} aria-labelledby={`${uid}-tab-invite`} hidden={tab !== "invite"}>
+          <InviteMemberForm
+            lang={lang}
+            people={data.people}
+            onOpenRow={(_id, email) => {
+              setFilter(email);
+              setTab("all");
+            }}
+          />
+        </div>
+      ) : null}
+
+      {isSuperAdmin ? (
+        <DeleteMemberDialog
+          target={deleteTarget}
+          lang={lang}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={(target, typed) =>
+            run(`delete:${target.id}`, () => deleteMember({ profileId: target.id, confirmName: typed }))
+          }
+        />
+      ) : null}
 
       <PickPersonDialog
         open={picker !== null}
@@ -482,11 +666,13 @@ function RequestCard({
       ) : (
         <div className="min-w-0 flex-1 basis-[280px] rounded-[14px] border border-[#F6D3BC] bg-[#FFF4EC] px-3 py-2.5">
           <div className="text-sm font-bold text-[#9A3412]">{t("Not in the tree yet", "غير موجود في الشجرة بعد")}</div>
-          <div className="text-[13px] text-[#3D2B2E]">
-            {r.parentsNote
-              ? t(`Says their parents are ${r.parentsNote}`, `يقول إن والديه هما ${r.parentsNote}`)
-              : t("Didn't say who their parents are", "لم يذكر من هما والداه")}
-          </div>
+          {r.parentsNote ? (
+            <div className="whitespace-pre-line break-words text-[13px] text-[#3D2B2E]">{r.parentsNote}</div>
+          ) : (
+            <div className="text-[13px] text-[#3D2B2E]">
+              {t("Didn't say who their parents are", "لم يذكر من هما والداه")}
+            </div>
+          )}
         </div>
       )}
 
@@ -500,7 +686,7 @@ function RequestCard({
               onClick={onApprove}
             >
               {busy === `approve:${r.id}` ? <Spinner /> : null}
-              {t("Approve", "وافق")}
+              {t("Approve & let in", "وافق واسمح بالدخول")}
             </button>
             <button type="button" className={pill.outline} disabled={working} onClick={onPickOther}>
               {t("Pick someone else", "اختر شخصًا آخر")}
@@ -526,6 +712,133 @@ function RequestCard({
         >
           {busy === `decline:${r.id}` ? <Spinner /> : null}
           {t("Decline", "ارفض")}
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function toDeleteTarget(a: MemberAccount, person: PersonSummary | null): DeleteTarget {
+  return {
+    id: a.id,
+    confirmName: confirmationName({ full_name: a.fullName, email: a.email }),
+    treeName: person ? getDisplayName(person, "en") : null,
+  };
+}
+
+// ── One account waiting for a decision ────────────────────────────────────────
+
+function WaitingCard({
+  a,
+  lang,
+  busy,
+  canDelete,
+  onLetIn,
+  onLink,
+  onDelete,
+}: {
+  a: MemberAccount;
+  lang: Lang;
+  busy: string | null;
+  canDelete: boolean;
+  onLetIn: () => void;
+  onLink: () => void;
+  onDelete: () => void;
+}) {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const dob = formatDob(a.dateOfBirth, lang);
+  const working = busy !== null && busy.endsWith(a.id);
+  return (
+    <li className={cn(cardClass, "flex flex-wrap items-center gap-4 p-4")}>
+      <div className="flex min-w-0 flex-1 basis-[220px] items-center gap-3">
+        <Initials name={a.fullName} size={44} />
+        <div className="min-w-0">
+          <div className="truncate text-[15px] font-bold">{a.fullName}</div>
+          <div className="break-words text-[13px] text-[var(--muted-foreground)]">
+            {a.email ?? "—"}
+            <UnconfirmedBadge confirmed={a.emailConfirmed} lang={lang} /> ·{" "}
+            <span suppressHydrationWarning>
+              {t("joined", "انضم")} {relativeJoined(a.createdAt, lang)}
+            </span>
+          </div>
+          {dob ? (
+            <div className="text-[13px] text-[var(--muted-foreground)]">
+              {t("Born", "مواليد")} {dob}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={pill.primary} disabled={working} onClick={onLetIn}>
+          {busy === `letin:${a.id}` ? <Spinner /> : null}
+          {t("Let in", "اسمح بالدخول")}
+        </button>
+        <button type="button" className={pill.outline} disabled={working} onClick={onLink}>
+          {t("Link to tree", "اربط بالشجرة")}
+        </button>
+        {canDelete ? (
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center justify-center rounded-full px-4 text-sm font-semibold text-[var(--destructive)] hover:bg-[#FDECEA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--destructive)]"
+            disabled={working}
+            onClick={onDelete}
+          >
+            {t("Remove", "أزل")}
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+// ── One suggested relative ────────────────────────────────────────────────────
+
+function SuggestionCard({
+  sg,
+  lang,
+  busy,
+  onAdd,
+  onAlready,
+  onDismiss,
+}: {
+  sg: SuggestionRow;
+  lang: Lang;
+  busy: string | null;
+  onAdd: () => void;
+  onAlready: () => void;
+  onDismiss: () => void;
+}) {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const working = busy !== null && busy.endsWith(sg.id);
+  return (
+    <li className={cn(cardClass, "flex flex-wrap items-center gap-4 p-4")}>
+      <div className="min-w-0 flex-1 basis-[240px]">
+        <div className="text-[15px] font-bold">{sg.name}</div>
+        <div className="text-[13px] text-[#3D2B2E]">
+          {t(`${sg.relation} of ${sg.suggestedBy.fullName}`, `${sg.relation} (${sg.suggestedBy.fullName})`)}
+        </div>
+        {sg.note ? <div className="mt-0.5 whitespace-pre-line break-words text-[13px] text-[var(--muted-foreground)]">{sg.note}</div> : null}
+        <div className="mt-0.5 text-xs text-[var(--muted-foreground)]" suppressHydrationWarning>
+          {t("Suggested", "اقتُرح")} {relativeJoined(sg.createdAt, lang)}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={pill.primary} disabled={working} onClick={onAdd}>
+          {t("Add to tree", "أضف إلى الشجرة")}
+        </button>
+        <button type="button" className={pill.outline} disabled={working} onClick={onAlready}>
+          {busy === `sg-in:${sg.id}` ? <Spinner /> : null}
+          {t("Already in tree", "موجود في الشجرة")}
+        </button>
+        <button
+          type="button"
+          className={pill.ghost}
+          disabled={working}
+          aria-label={t(`Dismiss ${sg.name}`, `استبعد ${sg.name}`)}
+          onClick={onDismiss}
+        >
+          {busy === `sg-no:${sg.id}` ? <Spinner /> : null}
+          {t("Dismiss", "استبعد")}
         </button>
       </div>
     </li>
