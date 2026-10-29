@@ -5,6 +5,8 @@ import { SideNav } from "@/components/shell/SideNav";
 import { MobileTabBar } from "@/components/shell/MobileTabBar";
 import { AddMenu } from "@/components/shell/AddMenu";
 import { PeopleSheet } from "@/components/shell/PeopleSheet";
+import { RoleProvider } from "@/components/providers/role-provider";
+import { WelcomeTour } from "@/components/onboarding/WelcomeTour";
 import type { Lang } from "@/lib/lang/server";
 
 type Props = {
@@ -33,12 +35,15 @@ export function AppShell({ user, lang, role, membersBadge, children }: Props) {
           <SideNav lang={lang} isAdmin={isAdmin} membersBadge={membersBadge} />
         </Suspense>
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 pb-[var(--tabbar-h)] focus:outline-none md:pb-0">
-          {children}
+          <RoleProvider role={role}>{children}</RoleProvider>
         </main>
       </div>
       <MobileTabBar lang={lang} user={user} role={role} />
       <AddMenu lang={lang} role={role} />
       <PeopleSheet lang={lang} />
+      <Suspense fallback={null}>
+        <WelcomeTour lang={lang} />
+      </Suspense>
     </div>
   );
 }

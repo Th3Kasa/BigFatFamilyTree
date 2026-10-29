@@ -2,7 +2,8 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { LogOut, Shield, UserCheck } from "lucide-react";
+import { LogOut, Shield, Sparkles, UserCheck } from "lucide-react";
+import { shell } from "@/lib/client/shell-store";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import {
   DropdownMenu,
@@ -119,6 +120,11 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
             <DropdownMenuSeparator />
           </>
         )}
+        <DropdownMenuItem onSelect={() => shell.setTourOpen(true)}>
+          <Sparkles className="h-4 w-4" />
+          {t("Replay the tour", "إعادة جولة الترحيب")}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => signOutRef.current?.requestSubmit()}
           className="text-[var(--destructive)] focus:text-[var(--destructive)]"
