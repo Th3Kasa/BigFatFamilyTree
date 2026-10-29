@@ -37,7 +37,7 @@ export function IdentityFields({ lang, value, onChange, disabled, dobHint }: Pro
           value={value.firstName}
           onChange={(e) => onChange({ ...value, firstName: e.target.value })}
           disabled={disabled}
-          placeholder={t("e.g. Omar", "مثال: عمر")}
+          placeholder={t("e.g. Adel", "مثال: عادل")}
           className={fieldClass}
         />
       </div>
@@ -55,7 +55,7 @@ export function IdentityFields({ lang, value, onChange, disabled, dobHint }: Pro
           value={value.lastName}
           onChange={(e) => onChange({ ...value, lastName: e.target.value })}
           disabled={disabled}
-          placeholder={t("e.g. Haddad", "مثال: حداد")}
+          placeholder={t("e.g. Mansour", "مثال: منصور")}
           className={fieldClass}
         />
       </div>
