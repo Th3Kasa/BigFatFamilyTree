@@ -95,14 +95,14 @@ export function FamilyGraph({
         deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
-          style: { stroke: "oklch(0.38 0.06 18 / 0.45)", strokeWidth: 1.5 },
+          style: { stroke: "#9A8A8C", strokeWidth: 1.5 },
           animated: false,
         }}
       >
         <Background
           gap={24}
-          size={1}
-          color="#e5e7eb"
+          size={1.2}
+          color="#E7DCD8"
           variant={BackgroundVariant.Dots}
         />
       </ReactFlow>

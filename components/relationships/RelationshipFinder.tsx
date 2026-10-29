@@ -166,7 +166,7 @@ export function RelationshipFinder({ people, relationships, nodes, edges, lang, 
   const enoughPeople = pickable.length >= 2;
 
   return (
-    <div className="mx-auto grid w-full max-w-[1600px] gap-4 p-4 md:h-[calc(100svh-57px)] md:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] md:gap-6 md:p-6">
+    <div className="mx-auto grid w-full max-w-[1600px] gap-4 p-4 md:h-[calc(100svh-var(--topbar-h))] md:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] md:gap-6 md:p-6">
       {/* ── Finder panel ─────────────────────────────────────────────── */}
       <section aria-labelledby="finder-title" className="flex flex-col gap-4 md:-m-2 md:min-h-0 md:overflow-y-auto md:p-2">
         <header>
@@ -358,7 +358,7 @@ export function RelationshipFinder({ people, relationships, nodes, edges, lang, 
           <TabsContent value="tree" className="relative mt-0 min-h-0 flex-1">
             <div className="h-[60svh] min-h-[360px] md:absolute md:inset-0 md:h-auto md:min-h-0">
               {view ? (
-                <div className="canvas-stage relative h-full overflow-hidden" data-grain="on">
+                <div className="canvas-stage relative h-full overflow-hidden">
                   <CanvasView
                     initialNodes={nodes}
                     initialEdges={edges}

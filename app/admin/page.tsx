@@ -7,7 +7,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Mic, Sparkles, ClipboardList, Link2, Shield } from "lucide-react";
+import { Users, ClipboardList, Link2, Shield } from "lucide-react";
 import Link from "next/link";
 import type { Database } from "@/lib/db/types";
 
@@ -54,14 +54,10 @@ export default async function AdminDashboardPage() {
 
   const [
     { count: peopleCount },
-    { count: transcriptsCount },
-    { count: pendingCount },
     { data: recentAudit },
     { data: profiles },
   ] = await Promise.all([
     supabase.from("people").select("*", { count: "exact", head: true }).is("deleted_at", null),
-    supabase.from("transcripts").select("*", { count: "exact", head: true }),
-    supabase.from("extraction_proposals").select("*", { count: "exact", head: true }).eq("status", "pending"),
     supabase
       .from("audit_log")
       .select("id, created_at, operation, table_name, row_id, actor_id")
@@ -90,36 +86,8 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Transcripts count */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Transcripts</CardTitle>
-            <Mic className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="font-[Fraunces,serif] text-4xl font-semibold text-foreground">
-              {transcriptsCount ?? 0}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Audio recordings</p>
-          </CardContent>
-        </Card>
-
-        {/* Pending proposals */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Proposals</CardTitle>
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="font-[Fraunces,serif] text-4xl font-semibold text-amber-600">
-              {pendingCount ?? 0}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Awaiting review</p>
-          </CardContent>
-        </Card>
-
         {/* Recent audit events */}
-        <Card className="sm:col-span-2">
+        <Card className="sm:col-span-2 lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Recent Activity</CardTitle>
             <ClipboardList className="h-4 w-4 text-muted-foreground" />
@@ -164,11 +132,6 @@ export default async function AdminDashboardPage() {
               <li>
                 <Link href="/" className="text-sm text-amber-600 hover:underline">
                   → Family canvas
-                </Link>
-              </li>
-              <li>
-                <Link href="/transcripts" className="text-sm text-amber-600 hover:underline">
-                  → Transcripts
                 </Link>
               </li>
               <li>

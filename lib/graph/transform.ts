@@ -3,9 +3,7 @@ import * as dagre from "@dagrejs/dagre";
 import type { Lang } from "@/lib/lang/server";
 import { EDGE_STYLES } from "./edge-styles";
 import type { EdgeHighlight, NodeHighlight } from "./highlight";
-
-const NODE_WIDTH = 220;
-const NODE_HEIGHT = 240;
+import { NODE_HEIGHT, NODE_WIDTH } from "./node-size";
 
 export type PersonInput = {
   id: string;
@@ -21,6 +19,9 @@ export type PersonInput = {
   photo_url: string | null;
   pos_x: number | null;
   pos_y: number | null;
+  /** Optional: shown as years on the card when the query selects them. */
+  birth_date?: string | null;
+  death_date?: string | null;
 };
 
 export type RelationshipInput = {
@@ -41,6 +42,8 @@ export type PersonNodeData = {
   readOnly?: boolean;
   /** Relationship-finder highlight: set only while a path is active. */
   highlight?: NodeHighlight;
+  /** This card is the signed-in member's own person: shows a "You" badge. */
+  isMe?: boolean;
 };
 
 export type GraphNode = {

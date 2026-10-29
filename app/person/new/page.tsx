@@ -39,22 +39,24 @@ export default async function NewPersonPage({ searchParams }: Props) {
     return (lang === "ar" ? (row.given_ar ?? row.given_en) : (row.given_en ?? row.given_ar)) ?? null;
   }
 
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const spouseName = pickName(spouseRow) ?? "";
   const pageTitle = spouseId
-    ? `Add spouse of ${pickName(spouseRow) ?? ""}`
-    : "Add person";
+    ? t(`Add ${spouseName}'s spouse`, `إضافة زوج/زوجة ${spouseName}`)
+    : t("Add a person", "إضافة شخص");
 
   return (
-    <main className="min-h-screen bg-[var(--background)] flex flex-col items-center px-4 py-8 pb-24 md:pb-10">
+    <div className="flex flex-col items-center px-3 py-6 sm:px-5 sm:py-8">
       <div className="w-full max-w-lg">
         <Link
           href="/"
-          className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-8 transition-colors"
+          className="mb-4 inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
         >
-          <span aria-hidden>←</span>
-          Back
+          <span aria-hidden className="rtl:rotate-180">←</span>
+          {t("Back to the tree", "العودة إلى الشجرة")}
         </Link>
 
-        <h1 className="text-xl sm:text-2xl font-bold text-[var(--foreground)] mb-8 font-[Fraunces,serif]">
+        <h1 className="font-heading mb-6 text-2xl font-bold text-[var(--foreground)] sm:text-[28px]">
           {pageTitle}
         </h1>
 
@@ -69,6 +71,6 @@ export default async function NewPersonPage({ searchParams }: Props) {
           spouseId={spouseId}
         />
       </div>
-    </main>
+    </div>
   );
 }

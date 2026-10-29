@@ -1,336 +1,285 @@
 "use client";
 
 import type React from "react";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Search, User as UserIcon, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { createClient } from "@/lib/supabase/client";
-import { cn, getNameParts } from "@/lib/utils";
-
-type Person = {
-  id: string;
-  slug: string | null;
-  given_en: string | null;
-  given_ar: string | null;
-  family_name_en: string | null;
-  family_name_ar: string | null;
-  photo_url: string | null;
-  gender?: "m" | "f" | "unknown" | null;
-};
+import { BookOpen, Loader2, MapPin, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  directoryName,
+  matchPeople,
+  matchStories,
+  useFamilyDirectory,
+  type DirectoryPerson,
+  type StoryMatch,
+} from "@/lib/client/family-directory";
+import { useFocusPerson } from "@/lib/client/use-focus-person";
+import { lifeYears } from "@/lib/people/display";
+import { PersonAvatar } from "@/components/people/PersonAvatar";
 
 interface SearchBarProps {
-  placeholder?: string;
   lang?: "ar" | "en";
+  className?: string;
 }
 
-const GooeyFilter = () => (
-  <svg style={{ position: "absolute", width: 0, height: 0 }} aria-hidden="true">
-    <defs>
-      <filter id="bft-gooey">
-        <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
-        <feColorMatrix
-          in="blur"
-          type="matrix"
-          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -8"
-          result="goo"
-        />
-        <feComposite in="SourceGraphic" in2="goo" operator="atop" />
-      </filter>
-    </defs>
-  </svg>
-);
+type Option =
+  | { kind: "person"; id: string; person: DirectoryPerson }
+  | { kind: "story"; id: string; match: StoryMatch };
 
-function displayLabel(p: Person, lang: "ar" | "en") {
-  const parts = getNameParts(p, lang);
-  return {
-    given: parts.given || (lang === "ar" ? "بدون اسم" : "Unnamed"),
-    family: parts.family,
-  };
+const noopSubscribe = () => () => {};
+
+function useIsMac() {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
+    () => false,
+  );
 }
 
-function searchHaystack(p: Person) {
-  return [
-    p.given_en,
-    p.given_ar,
-    p.family_name_en,
-    p.family_name_ar,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-export function SearchBar({
-  placeholder,
-  lang = "en",
-}: SearchBarProps) {
+/**
+ * The big pill search in the top bar. People first, then places and stories.
+ * Picking a person pans the tree to them (or opens the tree focused on them);
+ * picking a story or place opens that person's profile.
+ * Keyboard: Ctrl/⌘ K focuses it, ↑/↓ moves, Enter picks, Esc closes.
+ */
+export function SearchBar({ lang = "en", className }: SearchBarProps) {
   const router = useRouter();
+  const focusPerson = useFocusPerson();
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isFocused, setIsFocused] = useState(false);
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [touched, setTouched] = useState(false);
   const [query, setQuery] = useState("");
-  const [people, setPeople] = useState<Person[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState(0);
+  const dir = useFamilyDirectory(touched);
+  const isMac = useIsMac();
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
 
-  // Fetch people once when the user first focuses the search.
-  // NOTE: do NOT include `loading` in deps — setting it to true would
-  // remount the effect and cause its own cleanup to mark cancelled=true,
-  // which would then prevent setLoading(false) from ever running.
+  const options = useMemo<Option[]>(() => {
+    if (!dir || !query.trim()) return [];
+    const people = matchPeople(dir.people, query, 6).map<Option>((p) => ({ kind: "person", id: p.id, person: p }));
+    const stories = matchStories(dir, query, lang, 4).map<Option>((m) => ({ kind: "story", id: m.story.id, match: m }));
+    return [...people, ...stories];
+  }, [dir, query, lang]);
+
+  const firstStory = options.findIndex((o) => o.kind === "story");
+  const activeIndex = options.length ? Math.min(active, options.length - 1) : -1;
+
+  // Ctrl/⌘ K focuses this field while it is on screen. Runs in the capture
+  // phase so the command palette's own shortcut doesn't also fire.
   useEffect(() => {
-    if (!isFocused || people !== null) return;
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const supabase = createClient();
-        const { data, error } = await supabase
-          .from("people")
-          .select(
-            "id, slug, given_en, given_ar, family_name_en, family_name_ar, photo_url, gender, is_placeholder",
-          )
-          .is("deleted_at", null)
-          .order("given_en");
-        if (cancelled) return;
-        if (error) {
-          // Treat as empty list so the dropdown can show "No matches"
-          setPeople([]);
-          return;
-        }
-        const real = (data ?? []).filter(
-          (p) => !(p as { is_placeholder?: boolean }).is_placeholder,
-        );
-        setPeople(real as Person[]);
-      } catch {
-        if (!cancelled) setPeople([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
+      const input = inputRef.current;
+      if (!input || input.offsetParent === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      input.focus();
+      input.select();
     };
-  }, [isFocused, people]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
-  // Filtered matches
-  const matches = useMemo(() => {
-    if (!people || !query.trim()) return [];
-    const q = query.trim().toLowerCase();
-    return people.filter((p) => searchHaystack(p).includes(q)).slice(0, 8);
-  }, [people, query]);
-
-  // Close on outside click
+  // Close when clicking anywhere else.
   useEffect(() => {
-    if (!isFocused) return;
-    const onClick = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
-        setIsFocused(false);
-      }
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [isFocused]);
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
 
-  function gotoPerson(p: Person) {
-    setIsFocused(false);
+  function choose(option: Option) {
+    setOpen(false);
     setQuery("");
-    router.push(`/person/${p.slug ?? p.id}`);
+    inputRef.current?.blur();
+    if (option.kind === "person") {
+      focusPerson(option.person.id);
+    } else {
+      const p = option.match.person;
+      router.push(`/person/${p.slug ?? p.id}`);
+    }
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (matches[0]) gotoPerson(matches[0]);
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOpen(true);
+      if (options.length) setActive((i) => (Math.min(i, options.length - 1) + 1) % options.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setOpen(true);
+      if (options.length) setActive((i) => (Math.min(i, options.length - 1) - 1 + options.length) % options.length);
+    } else if (e.key === "Enter") {
+      if (activeIndex >= 0 && open) {
+        e.preventDefault();
+        choose(options[activeIndex]);
+      }
+    } else if (e.key === "Escape") {
+      if (open) {
+        e.preventDefault();
+        setOpen(false);
+      } else if (query) {
+        setQuery("");
+      }
+    }
   }
 
-  const placeholderText =
-    placeholder ?? (lang === "ar" ? "ابحث عن شخص…" : "Search people…");
+  const showPanel = open && query.trim().length > 0;
+  const loading = touched && dir === null;
+  const optionId = (i: number) => `${listId}-opt-${i}`;
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-md">
-      <GooeyFilter />
-
-      <motion.form
-        onSubmit={handleSubmit}
-        className="relative flex items-center justify-center w-full"
-        initial={{ width: 240 }}
-        animate={{ width: isFocused ? 380 : 240, scale: isFocused ? 1.02 : 1 }}
-        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-      >
-        <motion.div
-          className={cn(
-            "relative flex w-full items-center overflow-hidden rounded-full border backdrop-blur-md transition-colors",
-            isFocused
-              ? "border-transparent shadow-[0_18px_44px_-12px_oklch(0.34_0.13_18_/_0.25)]"
-              : "border-[var(--border)] bg-[var(--card)]/85",
-          )}
-          animate={{
-            boxShadow: isFocused
-              ? "0 18px 44px -12px oklch(0.34 0.13 18 / 0.30)"
-              : "0 1px 2px oklch(0.18 0.04 15 / 0.06)",
-          }}
-        >
-          {isFocused && (
-            <motion.div
-              className="absolute inset-0 -z-10"
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: 0.18,
-                background: [
-                  "linear-gradient(90deg, oklch(0.68 0.18 38) 0%, oklch(0.62 0.20 18) 100%)",
-                  "linear-gradient(90deg, oklch(0.62 0.20 18) 0%, oklch(0.34 0.13 18) 100%)",
-                  "linear-gradient(90deg, oklch(0.34 0.13 18) 0%, oklch(0.68 0.18 38) 100%)",
-                  "linear-gradient(90deg, oklch(0.68 0.18 38) 0%, oklch(0.62 0.20 18) 100%)",
-                ],
-              }}
-              transition={{
-                duration: 14,
-                repeat: Number.POSITIVE_INFINITY,
-                ease: "linear",
-              }}
-            />
-          )}
-
-          <motion.div
-            className="pl-4 py-3"
-            animate={{
-              rotate: loading ? 360 : 0,
-              scale: isFocused ? 1.1 : 1,
-            }}
-            transition={{
-              rotate: { duration: 1.2, ease: "linear", repeat: loading ? Infinity : 0 },
-              scale: { type: "spring", stiffness: 300, damping: 20 },
-            }}
-          >
-            {loading ? (
-              <Loader2 size={18} className="text-[var(--accent)]" />
-            ) : (
-              <Search
-                size={18}
-                strokeWidth={isFocused ? 2.5 : 2}
-                className={cn(
-                  "transition-colors",
-                  isFocused
-                    ? "text-[var(--primary)]"
-                    : "text-[var(--muted-foreground)]",
-                )}
-              />
-            )}
-          </motion.div>
-
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder={placeholderText}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setIsFocused(true)}
-            className={cn(
-              "relative z-10 w-full bg-transparent py-2.5 outline-none placeholder:text-[var(--muted-foreground)] font-medium text-sm",
-              isFocused ? "tracking-wide text-[var(--foreground)]" : "text-[var(--foreground)]",
-            )}
-          />
-
-          <AnimatePresence>
-            {query && matches.length > 0 && (
-              <motion.button
-                type="submit"
-                initial={{ opacity: 0, scale: 0.8, x: -16 }}
-                animate={{ opacity: 1, scale: 1, x: 0 }}
-                exit={{ opacity: 0, scale: 0.8, x: -16 }}
-                whileTap={{ scale: 0.95 }}
-                className="mx-2 rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--accent)] px-4 py-1.5 text-xs font-medium text-white shadow"
-              >
-                {lang === "ar" ? "↵" : "Go"}
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </motion.form>
-
-      {/* Suggestions dropdown */}
-      <AnimatePresence>
-        {isFocused && (query.trim() || matches.length > 0) && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.18 }}
-            className="glass-2 absolute left-1/2 z-50 mt-2 w-[380px] -translate-x-1/2 overflow-hidden rounded-2xl border border-[var(--border)] shadow-[var(--shadow-deep)]"
-          >
-            {loading ? (
-              <div className="px-4 py-6 text-center text-xs text-[var(--muted-foreground)]">
-                {lang === "ar" ? "جاري التحميل…" : "Loading…"}
-              </div>
-            ) : matches.length === 0 ? (
-              <div className="px-4 py-6 text-center text-xs text-[var(--muted-foreground)]">
-                {query.trim()
-                  ? lang === "ar"
-                    ? "لا توجد نتائج"
-                    : "No matches"
-                  : lang === "ar"
-                    ? "اكتب اسماً للبحث"
-                    : "Type a name to search"}
-              </div>
-            ) : (
-              <ul className="max-h-[60vh] divide-y divide-[var(--border)] overflow-y-auto">
-                {matches.map((p, index) => {
-                  const { given, family } = displayLabel(p, lang);
-                  return (
-                    <motion.li
-                      key={p.id}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.03 }}
-                    >
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => gotoPerson(p)}
-                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted)]/55"
-                      >
-                        <span
-                          className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-offset-1 ring-offset-[var(--card)]",
-                            p.gender === "f"
-                              ? "ring-rose-200"
-                              : p.gender === "m"
-                                ? "ring-[oklch(0.86_0.07_38)]/70"
-                                : "ring-[var(--border)]",
-                          )}
-                        >
-                          {p.photo_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={p.photo_url}
-                              alt={given}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <UserIcon className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                          )}
-                        </span>
-                        <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                          <span
-                            className="truncate text-sm font-medium text-[var(--foreground)]"
-                            style={{ fontFamily: "var(--font-display)" }}
-                          >
-                            {given}
-                          </span>
-                          {family && (
-                            <span className="truncate text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                              {family}
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                    </motion.li>
-                  );
-                })}
-              </ul>
-            )}
-          </motion.div>
+    <div ref={containerRef} className={cn("relative w-full max-w-[560px]", className)}>
+      <label
+        className={cn(
+          "flex h-11 w-full items-center gap-2.5 rounded-full border border-transparent bg-[var(--input)] px-4 text-[var(--muted-foreground)] transition-colors",
+          "hover:border-[var(--border-strong)] focus-within:border-[var(--primary)] focus-within:bg-[var(--card)]",
         )}
-      </AnimatePresence>
+      >
+        {loading ? (
+          <Loader2 className="h-[18px] w-[18px] shrink-0 animate-spin" aria-hidden />
+        ) : (
+          <Search className="h-[18px] w-[18px] shrink-0" aria-hidden />
+        )}
+        <span className="sr-only">{t("Search the family", "ابحث في العائلة")}</span>
+        <input
+          ref={inputRef}
+          type="search"
+          role="combobox"
+          aria-expanded={showPanel}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={showPanel && activeIndex >= 0 ? optionId(activeIndex) : undefined}
+          autoComplete="off"
+          enterKeyHint="search"
+          placeholder={t("Search people, places or stories", "ابحث عن أشخاص أو أماكن أو قصص")}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            setTouched(true);
+            setOpen(true);
+          }}
+          onKeyDown={onKeyDown}
+          className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] [&::-webkit-search-cancel-button]:hidden"
+        />
+        <kbd
+          aria-hidden
+          className="hidden shrink-0 rounded-md border border-[var(--border-strong)] bg-[var(--card)] px-1.5 py-0.5 font-sans text-xs text-[var(--muted-foreground)] lg:inline-block"
+        >
+          {isMac ? "⌘ K" : "Ctrl K"}
+        </kbd>
+      </label>
+
+      {showPanel && (
+        <div className="absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-deep)]">
+          {loading ? (
+            <p role="status" className="px-4 py-5 text-center text-sm text-[var(--muted-foreground)]">
+              {t("Loading the family…", "جارٍ تحميل العائلة…")}
+            </p>
+          ) : options.length === 0 ? (
+            <p role="status" className="px-4 py-5 text-center text-sm text-[var(--muted-foreground)]">
+              {t(`No one or nothing matches “${query.trim()}”`, `لا توجد نتائج لـ «${query.trim()}»`)}
+            </p>
+          ) : null}
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label={t("Search results", "نتائج البحث")}
+            className={cn("max-h-[60vh] overflow-y-auto p-1.5", options.length === 0 && "hidden")}
+          >
+            {options.map((o, i) => (
+              <SearchOption
+                key={`${o.kind}-${o.id}`}
+                option={o}
+                id={optionId(i)}
+                active={i === activeIndex}
+                lang={lang}
+                heading={
+                  i === 0 && o.kind === "person"
+                    ? t("People", "الأشخاص")
+                    : i === firstStory
+                      ? t("Places and stories", "أماكن وقصص")
+                      : null
+                }
+                onHover={() => setActive(i)}
+                onChoose={() => choose(o)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
+  );
+}
+
+function SearchOption({
+  option,
+  id,
+  active,
+  lang,
+  heading,
+  onHover,
+  onChoose,
+}: {
+  option: Option;
+  id: string;
+  active: boolean;
+  lang: "ar" | "en";
+  heading: string | null;
+  onHover: () => void;
+  onChoose: () => void;
+}) {
+  const person = option.kind === "person" ? option.person : option.match.person;
+  const name = directoryName(person, lang);
+  const years = lifeYears(person.birth_date, person.death_date, lang);
+
+  return (
+    <>
+      {heading && (
+        <li role="presentation" className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
+          {heading}
+        </li>
+      )}
+      <li
+        id={id}
+        role="option"
+        aria-selected={active}
+        onMouseDown={(e) => e.preventDefault()}
+        onMouseMove={onHover}
+        onClick={onChoose}
+        className={cn(
+          "flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl px-3 py-2",
+          active ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--muted)]",
+        )}
+      >
+        {option.kind === "person" ? (
+          <PersonAvatar person={person} lang={lang} className="h-9 w-9" textClassName="text-xs" />
+        ) : (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--foreground)]">
+            {option.match.kind === "place" ? <MapPin className="h-4 w-4" aria-hidden /> : <BookOpen className="h-4 w-4" aria-hidden />}
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
+            {option.kind === "person" ? name : option.match.snippet}
+          </span>
+          <span className="block truncate text-xs text-[var(--muted-foreground)]">
+            {option.kind === "person"
+              ? years || (lang === "ar" ? "اعرض على الشجرة" : "Show on the tree")
+              : option.match.kind === "place"
+                ? lang === "ar" ? `مكان في حياة ${name}` : `A place in ${name}'s life`
+                : lang === "ar" ? `قصة عن ${name}` : `A story about ${name}`}
+          </span>
+        </span>
+      </li>
+    </>
   );
 }

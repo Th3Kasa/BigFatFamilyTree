@@ -1,61 +1,80 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Breadcrumb } from "@/components/shell/Breadcrumb";
+import { Waypoints } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
 import { UserMenu } from "@/components/shell/UserMenu";
+import { LanguageToggle } from "@/components/shell/LanguageToggle";
+import { AddButton } from "@/components/shell/AddButton";
 import { SearchBar } from "@/components/ui/search-bar";
 import type { Lang } from "@/lib/lang/server";
-import type { User } from "@supabase/supabase-js";
 
 interface TopBarProps {
+  /** null renders the signed-out bar: logo, language and "Sign in". */
   user: User | null;
   lang: Lang;
   role?: string;
 }
 
-export function TopBar({ user, lang, role }: TopBarProps) {
+function Brand({ lang }: { lang: Lang }) {
   return (
-    <header className="glass-1 sticky top-0 z-40 col-span-1 md:col-span-2 flex h-14 items-center gap-3 border-b border-[var(--border)] px-4">
-      <Link
-        href="/"
-        className="group flex items-center gap-2.5 text-sm font-semibold text-[var(--foreground)] transition-opacity hover:opacity-90"
-      >
-        <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-full shadow-[var(--shadow-floating)] ring-1 ring-[var(--border)] transition-transform duration-300 ease-out group-hover:-rotate-3 group-hover:scale-105">
-          <Image
-            src="/logo-mark.png"
-            alt=""
-            width={32}
-            height={32}
-            className="h-8 w-8 rounded-full"
-            priority
-          />
-        </span>
-        <span
-          className="tracking-tight"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          Big Fat Family
-        </span>
-      </Link>
+    <Link
+      href="/"
+      aria-label={lang === "ar" ? "Big Fat Family، الصفحة الرئيسية" : "Big Fat Family, home"}
+      className="flex shrink-0 items-center gap-2.5 rounded-full text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+    >
+      <Image src="/logo-mark.png" alt="" width={36} height={36} className="h-9 w-9 rounded-full" priority />
+      <span lang="en" dir="ltr" className="whitespace-nowrap font-[family-name:var(--font-display)] text-[17px] font-bold tracking-tight sm:text-[19px]">
+        Big Fat Family
+      </span>
+    </Link>
+  );
+}
 
-      <div className="hidden items-center gap-2 text-[var(--muted-foreground)] sm:flex">
-        <span aria-hidden className="text-[var(--border)]">/</span>
-        <Breadcrumb />
+export function TopBar({ user, lang, role }: TopBarProps) {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+
+  if (!user) {
+    return (
+      <header className="sticky top-0 z-40 flex h-[var(--topbar-h)] items-center gap-3 border-b border-[var(--border)] bg-[var(--card)] px-3 sm:px-5">
+        <Brand lang={lang} />
+        <div className="ms-auto flex items-center gap-2">
+          <LanguageToggle lang={lang} />
+          <Link
+            href="/login"
+            className="inline-flex h-11 items-center rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+          >
+            {t("Sign in", "تسجيل الدخول")}
+          </Link>
+        </div>
+      </header>
+    );
+  }
+
+  return (
+    <header className="sticky top-0 z-40 flex h-[var(--topbar-h)] items-center gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 sm:gap-4 sm:px-5">
+      <Brand lang={lang} />
+
+      {/* Desktop search pill; on phones the bottom bar's "Search" tab takes over */}
+      <div className="hidden min-w-0 flex-1 justify-center md:flex">
+        <SearchBar lang={lang} />
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-2">
-        {user && <SearchBar lang={lang} />}
-      </div>
-
-      {user ? (
-        <UserMenu user={user} role={role} />
-      ) : (
+      <div className="ms-auto flex shrink-0 items-center gap-2 md:ms-0">
         <Link
-          href="/login"
-          className="rounded-full bg-[var(--primary)] px-4 py-1.5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:opacity-90"
+          href="/relationships"
+          aria-label={t("How are we related?", "ما صلة القرابة بيننا؟")}
+          className="inline-flex h-11 w-11 items-center justify-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--card)] text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 xl:w-auto xl:px-4"
         >
-          {lang === "ar" ? "تسجيل الدخول" : "Sign in"}
+          <Waypoints className="h-[18px] w-[18px] shrink-0" aria-hidden />
+          <span className="hidden xl:inline">{t("How are we related?", "ما صلة القرابة بيننا؟")}</span>
         </Link>
-      )}
+        <AddButton lang={lang} className="hidden md:inline-flex" />
+        <LanguageToggle lang={lang} compact className="sm:hidden" />
+        <LanguageToggle lang={lang} className="hidden sm:inline-flex" />
+        <div className="hidden md:block">
+          <UserMenu user={user} role={role} lang={lang} />
+        </div>
+      </div>
     </header>
   );
 }

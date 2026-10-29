@@ -1,615 +1,624 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, ArrowRight, Camera, PenLine, Plus, UserPen, Waypoints } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getLang } from "@/lib/lang/server";
+import { getLang, type Lang } from "@/lib/lang/server";
 import { deletePerson } from "@/lib/actions/people";
 import { createRelationship } from "@/lib/actions/relationships";
 import { deleteEvent } from "@/lib/actions/events";
 import { RelationshipForm } from "@/components/forms/RelationshipForm";
 import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import {
-  Calendar,
-  Edit2,
-  Plus,
-  Trash2,
-  User,
-  Users,
-  Waypoints,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { DeletePersonButton } from "@/components/person/DeletePersonButton";
-import {
-  inferParents,
-  type PersonRow,
-  type RelationshipRow,
-  type ParentDisplay,
-} from "@/lib/people/inferParents";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PersonAvatar } from "@/components/people/PersonAvatar";
+import { PagePersonContext } from "@/components/shell/PagePersonContext";
+import { ProfileMoreMenu } from "@/components/person/ProfileMoreMenu";
+import { ConfirmDeleteButton } from "@/components/person/ConfirmDeleteButton";
+import { cn, getDisplayName, getNameParts } from "@/lib/utils";
+import { avatarTone, formatEventDate, initialsOf, lifeYears } from "@/lib/people/display";
+import { familyOf, kinLabel, type FamilyMember, type FamilyPerson, type FamilyRelationship } from "@/lib/people/family";
 
-type Props = { params: Promise<{ id: string }> };
-
-const EVENT_TYPE_LABELS: Record<string, { ar: string; en: string }> = {
-  birth:         { ar: "الميلاد",    en: "Birth" },
-  death:         { ar: "الوفاة",     en: "Death" },
-  marriage:      { ar: "الزواج",     en: "Marriage" },
-  divorce:       { ar: "الطلاق",     en: "Divorce" },
-  engagement:    { ar: "الخطوبة",    en: "Engagement" },
-  migration:     { ar: "الهجرة",     en: "Migration" },
-  education:     { ar: "التعليم",    en: "Education" },
-  notable_story: { ar: "قصة بارزة", en: "Notable Story" },
-  custom:        { ar: "حدث",        en: "Event" },
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 };
 
-const REL_TYPE_LABELS: Record<string, { ar: string; en: string }> = {
-  spouse:     { ar: "زوج/زوجة",       en: "Spouse" },
-  adopted_by: { ar: "متبنَّى بواسطة", en: "Adopted by" },
-  raised_by:  { ar: "تربى بواسطة",    en: "Raised by" },
-  godparent:  { ar: "عرّاب",           en: "Godparent" },
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const FAMILY_COLUMNS =
+  "id, slug, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, birth_date, death_date";
+
+const EVENT_STYLE: Record<string, { en: string; ar: string; bg: string; fg: string }> = {
+  birth: { en: "Born", ar: "الميلاد", bg: "#E3EEDF", fg: "#2F5A27" },
+  death: { en: "Passed away", ar: "الوفاة", bg: "#ECE2DE", fg: "#4A3B3D" },
+  marriage: { en: "Married", ar: "الزواج", bg: "#F7E7EB", fg: "#7A1631" },
+  divorce: { en: "Divorced", ar: "الطلاق", bg: "#ECE2DE", fg: "#4A3B3D" },
+  engagement: { en: "Engaged", ar: "الخطوبة", bg: "#F7E7EB", fg: "#7A1631" },
+  migration: { en: "Moved", ar: "الانتقال", bg: "#DDE7F1", fg: "#1F4467" },
+  education: { en: "Education", ar: "التعليم", bg: "#E8E1F2", fg: "#4A3470" },
+  notable_story: { en: "Memory", ar: "ذكرى", bg: "#EFE3D3", fg: "#6A4A1F" },
+  custom: { en: "Life event", ar: "حدث", bg: "#F4EDEA", fg: "#4A3B3D" },
 };
 
-export default async function PersonPage({ params }: Props) {
-  const { id } = await params;
-  const [supabase, lang] = await Promise.all([createClient(), getLang()]);
+type TabKey = "life" | "family" | "photos";
 
-  // Accept slug or UUID
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const personQuery = UUID_RE.test(id)
-    ? supabase.from("people").select("*").eq("id", id).is("deleted_at", null).single()
-    : supabase.from("people").select("*").eq("slug", id).is("deleted_at", null).single();
+function pickTab(v: string | string[] | undefined): TabKey {
+  return v === "family" || v === "photos" ? v : "life";
+}
 
-  const { data: person } = await personQuery;
+// Memoised per request: generateMetadata and the page share one lookup.
+const loadPerson = cache(async (id: string) => {
+  const supabase = await createClient();
+  const q = supabase.from("people").select("*").is("deleted_at", null);
+  const { data } = await (UUID_RE.test(id) ? q.eq("id", id) : q.eq("slug", id)).maybeSingle();
+  return { supabase, person: data };
+});
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const [{ id }, lang] = await Promise.all([params, getLang()]);
+  const { person } = await loadPerson(id);
+  if (!person) return { title: lang === "ar" ? "غير موجود · شجرة العائلة" : "Not found · Big Fat Family Tree" };
+  return { title: `${getDisplayName(person, lang)} · ${lang === "ar" ? "شجرة العائلة" : "Big Fat Family Tree"}` };
+}
+
+/** Title for a life-story card, e.g. "Moved to Beirut" or the custom label. */
+function eventTitle(e: { type: string; custom_label: string | null; location: string | null }, lang: Lang) {
+  const at = e.location?.trim();
+  if (e.type === "custom" && e.custom_label) return e.custom_label;
+  if (lang === "ar") {
+    switch (e.type) {
+      case "birth": return at ? `وُلد في ${at}` : "الميلاد";
+      case "death": return at ? `توفي في ${at}` : "الوفاة";
+      case "migration": return at ? `انتقل إلى ${at}` : "انتقال إلى مكان جديد";
+      case "marriage": return "الزواج";
+      case "notable_story": return "ذكرى";
+      default: return EVENT_STYLE[e.type]?.ar ?? "حدث";
+    }
+  }
+  switch (e.type) {
+    case "birth": return at ? `Born in ${at}` : "Born";
+    case "death": return at ? `Passed away in ${at}` : "Passed away";
+    case "migration": return at ? `Moved to ${at}` : "Moved somewhere new";
+    case "marriage": return "Got married";
+    case "notable_story": return "A memory";
+    default: return EVENT_STYLE[e.type]?.en ?? "Life event";
+  }
+}
+
+export default async function PersonPage({ params, searchParams }: Props) {
+  const [{ id }, sp, lang] = await Promise.all([params, searchParams, getLang()]);
+  const { supabase, person } = await loadPerson(id);
   if (!person) notFound();
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
 
   const personId = person.id as string;
+  const ref = encodeURIComponent((person.slug as string | null) ?? personId);
 
   const { data: { user } } = await supabase.auth.getUser();
-  const { data: viewerProfile } = user
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
-    : { data: null };
-  const canEdit = ["admin", "editor"].includes(
-    (viewerProfile as { role?: string } | null)?.role ?? "",
-  );
-
-  const [
-    { data: events },
-    { data: people },
-    { data: relationships },
-  ] = await Promise.all([
-    supabase
-      .from("events")
-      .select("*")
-      .eq("person_id", personId)
-      .order("date_value", { ascending: true }),
-    supabase
-      .from("people")
-      .select("id, given_en, given_ar, family_name_en, family_name_ar")
-      .is("deleted_at", null)
-      .neq("id", personId),
-    supabase
-      .from("relationships")
-      .select(
-        "*, person_a:people!relationships_person_a_id_fkey(id,given_en,given_ar), person_b:people!relationships_person_b_id_fkey(id,given_en,given_ar)"
-      )
-      .or(`person_a_id.eq.${personId},person_b_id.eq.${personId}`),
+  const [{ data: viewerProfile }, { data: events }, { data: peopleRows }, { data: relRows }] = await Promise.all([
+    user ? supabase.from("profiles").select("role").eq("id", user.id).single() : Promise.resolve({ data: null }),
+    supabase.from("events").select("*").eq("person_id", personId),
+    supabase.from("people").select(FAMILY_COLUMNS).is("deleted_at", null),
+    supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
   ]);
+  const role = (viewerProfile as { role?: string } | null)?.role ?? "";
+  const canEdit = role === "admin" || role === "editor";
+
+  const allPeople = (peopleRows ?? []) as FamilyPerson[];
+  const family = familyOf(personId, allPeople, (relRows ?? []) as FamilyRelationship[]);
 
   async function handleDelete() {
     "use server";
-    const result = await deletePerson(person.id);
+    const result = await deletePerson(personId);
     if (result && !result.success) throw new Error(result.error ?? "Delete failed");
   }
 
-  // Derived display values
-  const given =
-    lang === "ar"
-      ? (person.given_ar ?? person.given_en)
-      : (person.given_en ?? person.given_ar);
-  const fatherName =
-    lang === "ar"
-      ? (person.father_name_ar ?? person.father_name_en)
-      : (person.father_name_en ?? person.father_name_ar);
-  const grandfatherName =
-    lang === "ar"
-      ? (person.grandfather_name_ar ?? person.grandfather_name_en)
-      : (person.grandfather_name_en ?? person.grandfather_name_ar);
-  const familyName =
-    lang === "ar"
-      ? (person.family_name_ar ?? person.family_name_en)
-      : (person.family_name_en ?? person.family_name_ar);
-
-  const fullNameChain = [given, fatherName, grandfatherName, familyName]
+  // ── Names ──────────────────────────────────────────────────────────────
+  const { given } = getNameParts(person, lang);
+  const displayName = getDisplayName(person, lang);
+  const otherLang: Lang = lang === "ar" ? "en" : "ar";
+  const otherName = (() => {
+    const g = otherLang === "ar" ? person.given_ar : person.given_en;
+    const f = otherLang === "ar" ? person.family_name_ar : person.family_name_en;
+    const n = [g, f].filter(Boolean).join(" ").trim();
+    return n && n !== displayName ? n : null;
+  })();
+  const pick = (en: string | null, ar: string | null) => (lang === "ar" ? ar ?? en : en ?? ar);
+  const fullNameChain = [
+    given,
+    pick(person.father_name_en, person.father_name_ar),
+    pick(person.grandfather_name_en, person.grandfather_name_ar),
+    getNameParts(person, lang).family,
+  ]
     .filter(Boolean)
     .join(" ");
-  const initials = (given ?? "?").slice(0, 2).toUpperCase();
-  const notes =
-    lang === "ar"
-      ? (person.notes_ar ?? person.notes_en)
-      : (person.notes_en ?? person.notes_ar);
+  const notes = pick(person.notes_en, person.notes_ar);
+  const firstName = given || displayName;
 
-  // Birth / death year — prefer person record fields, fall back to events
-  const birthYear = person.birth_date
-    ? String(person.birth_date).slice(0, 4)
-    : events?.find((e) => e.type === "birth")?.date_value
-      ? String(events.find((e) => e.type === "birth")!.date_value).slice(0, 4)
-      : null;
-  const deathYear = person.death_date
-    ? String(person.death_date).slice(0, 4)
-    : events?.find((e) => e.type === "death")?.date_value
-      ? String(events.find((e) => e.type === "death")!.date_value).slice(0, 4)
-      : null;
+  // ── Life story ─────────────────────────────────────────────────────────
+  const sorted = [...(events ?? [])].sort((a, b) => {
+    if (!a.date_value && !b.date_value) return 0;
+    if (!a.date_value) return 1;
+    if (!b.date_value) return -1;
+    return a.date_value < b.date_value ? 1 : -1;
+  });
+  const birthEvent = sorted.find((e) => e.type === "birth");
+  const deathEvent = sorted.find((e) => e.type === "death");
+  const birthText =
+    formatEventDate(person.birth_date ?? birthEvent?.date_value, person.birth_date ? "exact" : birthEvent?.date_precision, lang);
+  const deathText =
+    formatEventDate(person.death_date ?? deathEvent?.date_value, person.death_date ? "exact" : deathEvent?.date_precision, lang);
+  const years = lifeYears(person.birth_date ?? birthEvent?.date_value, person.death_date ?? deathEvent?.date_value, lang);
 
-  const genderLabel =
-    person.gender === "m"
-      ? lang === "ar" ? "ذكر" : "Male"
-      : person.gender === "f"
-        ? lang === "ar" ? "أنثى" : "Female"
-        : null;
+  // Places in order: where they were born, moved, and passed away.
+  const places: string[] = [];
+  for (const e of [...sorted].reverse()) {
+    if (!["birth", "migration", "death"].includes(e.type)) continue;
+    const place = e.location?.trim();
+    if (place && !places.includes(place)) places.push(place);
+  }
+  const placesLine = places.join(lang === "ar" ? " ← " : " → ");
+
+  const tab = pickTab(sp.tab);
+  const tone = avatarTone(personId);
+  const BackIcon = lang === "ar" ? ArrowRight : ArrowLeft;
+
+  const circles: FamilyMember[] = [...family.partners, ...family.parents, ...family.children, ...family.siblings];
 
   return (
-    <main className="min-h-screen bg-[var(--background)]">
-      {/* Ambient bloom — burgundy + accent behind the hero */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[420px] overflow-hidden"
-        style={{
-          background:
-            "radial-gradient(800px 380px at 50% -10%, oklch(0.34 0.13 18 / 0.18), transparent 70%), radial-gradient(600px 300px at 80% 5%, oklch(0.68 0.18 38 / 0.18), transparent 65%)",
-        }}
-      />
+    <div className="mx-auto w-full max-w-[1040px] px-3 pb-10 sm:px-5">
+      <PagePersonContext id={personId} slug={person.slug ?? null} name={displayName} />
 
-      {/* Back nav */}
-      <div className="relative max-w-2xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6">
-        <Link
-          href="/"
-          className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-sm transition-colors hover:text-[var(--foreground)]"
+      <Tabs key={tab} defaultValue={tab} dir={lang === "ar" ? "rtl" : "ltr"} className="flex flex-col gap-5">
+        {/* ── Header card ─────────────────────────────────────────────── */}
+        <section
+          aria-labelledby="person-name"
+          className="overflow-hidden rounded-b-[24px] border border-t-0 border-[var(--border)] bg-[var(--card)]"
         >
-          <span aria-hidden>←</span>
-          Back
-        </Link>
-      </div>
-
-      {/* Hero */}
-      <div className="relative max-w-2xl mx-auto px-3 sm:px-4 pb-20 sm:pb-6">
-        <Card className="chrome-card relative overflow-hidden rounded-3xl">
-          {/* Top sheen */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[var(--primary)] via-[var(--accent)] to-transparent"
-          />
-
-          {/* Top bar with edit button */}
-          <div className="relative flex flex-wrap justify-end px-4 sm:px-6 pt-4 sm:pt-5 gap-2">
-            <Link href={`/relationships?b=${personId}`}>
-              <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
-                <Waypoints className="h-3.5 w-3.5" />
-                {lang === "ar" ? "ما صلة القرابة بيننا؟" : "How are we related?"}
-              </Button>
+          <div className="relative h-[132px] bg-[#EFE3D3] sm:h-[180px]">
+            <Link
+              href={`/?focus=${encodeURIComponent(personId)}`}
+              className="absolute start-3 top-3 inline-flex h-10 items-center gap-1.5 rounded-full bg-[var(--card)] px-4 text-sm font-semibold text-[var(--foreground)] shadow-sm transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:start-4 sm:top-4"
+            >
+              <BackIcon className="h-4 w-4" aria-hidden />
+              {t("Back to tree", "العودة إلى الشجرة")}
             </Link>
-            <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/edit`}>
-              <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
-                <Edit2 className="h-3.5 w-3.5" />
-                Edit
-              </Button>
-            </Link>
-            <DeletePersonButton action={handleDelete} lang={lang} />
           </div>
 
-          {/* Avatar + name */}
-          <div className="relative flex flex-col items-center gap-3 sm:gap-4 px-4 sm:px-6 pb-6 sm:pb-7 pt-3 text-center">
-            <div className="relative">
-              {/* Soft accent halo behind avatar */}
-              <div
-                aria-hidden
-                className="absolute inset-0 -m-3 rounded-full opacity-70 blur-2xl"
-                style={{
-                  background:
-                    person.gender === "f"
-                      ? "radial-gradient(closest-side, oklch(0.78 0.16 12 / 0.45), transparent 70%)"
-                      : "radial-gradient(closest-side, oklch(0.68 0.18 38 / 0.35), transparent 70%)",
-                }}
-              />
-              <AvatarPhotoUpload
-                personId={person.id}
-                currentUrl={person.photo_url ?? null}
-                alt={given ?? ""}
-                initials={initials}
-                fallbackGender={person.gender as "m" | "f" | "unknown" | undefined}
-                sizeClass="h-[128px] w-[128px]"
-                wrapperClassName={cn(
-                  "relative ring-[5px] ring-offset-2 ring-offset-[var(--card)]",
-                  person.gender === "f"
-                    ? "ring-rose-200/80"
-                    : "ring-[oklch(0.86_0.07_38)]/70"
-                )}
-                fallbackClassName={cn(
-                  "text-3xl font-bold",
-                  person.gender === "f"
-                    ? "bg-rose-50 text-rose-500"
-                    : "bg-[oklch(0.96_0.04_60)] text-[var(--primary)]"
-                )}
-                lang={lang}
-              />
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-4 px-4 pb-5 sm:px-7">
+            <div className="-mt-16 shrink-0">
+              {canEdit ? (
+                <AvatarPhotoUpload
+                  personId={personId}
+                  currentUrl={person.photo_url ?? null}
+                  alt={displayName}
+                  initials={initialsOf(person, lang)}
+                  fallbackGender={person.gender as "m" | "f" | "unknown" | undefined}
+                  sizeClass="h-32 w-32 sm:h-36 sm:w-36"
+                  wrapperClassName="border-[5px] border-[var(--card)] shadow-[0_6px_20px_rgba(36,21,23,0.12)]"
+                  fallbackClassName={cn("font-heading text-[44px] font-bold", tone.className)}
+                  lang={lang}
+                />
+              ) : (
+                <span className="block rounded-full border-[5px] border-[var(--card)] shadow-[0_6px_20px_rgba(36,21,23,0.12)]">
+                  <PersonAvatar
+                    person={person}
+                    lang={lang}
+                    alt={person.photo_url ? displayName : undefined}
+                    className="h-32 w-32 sm:h-36 sm:w-36"
+                    textClassName="font-heading text-[44px]"
+                  />
+                </span>
+              )}
             </div>
 
-            <div className="space-y-1">
-              <h1
-                className="text-[34px] font-semibold leading-[1.05] tracking-tight text-[var(--foreground)]"
-                style={{ fontFamily: "var(--font-display)", fontOpticalSizing: "auto" }}
-              >
-                {given ?? "—"}
+            <div className="min-w-0 flex-[1_1_18rem] pb-1">
+              <h1 id="person-name" className="font-heading text-[28px] font-bold leading-tight text-[var(--foreground)] sm:text-[34px]">
+                {displayName}
               </h1>
-              {fullNameChain !== given && (
-                <p className="text-sm tracking-wide text-[var(--muted-foreground)]">{fullNameChain}</p>
+              {otherName && (
+                <p
+                  lang={otherLang}
+                  dir={otherLang === "ar" ? "rtl" : "ltr"}
+                  className={cn(
+                    "mt-1 text-lg font-semibold text-[#3D2B2E]",
+                    otherLang === "ar" ? "font-[family-name:var(--font-arabic)]" : "font-heading",
+                  )}
+                  style={{ textAlign: "start" }}
+                >
+                  {otherName}
+                </p>
+              )}
+              {(years || placesLine) && (
+                <p className="mt-1.5 text-[15px] text-[var(--muted-foreground)]">
+                  {[years, placesLine].filter(Boolean).join(" · ")}
+                </p>
               )}
             </div>
 
-            {/* Meta badges */}
-            <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
-              {(birthYear || deathYear) && (
-                <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1">
-                  <Calendar className="h-3 w-3" />
-                  {birthYear ?? "?"}
-                  {deathYear ? ` – ${deathYear}` : ""}
-                </Badge>
-              )}
-              {genderLabel && (
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs",
-                    person.gender === "f"
-                      ? "border-rose-100 bg-rose-50 text-rose-600"
-                      : "border-[oklch(0.86_0.07_38)]/40 bg-[oklch(0.96_0.04_60)] text-[var(--primary)]"
-                  )}
+            <div className="flex flex-wrap gap-2 pb-1.5">
+              {canEdit && (
+                <Link
+                  href={`/person/${ref}/event/new?kind=memory`}
+                  className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
                 >
-                  {genderLabel}
-                </Badge>
+                  <PenLine className="h-4 w-4" aria-hidden />
+                  {t("Add a memory", "أضف ذكرى")}
+                </Link>
               )}
-              {familyName && (
-                <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1">
-                  <Users className="h-3 w-3" />
-                  {familyName}
-                </Badge>
+              {canEdit && (
+                <Link
+                  href={`/person/${ref}/edit`}
+                  className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--card)] px-5 text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+                >
+                  <UserPen className="h-4 w-4" aria-hidden />
+                  {t("Edit details", "تعديل البيانات")}
+                </Link>
+              )}
+              <Link
+                href={`/relationships?b=${encodeURIComponent(personId)}`}
+                className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--card)] px-5 text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+              >
+                <Waypoints className="h-4 w-4" aria-hidden />
+                {t("How are we related?", "ما صلة القرابة بيننا؟")}
+              </Link>
+              {canEdit && (
+                <ProfileMoreMenu
+                  lang={lang}
+                  name={displayName}
+                  eventHref={`/person/${ref}/event/new`}
+                  treeHref={`/?focus=${encodeURIComponent(personId)}`}
+                  deleteAction={handleDelete}
+                />
               )}
             </div>
           </div>
 
-          <Separator />
-
-          {/* Tabs */}
-          <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="w-full rounded-none border-b border-[var(--border)] bg-transparent h-auto p-0">
-              <TabsTrigger
-                value="profile"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-xs sm:text-sm"
-              >
-                <User className="h-3.5 w-3.5 mr-1" />
-                Profile
-              </TabsTrigger>
-              <TabsTrigger
-                value="events"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-xs sm:text-sm"
-              >
-                <Calendar className="h-3.5 w-3.5 mr-1" />
-                Events
-              </TabsTrigger>
-              <TabsTrigger
-                value="relations"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent py-3 text-xs sm:text-sm"
-              >
-                <Users className="h-3.5 w-3.5 mr-1" />
-                Relations
-              </TabsTrigger>
-            </TabsList>
-
-            {/* ─── Profile Tab ─── */}
-            <TabsContent value="profile" className="p-4 sm:p-6 space-y-6">
-              {/* Bilingual name fields as read-only cards */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide">
-                  {lang === "ar" ? "الأسماء" : "Names"}
-                </p>
-                {[
-                  {
-                    labelEn: "Given name",
-                    labelAr: "الاسم الأول",
-                    en: person.given_en,
-                    ar: person.given_ar,
-                  },
-                  {
-                    labelEn: "Father's name",
-                    labelAr: "اسم الأب",
-                    en: person.father_name_en,
-                    ar: person.father_name_ar,
-                  },
-                  {
-                    labelEn: "Grandfather's name",
-                    labelAr: "اسم الجد",
-                    en: person.grandfather_name_en,
-                    ar: person.grandfather_name_ar,
-                  },
-                  {
-                    labelEn: "Family name",
-                    labelAr: "اسم العائلة",
-                    en: person.family_name_en,
-                    ar: person.family_name_ar,
-                  },
-                ]
-                  .filter((row) => row.en || row.ar)
-                  .map((row) => (
-                    <div
-                      key={row.labelEn}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3 flex items-center justify-between gap-4"
+          {/* Family circles */}
+          {(circles.length > 0 || canEdit) && (
+            <nav aria-label={t(`${firstName}'s close family`, `عائلة ${firstName} القريبة`)} className="px-4 pb-5 sm:px-7">
+              <ul className="scrollbar-none -mx-1 flex gap-4 overflow-x-auto px-1 py-1">
+                {circles.map((m) => (
+                  <li key={`${m.kin}-${m.person.id}`} className="shrink-0">
+                    <FamilyCircle member={m} lang={lang} />
+                  </li>
+                ))}
+                {canEdit && (
+                  <li className="shrink-0">
+                    <Link
+                      href={`/?focus=${encodeURIComponent(personId)}`}
+                      className="flex w-[76px] flex-col items-center gap-1.5 rounded-2xl text-center text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
                     >
-                      <span className="text-xs text-[var(--muted-foreground)] w-32 shrink-0">
-                        {lang === "ar" ? row.labelAr : row.labelEn}
+                      <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-[#C9B8B3] text-[var(--primary)]">
+                        <Plus className="h-6 w-6" aria-hidden />
                       </span>
-                      <div className="flex gap-6 text-sm font-medium text-[var(--foreground)]">
-                        {row.en && <span>{row.en}</span>}
-                        {row.ar && (
-                          <span dir="rtl" className="text-[var(--muted-foreground)]">
-                            {row.ar}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-              </div>
+                      <span className="text-[13px] font-semibold leading-tight">{t("Add family", "أضف للعائلة")}</span>
+                      <span className="sr-only">{t("on the tree", "على الشجرة")}</span>
+                    </Link>
+                  </li>
+                )}
+              </ul>
+            </nav>
+          )}
 
-              {/* Notes */}
-              {notes && (
-                <div>
-                  <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">
-                    {lang === "ar" ? "ملاحظات" : "Notes"}
+          <TabsList className="scrollbar-none flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-t border-[var(--border)] bg-transparent p-0 px-3 sm:px-5">
+            {(
+              [
+                ["life", t("Life story", "قصة الحياة")],
+                ["family", t("Family", "العائلة")],
+                ["photos", t("Photos", "الصور")],
+              ] as const
+            ).map(([value, label]) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="min-h-12 rounded-none border-b-[3px] border-transparent bg-transparent px-3.5 text-[15px] font-medium text-[var(--muted-foreground)] shadow-none data-[state=active]:border-[var(--primary)] data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-[var(--primary)] data-[state=active]:shadow-none"
+              >
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </section>
+
+        {/* ── Life story ──────────────────────────────────────────────── */}
+        <TabsContent value="life" className="mt-0">
+          <div className="flex flex-col-reverse gap-5 lg:flex-row lg:items-start">
+            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
+              <section aria-labelledby="about-title" className="rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-5">
+                <h2 id="about-title" className="mb-3 text-[17px] font-bold text-[var(--foreground)]">
+                  {t("About", "نبذة")}
+                </h2>
+                <dl className="grid gap-3 text-sm">
+                  <AboutRow
+                    label={t("Born", "الميلاد")}
+                    value={[birthText, birthEvent?.location].filter(Boolean).join(" · ") || null}
+                  />
+                  <AboutRow
+                    label={t("Passed away", "الوفاة")}
+                    value={[deathText, deathEvent?.location].filter(Boolean).join(" · ") || null}
+                  />
+                  <AboutRow
+                    label={t("Married to", "الزواج")}
+                    value={family.partners.map((m) => getDisplayName(m.person, lang)).join(", ") || null}
+                  />
+                  <AboutRow label={t("Lived in", "عاش في")} value={places.join(lang === "ar" ? "، " : ", ") || null} />
+                  {fullNameChain && fullNameChain !== displayName && (
+                    <AboutRow label={t("Full name", "الاسم الكامل")} value={fullNameChain} />
+                  )}
+                </dl>
+                {!birthText && !deathText && family.partners.length === 0 && places.length === 0 && (
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    {canEdit
+                      ? t("No details yet. Use “Edit details” to add a birth date.", "لا توجد تفاصيل بعد. استخدم «تعديل البيانات» لإضافة تاريخ الميلاد.")
+                      : t("No details have been added yet.", "لم تُضف أي تفاصيل بعد.")}
                   </p>
-                  <div className="rounded-lg border border-amber-100 bg-amber-50/60 px-4 py-3">
-                    <p className="text-sm text-[var(--foreground)] leading-relaxed whitespace-pre-wrap">
+                )}
+                {notes && (
+                  <div className="mt-4 border-t border-[var(--border)] pt-4">
+                    <h3 className="mb-1 text-[13px] text-[var(--muted-foreground)]">{t("Notes", "ملاحظات")}</h3>
+                    <p dir="auto" className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--foreground)]">
                       {notes}
                     </p>
                   </div>
+                )}
+              </section>
+            </aside>
+
+            <section aria-label={t("Life story", "قصة الحياة")} className="flex min-w-0 flex-1 flex-col gap-4">
+              {canEdit && (
+                <div className="flex items-center gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--card)] px-4 py-3.5">
+                  <PersonAvatar person={person} lang={lang} className="h-10 w-10" textClassName="text-[13px]" />
+                  <Link
+                    href={`/person/${ref}/event/new?kind=memory`}
+                    className="flex h-11 min-w-0 flex-1 items-center rounded-full bg-[var(--input)] px-4 text-[15px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                  >
+                    <span className="truncate">{t(`Share a memory of ${firstName}…`, `شارك ذكرى عن ${firstName}…`)}</span>
+                  </Link>
+                  <Link
+                    href={`/person/${ref}?tab=photos`}
+                    aria-label={t("Add a photo", "أضف صورة")}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                  >
+                    <Camera className="h-5 w-5" aria-hidden />
+                  </Link>
                 </div>
               )}
-            </TabsContent>
 
-            {/* ─── Events Tab ─── */}
-            <TabsContent value="events" className="p-4 sm:p-6">
-              {events && events.length > 0 ? (
-                <ol className="relative border-s border-[var(--border)] space-y-0">
-                  {events.map((e, i) => {
-                    const label =
-                      lang === "ar"
-                        ? (EVENT_TYPE_LABELS[e.type]?.ar ?? e.type)
-                        : (EVENT_TYPE_LABELS[e.type]?.en ?? e.type);
-                    const story =
-                      lang === "ar"
-                        ? (e.story_ar ?? e.story_en)
-                        : (e.story_en ?? e.story_ar);
+              {sorted.length > 0 ? (
+                <ol className="flex flex-col gap-3.5">
+                  {sorted.map((e) => {
+                    const style = EVENT_STYLE[e.type] ?? EVENT_STYLE.custom;
+                    const story = pick(e.story_en, e.story_ar);
+                    const date = formatEventDate(e.date_value, e.date_precision, lang);
+                    const meta = [date, e.type === "migration" || e.type === "birth" || e.type === "death" ? null : e.location]
+                      .filter(Boolean)
+                      .join(" · ");
                     const removeEvent = async () => {
                       "use server";
                       await deleteEvent(e.id as string, personId);
                     };
                     return (
-                      <li key={e.id} className="group ms-5 pb-8 last:pb-0">
-                        <span className="absolute -start-[9px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] border-2 border-[var(--primary)]" />
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <time className="text-xs text-[var(--muted-foreground)]">
-                              {e.date_value ??
-                                (lang === "ar" ? "تاريخ غير معروف" : "Date unknown")}
-                              {(e.date_precision as string) !== "exact" &&
-                                ` (${e.date_precision})`}
-                            </time>
-                            <p className="text-sm font-semibold text-[var(--foreground)] mt-0.5">
-                              {e.type === "custom" && e.custom_label ? e.custom_label : label}
-                            </p>
-                            {story && (
-                              <p className="text-sm text-[var(--muted-foreground)] mt-1 leading-relaxed">
-                                {story}
-                              </p>
-                            )}
-                          </div>
+                      <li key={e.id} className="flex flex-col gap-2.5 rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-5">
+                        <div className="flex items-center gap-3">
+                          <span className="rounded-full px-2.5 py-1 text-xs font-bold" style={{ background: style.bg, color: style.fg }}>
+                            {lang === "ar" ? style.ar : style.en}
+                          </span>
+                          <p className="min-w-0 flex-1 truncate text-sm text-[var(--muted-foreground)]">
+                            {meta || t("Date not known", "التاريخ غير معروف")}
+                          </p>
                           {canEdit && (
-                            <form action={removeEvent}>
-                              <Button
-                                type="submit"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-[var(--muted-foreground)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--destructive)]"
-                                aria-label={lang === "ar" ? "حذف الحدث" : "Delete event"}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </form>
+                            <ConfirmDeleteButton
+                              action={removeEvent}
+                              label={t("Delete this entry", "حذف هذا الإدخال")}
+                              confirmText={t("Delete this from the life story?", "حذف هذا من قصة الحياة؟")}
+                              className="-my-2 -me-2"
+                            />
                           )}
                         </div>
+                        <h3 className="text-lg font-bold text-[var(--foreground)]">{eventTitle(e, lang)}</h3>
+                        {story && (
+                          <p dir="auto" className="whitespace-pre-wrap text-[15px] leading-relaxed text-[#3D2B2E]">
+                            {story}
+                          </p>
+                        )}
                       </li>
                     );
                   })}
                 </ol>
               ) : (
-                <p className="text-sm text-[var(--muted-foreground)] py-4">
-                  {lang === "ar"
-                    ? "لا توجد أحداث مسجّلة."
-                    : "No events recorded yet."}
-                </p>
-              )}
-
-              {canEdit && (
-                <div className="mt-6 pt-4 border-t border-[var(--border)]">
-                  <Link href={`/person/${(person as { slug?: string | null }).slug ?? id}/event/new`}>
-                    <Button variant="outline" size="sm" className="gap-1.5">
-                      <Plus className="h-4 w-4" />
-                      {lang === "ar" ? "إضافة حدث" : "Add event"}
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </TabsContent>
-
-            {/* ─── Relations Tab ─── */}
-            <TabsContent value="relations" className="p-4 sm:p-6 space-y-6">
-              {/* Parents row — uses inference helper so that when one parent_id
-                  is missing but the recorded parent has a single current
-                  spouse, we *display* that spouse as the second parent. */}
-              {(() => {
-                const childRow = {
-                  id: personId,
-                  father_id: person.father_id ?? null,
-                  mother_id: person.mother_id ?? null,
-                };
-                const allPeople: PersonRow[] = (people ?? []) as PersonRow[];
-                const allRels: RelationshipRow[] = (relationships ?? []) as RelationshipRow[];
-                const { father, mother } = inferParents(childRow, allPeople, allRels);
-
-                const editHref = `/person/${(person as { slug?: string | null }).slug ?? id}/edit`;
-
-                const labels = {
-                  father: lang === "ar" ? "الأب" : "Father",
-                  mother: lang === "ar" ? "الأم" : "Mother",
-                  inferred: lang === "ar" ? "(مستنتج من الزواج)" : "(inferred from marriage)",
-                  notRecorded: lang === "ar" ? "غير مسجَّل" : "Not recorded",
-                  addFather: lang === "ar" ? "+ إضافة الأب" : "+ Add father",
-                  addMother: lang === "ar" ? "+ إضافة الأم" : "+ Add mother",
-                };
-
-                const renderParent = (slot: "father" | "mother", pd: ParentDisplay) => {
-                  const slotLabel = slot === "father" ? labels.father : labels.mother;
-                  if (pd.kind === "recorded" || pd.kind === "inferred") {
-                    const name =
-                      lang === "ar"
-                        ? (pd.person.given_ar ?? pd.person.given_en ?? "?")
-                        : (pd.person.given_en ?? pd.person.given_ar ?? "?");
-                    return (
-                      <div key={slot} className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-[var(--muted-foreground)] w-16 shrink-0">
-                          {slotLabel}
-                        </span>
-                        <Link href={`/person/${pd.personId}`}>
-                          <Badge
-                            variant="outline"
-                            className="px-3 py-1.5 text-sm cursor-pointer hover:bg-[var(--accent)] transition-colors"
-                          >
-                            <User className="h-3 w-3 mr-1.5" />
-                            {name}
-                          </Badge>
-                        </Link>
-                        {pd.kind === "inferred" && (
-                          <span className="text-xs italic text-[var(--muted-foreground)]">
-                            {labels.inferred}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  }
-                  // not-recorded
-                  const addLabel = slot === "father" ? labels.addFather : labels.addMother;
-                  return (
-                    <div key={slot} className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-[var(--muted-foreground)] w-16 shrink-0">
-                        {slotLabel}
-                      </span>
-                      <span className="text-sm italic text-[var(--muted-foreground)]">
-                        {labels.notRecorded}
-                      </span>
-                      <Link
-                        href={editHref}
-                        className="text-xs font-medium text-[var(--primary)] hover:underline"
-                      >
-                        {addLabel}
-                      </Link>
-                    </div>
-                  );
-                };
-
-                return (
-                  <div>
-                    <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
-                      {lang === "ar" ? "الوالدان" : "Parents"}
-                    </p>
-                    <div className="space-y-2">
-                      {renderParent("father", father)}
-                      {renderParent("mother", mother)}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Explicit relationships */}
-              {relationships && relationships.length > 0 ? (
-                <div>
-                  <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
-                    {lang === "ar" ? "علاقات أخرى" : "Relationships"}
+                <div className="rounded-[20px] border border-dashed border-[var(--border-strong)] bg-[var(--card)] px-6 py-10 text-center">
+                  <p className="text-[15px] font-semibold text-[var(--foreground)]">
+                    {t(`${firstName}'s story hasn't been written yet`, `لم تُكتب قصة ${firstName} بعد`)}
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {relationships.map((r) => {
-                      const other =
-                        r.person_a_id === personId
-                          ? (r.person_b as {
-                              id: string;
-                              given_en: string | null;
-                              given_ar: string | null;
-                            } | null)
-                          : (r.person_a as {
-                              id: string;
-                              given_en: string | null;
-                              given_ar: string | null;
-                            } | null);
-                      const otherName = other
-                        ? (lang === "ar"
-                            ? (other.given_ar ?? other.given_en)
-                            : (other.given_en ?? other.given_ar)) ?? "?"
-                        : "?";
-                      const typeLabel =
-                        lang === "ar"
-                          ? (REL_TYPE_LABELS[r.type]?.ar ?? r.type)
-                          : (REL_TYPE_LABELS[r.type]?.en ?? r.type);
-                      return (
-                        <Link key={r.id} href={`/person/${other?.id}`}>
-                          <div className="flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-sm cursor-pointer hover:bg-[var(--accent)] transition-colors">
-                            <span className="font-medium text-[var(--foreground)]">
-                              {otherName}
-                            </span>
-                            <span className="text-[var(--muted-foreground)] text-xs">
-                              · {typeLabel}
-                            </span>
-                            {r.status !== "current" && (
-                              <span className="text-xs text-[var(--muted-foreground)]">
-                                ({r.status})
-                              </span>
-                            )}
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    {canEdit
+                      ? t("Start with a memory, a move, a wedding: anything worth remembering.", "ابدأ بذكرى أو انتقال أو زفاف: أي شيء يستحق أن يُذكر.")
+                      : t("When the family adds memories and life events, they'll appear here.", "عندما تضيف العائلة ذكريات وأحداثًا، ستظهر هنا.")}
+                  </p>
+                  {canEdit && (
+                    <Link
+                      href={`/person/${ref}/event/new?kind=memory`}
+                      className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]"
+                    >
+                      <PenLine className="h-4 w-4" aria-hidden />
+                      {t("Write the first memory", "اكتب أول ذكرى")}
+                    </Link>
+                  )}
                 </div>
-              ) : null}
+              )}
+            </section>
+          </div>
+        </TabsContent>
 
-              {/* Add relationship form */}
-              <div className="pt-4 border-t border-[var(--border)]">
-                <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
-                  {lang === "ar" ? "إضافة علاقة" : "Add relationship"}
-                </p>
-                <RelationshipForm
-                  people={people ?? []}
-                  lang={lang}
-                  action={createRelationship.bind(null, person.id)}
-                />
-              </div>
-            </TabsContent>
+        {/* ── Family ──────────────────────────────────────────────────── */}
+        <TabsContent value="family" className="mt-0 flex flex-col gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FamilyGroup
+              title={t("Parents", "الوالدان")}
+              members={family.parents}
+              lang={lang}
+              empty={
+                family.missingParent.father || family.missingParent.mother
+                  ? t("Not recorded yet.", "غير مسجّلين بعد.")
+                  : null
+              }
+              action={
+                canEdit && (family.missingParent.father || family.missingParent.mother) ? (
+                  <Link href={`/?focus=${encodeURIComponent(personId)}`} className="text-sm font-semibold text-[var(--primary)] hover:underline">
+                    {t("Add a parent on the tree", "أضف أحد الوالدين على الشجرة")}
+                  </Link>
+                ) : null
+              }
+            />
+            <FamilyGroup title={t("Partners", "الأزواج")} members={family.partners} lang={lang} empty={t("No marriages recorded.", "لا يوجد زواج مسجّل.")} />
+            <FamilyGroup title={t("Children", "الأبناء")} members={family.children} lang={lang} empty={t("No children recorded.", "لا يوجد أبناء مسجّلون.")} />
+            <FamilyGroup title={t("Brothers and sisters", "الإخوة والأخوات")} members={family.siblings} lang={lang} empty={t("No brothers or sisters recorded.", "لا يوجد إخوة مسجّلون.")} />
+            {family.others.length > 0 && (
+              <FamilyGroup title={t("Other family links", "صلات عائلية أخرى")} members={family.others} lang={lang} empty={null} />
+            )}
+          </div>
 
-          </Tabs>
-        </Card>
-      </div>
-    </main>
+          {canEdit && (
+            <section aria-labelledby="add-rel-title" className="rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-5">
+              <h2 id="add-rel-title" className="text-[17px] font-bold text-[var(--foreground)]">
+                {t("Add a marriage or other link", "أضف زواجًا أو صلة أخرى")}
+              </h2>
+              <p className="mb-4 mt-1 text-sm text-[var(--muted-foreground)]">
+                {t(
+                  "Parents and children are easiest to add on the tree. Use this for marriages, adoption, guardians and godparents.",
+                  "إضافة الوالدين والأبناء أسهل على الشجرة. استخدم هذا للزواج والتبني والأوصياء والعرّابين.",
+                )}
+              </p>
+              <RelationshipForm
+                people={allPeople.filter((p) => p.id !== personId && !p.is_placeholder)}
+                lang={lang}
+                action={createRelationship.bind(null, personId)}
+              />
+            </section>
+          )}
+        </TabsContent>
+
+        {/* ── Photos ──────────────────────────────────────────────────── */}
+        <TabsContent value="photos" className="mt-0">
+          <section aria-labelledby="photos-title" className="rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6">
+            <h2 id="photos-title" className="text-[17px] font-bold text-[var(--foreground)]">
+              {t("Profile photo", "الصورة الشخصية")}
+            </h2>
+            <p className="mb-5 mt-1 text-sm text-[var(--muted-foreground)]">
+              {canEdit
+                ? t(
+                    `Tap the photo to choose a new one. It shows on the tree, in search and on ${firstName}'s page.`,
+                    `اضغط على الصورة لاختيار صورة جديدة. تظهر على الشجرة وفي البحث وفي صفحة ${firstName}.`,
+                  )
+                : person.photo_url
+                  ? t(`${firstName}'s photo on the tree.`, `صورة ${firstName} على الشجرة.`)
+                  : t("No photo yet. An editor can add one.", "لا توجد صورة بعد. يمكن للمحرّر إضافة واحدة.")}
+            </p>
+            {canEdit ? (
+              <AvatarPhotoUpload
+                personId={personId}
+                currentUrl={person.photo_url ?? null}
+                alt={displayName}
+                initials={initialsOf(person, lang)}
+                fallbackGender={person.gender as "m" | "f" | "unknown" | undefined}
+                sizeClass="h-44 w-44"
+                wrapperClassName="ring-1 ring-[var(--border)]"
+                fallbackClassName={cn("font-heading text-5xl font-bold", tone.className)}
+                lang={lang}
+              />
+            ) : (
+              <PersonAvatar
+                person={person}
+                lang={lang}
+                alt={person.photo_url ? displayName : undefined}
+                className="h-44 w-44"
+                textClassName="font-heading text-5xl"
+              />
+            )}
+          </section>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function AboutRow({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div>
+      <dt className="text-[13px] text-[var(--muted-foreground)]">{label}</dt>
+      <dd dir="auto" className="mt-0.5 font-semibold text-[var(--foreground)]">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function FamilyCircle({ member, lang }: { member: FamilyMember; lang: Lang }) {
+  const p = member.person;
+  const { given } = getNameParts(p, lang);
+  const ringed = member.kin === "partner";
+  return (
+    <Link
+      href={`/person/${encodeURIComponent(p.slug ?? p.id)}`}
+      className="flex w-[76px] flex-col items-center gap-1.5 rounded-2xl text-center text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+    >
+      <span className={cn("rounded-full p-[3px]", ringed ? "bg-[var(--primary)]" : "bg-[#D9C6C0]")}>
+        <span className="block rounded-full border-[3px] border-[var(--card)]">
+          <PersonAvatar person={p} lang={lang} className="h-[52px] w-[52px]" textClassName="text-[15px]" />
+        </span>
+      </span>
+      <span className="w-full truncate text-[13px] font-semibold leading-tight">{given || getDisplayName(p, lang)}</span>
+      <span className="-mt-1 w-full truncate text-xs text-[var(--muted-foreground)]">{kinLabel(member, lang)}</span>
+    </Link>
+  );
+}
+
+function FamilyGroup({
+  title,
+  members,
+  lang,
+  empty,
+  action,
+}: {
+  title: string;
+  members: FamilyMember[];
+  lang: Lang;
+  empty: string | null;
+  action?: React.ReactNode;
+}) {
+  if (members.length === 0 && !empty) return null;
+  return (
+    <section className="rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-5">
+      <h2 className="mb-3 text-[17px] font-bold text-[var(--foreground)]">{title}</h2>
+      {members.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {members.map((m) => {
+            const years = lifeYears(m.person.birth_date, m.person.death_date, lang);
+            return (
+              <li key={`${m.kin}-${m.person.id}`}>
+                <Link
+                  href={`/person/${encodeURIComponent(m.person.slug ?? m.person.id)}`}
+                  className="-mx-2 flex min-h-[56px] items-center gap-3 rounded-2xl px-2 py-1.5 transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                >
+                  <PersonAvatar person={m.person} lang={lang} className="h-11 w-11" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold text-[var(--foreground)]">{getDisplayName(m.person, lang)}</span>
+                    <span className="block truncate text-[13px] text-[var(--muted-foreground)]">
+                      {[kinLabel(m, lang), years, m.inferred ? (lang === "ar" ? "مستنتج من الزواج" : "from the marriage record") : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {members.length === 0 && empty && <p className="text-sm text-[var(--muted-foreground)]">{empty}</p>}
+      {action && <div className="mt-3">{action}</div>}
+    </section>
   );
 }

@@ -3,9 +3,7 @@
 import { useInternalNode, useStore, type EdgeProps } from "@xyflow/react";
 import { EDGE_STYLES } from "@/lib/graph/edge-styles";
 import { DIM_OPACITY, type EdgeHighlight } from "@/lib/graph/highlight";
-
-const NODE_WIDTH = 220;
-const NODE_HEIGHT = 240;
+import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graph/node-size";
 
 type FamilyBranchData = {
   edgeKind: "family-branch";
