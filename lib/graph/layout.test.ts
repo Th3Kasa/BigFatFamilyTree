@@ -400,3 +400,42 @@ describe("saved positions", () => {
   });
 });
 
+
+describe("birth order set by hand", () => {
+  // Nassif & Victoria's sons, no birth dates; Samuel is the eldest by hand.
+  const base = [
+    m("nassif"), f("victoria"),
+    kid("adel", "nassif", "victoria"),
+    kid("fouad", "nassif", "victoria"),
+    kid("samuel", "nassif", "victoria"),
+    f("samwife"),
+    kid("samkid1", "samuel", "samwife"),
+    kid("samkid2", "samuel", "samwife"),
+  ];
+  const rels = [married("r0", "nassif", "victoria"), married("r1", "samuel", "samwife")];
+  const order = (o: Record<string, number>) => base.map((p) => (p.id in o ? { ...p, birth_order: o[p.id] } : p));
+
+  test("without an order, siblings fall back to name", () => {
+    const pos = layoutFamily(base, rels).positions;
+    expect(pos.get("adel")!.x).toBeLessThan(pos.get("fouad")!.x);
+    expect(pos.get("fouad")!.x).toBeLessThan(pos.get("samuel")!.x);
+  });
+
+  test("the oldest's whole branch (partner and children) moves to the left of their siblings", () => {
+    const pos = layoutFamily(order({ samuel: 1, adel: 2, fouad: 3 }), rels).positions;
+    const branch = ["samuel", "samwife", "samkid1", "samkid2"].map((id) => pos.get(id)!.x);
+    expect(Math.max(...branch)).toBeLessThan(pos.get("adel")!.x);
+    expect(pos.get("adel")!.x).toBeLessThan(pos.get("fouad")!.x);
+  });
+
+  test("a set order beats birth dates, and people without one come after", () => {
+    const people = order({ fouad: 1 }).map((p) => (p.id === "adel" ? { ...p, birth_date: "1930" } : p));
+    const pos = layoutFamily(people, rels).positions;
+    expect(pos.get("fouad")!.x).toBeLessThan(pos.get("adel")!.x);
+    expect(pos.get("adel")!.x).toBeLessThan(pos.get("samuel")!.x);
+  });
+
+  test("the reordered tree never overlaps", () => {
+    expectNoOverlaps(buildGraphElements(order({ samuel: 1, fouad: 2, adel: 3 }), rels, "en").nodes);
+  });
+});
