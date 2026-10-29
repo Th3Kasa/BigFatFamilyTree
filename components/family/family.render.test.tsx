@@ -28,6 +28,8 @@ vi.mock("@/lib/actions/people", () => ({
 }));
 vi.mock("@/lib/actions/relationships", () => ({ deleteRelationship: vi.fn(), updateRelationshipStatus: vi.fn() }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn() }));
+const saveChildrenOrder = vi.fn(async () => ({ success: true }));
+vi.mock("@/lib/actions/canvas", () => ({ saveChildrenOrder }));
 
 const { FamilyHub } = await import("./FamilyHub");
 const { FamilyView } = await import("./FamilyView");
@@ -111,6 +113,39 @@ describe("FamilyHub", () => {
     act(() => root.render(<FamilyHub {...hubProps} lang="ar" canEdit />));
     expect(host.querySelector("aside")?.getAttribute("dir")).toBe("rtl");
     expect(host.textContent).toContain("عائلة Omar");
+  });
+});
+
+describe("FamilyHub children birth order", () => {
+  // Elias: Omar (no mother recorded) and Lina (with Step). Lina is set as the eldest.
+  const ordered = people.map((p) => (p.id === "lina" ? { ...p, birth_order: 1 } : p.id === "omar" ? { ...p, birth_order: 2 } : p));
+  const eliasHub = { ...hubProps, person: ordered[0], people: ordered };
+  const childNames = () =>
+    [...host.querySelectorAll('section[aria-labelledby="hub-children"] a span.block.truncate:first-child')].map((n) => n.textContent);
+
+  test("children are listed oldest first across marriages, with a reorder handle for editors", () => {
+    act(() => root.render(<FamilyHub {...eliasHub} canEdit />));
+    expect(childNames()).toEqual(["Lina Haddad", "Omar Haddad"]);
+    expect(host.textContent).toContain("Oldest at the top");
+    expect(host.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(2);
+  });
+
+  test("arrow keys on the handle save the new order and announce it", async () => {
+    saveChildrenOrder.mockClear();
+    act(() => root.render(<FamilyHub {...eliasHub} canEdit />));
+    const handle = host.querySelector<HTMLButtonElement>('button[aria-label^="Reorder Omar"]')!;
+    await act(async () => {
+      handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    });
+    expect(saveChildrenOrder).toHaveBeenCalledWith("elias", ["omar", "lina"]);
+    expect(childNames()).toEqual(["Omar Haddad", "Lina Haddad"]);
+    expect(host.querySelector('[aria-live="polite"]')?.textContent).toBe("Omar is now the oldest");
+  });
+
+  test("viewers see the order but cannot change it", () => {
+    act(() => root.render(<FamilyHub {...eliasHub} canEdit={false} />));
+    expect(childNames()).toEqual(["Lina Haddad", "Omar Haddad"]);
+    expect(host.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(0);
   });
 });
 

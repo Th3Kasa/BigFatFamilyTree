@@ -22,6 +22,7 @@ export type FamilyPerson = {
   photo_url: string | null;
   birth_date?: string | null;
   death_date?: string | null;
+  birth_order?: number | null;
 };
 
 export type FamilyRelationship = {
@@ -66,7 +67,11 @@ export type Family = {
   missingParent: { father: boolean; mother: boolean };
 };
 
+/** Oldest first: birth order set by hand, then birth date (unknown last). */
 function byBirth(a: FamilyMember, b: FamilyMember) {
+  const ao = a.person.birth_order ?? Number.MAX_SAFE_INTEGER;
+  const bo = b.person.birth_order ?? Number.MAX_SAFE_INTEGER;
+  if (ao !== bo) return ao - bo;
   const ay = a.person.birth_date ?? "9999";
   const by = b.person.birth_date ?? "9999";
   return ay < by ? -1 : ay > by ? 1 : 0;

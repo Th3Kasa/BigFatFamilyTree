@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { withSignedPhotos } from "@/lib/storage/photos";
+import { fetchBirthOrders, withBirthOrder } from "@/lib/people/birth-order";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -99,16 +100,17 @@ export default async function PersonPage({ params, searchParams }: Props) {
   const ref = encodeURIComponent((person.slug as string | null) ?? personId);
 
   const { data: { user } } = await supabase.auth.getUser();
-  const [{ data: viewerProfile }, { data: events }, { data: peopleRows }, { data: relRows }] = await Promise.all([
+  const [{ data: viewerProfile }, { data: events }, { data: peopleRows }, { data: relRows }, birthOrders] = await Promise.all([
     user ? supabase.from("profiles").select("role").eq("id", user.id).single() : Promise.resolve({ data: null }),
     supabase.from("events").select("*").eq("person_id", personId),
     supabase.from("people").select(FAMILY_COLUMNS).is("deleted_at", null),
     supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
+    fetchBirthOrders(supabase),
   ]);
   const role = (viewerProfile as { role?: string } | null)?.role ?? "";
   const canEdit = role === "admin" || role === "editor";
 
-  const allPeople = await withSignedPhotos(supabase, (peopleRows ?? []) as FamilyPerson[]);
+  const allPeople = withBirthOrder(await withSignedPhotos(supabase, (peopleRows ?? []) as FamilyPerson[]), birthOrders);
   const family = familyOf(personId, allPeople, (relRows ?? []) as FamilyRelationship[]);
 
   async function handleDelete() {

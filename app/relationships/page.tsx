@@ -4,6 +4,7 @@ import { getLang } from "@/lib/lang/server";
 import { buildGraphElements } from "@/lib/graph/transform";
 import { RelationshipFinder } from "@/components/relationships/RelationshipFinder";
 import { withSignedPhotos } from "@/lib/storage/photos";
+import { fetchBirthOrders, withBirthOrder } from "@/lib/people/birth-order";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
 const TREE_COLUMNS =
@@ -26,12 +27,13 @@ function single(v: string | string[] | undefined): string | null {
 export default async function RelationshipsPage({ searchParams }: { searchParams: SearchParams }) {
   const [supabase, lang, params] = await Promise.all([createClient(), getLang(), searchParams]);
 
-  const [{ data: peopleRows }, { data: relRows }] = await Promise.all([
+  const [{ data: peopleRows }, { data: relRows }, birthOrders] = await Promise.all([
     supabase.from("people").select(TREE_COLUMNS).is("deleted_at", null).order("given_en"),
     supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
+    fetchBirthOrders(supabase),
   ]);
 
-  const people = await withSignedPhotos(supabase, (peopleRows ?? []) as PersonInput[]);
+  const people = withBirthOrder(await withSignedPhotos(supabase, (peopleRows ?? []) as PersonInput[]), birthOrders);
   const relationships = (relRows ?? []) as RelationshipInput[];
   const { nodes, edges } = buildGraphElements(people, relationships, lang);
 
