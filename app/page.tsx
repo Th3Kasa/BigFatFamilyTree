@@ -11,7 +11,7 @@ import { Landing } from "@/components/landing/Landing";
 import { homeEntry } from "@/lib/members/journey";
 import { handleFirstVisit } from "@/lib/members/onboarding";
 import { withSignedPhotos } from "@/lib/storage/photos";
-import { commonFamilyName, countGenerations } from "@/lib/people/stats";
+import { countGenerations } from "@/lib/people/stats";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 
 const TREE_COLUMNS =
@@ -48,11 +48,8 @@ function focusFromQuery(params: Awaited<SearchParams>, people: PersonInput[]) {
 
 function treeSummary(people: PersonInput[], stories: number | null, lang: Lang) {
   const real = people.filter((p) => !p.is_placeholder);
-  const family = commonFamilyName(people, lang);
   const generations = countGenerations(real);
-  const title = family
-    ? lang === "ar" ? `عائلة ${family}` : `The ${family} family`
-    : lang === "ar" ? "شجرة عائلتنا" : "Our family tree";
+  const title = lang === "ar" ? "عائلة بيغ فات" : "The Big Fat Family";
   const parts =
     lang === "ar"
       ? [
