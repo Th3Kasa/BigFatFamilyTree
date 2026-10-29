@@ -13,11 +13,14 @@ import { rotateFamilyPin } from "@/lib/auth/family-pin";
 import { derivePinPassword, generateTempPin } from "@/lib/auth/pin-crypto";
 import {
   changeOwnPin,
+  checkFamilyPinForJoin,
+  checkJoinFirstName,
   clearPinLockout,
   joinWithPin,
   pinAccountLockId,
   signInWithDevice,
   signInWithPin,
+  type JoinStepResult,
   type PinResult,
 } from "@/lib/auth/pin-session";
 import { forgetCurrentDevice, revokeDevices } from "@/lib/auth/pin-device-store";
@@ -42,6 +45,16 @@ export async function pinDeviceSignInAction(pin: string): Promise<PinResult> {
 /** "Not you?" (and a stale cookie): forget this device, i.e. delete its row and clear the cookie. */
 export async function forgetThisDeviceAction(): Promise<void> {
   await forgetCurrentDevice();
+}
+
+/** Join, step 1: the family PIN. A right answer returns a 30-minute ticket for the next steps. */
+export async function checkFamilyPinAction(familyPin: string): Promise<JoinStepResult<{ ticket: string }>> {
+  return checkFamilyPinForJoin(typeof familyPin === "string" ? familyPin : "", await getLang());
+}
+
+/** Join, step 2: does this first name need a birthday to be told apart? */
+export async function checkJoinFirstNameAction(input: { ticket: string; firstName: string }): Promise<JoinStepResult<{ needBirthday: boolean }>> {
+  return checkJoinFirstName({ ticket: input?.ticket, firstName: input?.firstName }, await getLang());
 }
 
 export async function pinJoinAction(input: PinJoinInput): Promise<PinResult> {
@@ -107,7 +120,7 @@ export async function resetMemberPin(input: { profileId: string }): Promise<Memb
   // Devices that remembered the old PIN start again.
   await revokeDevices(ctx.userId, target.id, "pin_reset_by_admin");
   // A reset also clears any lockout on that account (15-minute and 24-hour).
-  if (target.name_key && target.date_of_birth) {
+  if (target.name_key) {
     await clearPinLockout(pinAccountLockId(target.name_key, target.date_of_birth));
   }
   await writeAudit({

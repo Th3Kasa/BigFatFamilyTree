@@ -14,6 +14,7 @@ let _limiters: {
   pinFirst: Ratelimit;
   pinFirstDay: Ratelimit;
   familyPin: Ratelimit;
+  pinJoin: Ratelimit;
 } | null = null;
 
 function getLimiters() {
@@ -53,6 +54,8 @@ function getLimiters() {
     pinFirst: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "15 m"), prefix: "rl:pin-first" }),
     pinFirstDay: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(50, "24 h"), prefix: "rl:pin-first-day" }),
     familyPin: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(10, "1 h"), prefix: "rl:family-pin" }),
+    // Accounts created per IP (join), taken just before the account is created.
+    pinJoin: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(5, "1 h"), prefix: "rl:pin-join" }),
   };
   return _limiters;
 }

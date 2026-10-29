@@ -72,6 +72,14 @@ export const PIN_MESSAGES = {
     "يرجى تسجيل الدخول باسمك وتاريخ ميلادك ورمزك السري.",
   ],
   not_allowed: ["This account can't do that.", "لا يمكن لهذا الحساب تنفيذ ذلك."],
+  join_need_birthday: [
+    "Someone with this first name has already joined. Add your birthday so we can tell you apart.",
+    "انضم شخص بهذا الاسم من قبل. أضف تاريخ ميلادك لنميّز بينكما.",
+  ],
+  join_expired: [
+    "That took a while, so please type the family PIN again.",
+    "استغرق ذلك بعض الوقت، يرجى إدخال رمز العائلة مرة أخرى.",
+  ],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type PinMessageCode = keyof typeof PIN_MESSAGES;
@@ -186,12 +194,17 @@ export const pinSignInSchema = z.object({
 });
 export type PinSignInInput = z.input<typeof pinSignInSchema>;
 
+/**
+ * Join, after the family PIN step: first name and your own PIN twice. The
+ * birthday is optional here; the server asks for it (join_need_birthday) when
+ * another PIN account already has this first name. `ticket` is the short-lived
+ * proof that the family PIN was right (lib/auth/join-ticket.ts).
+ */
 export const pinJoinSchema = z
   .object({
+    ticket: z.string().min(1).max(200),
     firstName: pinNameSchema,
-    lastName: pinNameSchema,
-    dateOfBirth: pinDobSchema,
-    familyPin: familyPinSchema,
+    dateOfBirth: optionalField(pinDobSchema),
     pin: newPinSchema,
     pinConfirm: z.preprocess(digitsPreprocess, z.string()),
   })
@@ -212,6 +225,8 @@ export type ChangePinInput = z.input<typeof changePinSchema>;
 
 /** Name of the unique index behind "one PIN account per name + birthday". */
 export const PIN_IDENTITY_INDEX = "profiles_pin_identity_uidx";
+/** At most one PIN account per name without a birthday. */
+export const PIN_IDENTITY_NO_BIRTHDAY_INDEX = "profiles_pin_identity_nobirthday_uidx";
 
 /** Did Postgres refuse an insert because that name + birthday already has a PIN account? */
 export function isDuplicateIdentityError(error: { code?: string | null; message?: string | null } | null | undefined): boolean {
@@ -219,6 +234,7 @@ export function isDuplicateIdentityError(error: { code?: string | null; message?
   const msg = error.message ?? "";
   return (
     msg.includes(PIN_IDENTITY_INDEX) ||
+    msg.includes(PIN_IDENTITY_NO_BIRTHDAY_INDEX) ||
     // GoTrue wraps trigger failures as "Database error creating new user".
     (error.code === "23505" && /profiles/.test(msg))
   );

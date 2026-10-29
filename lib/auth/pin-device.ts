@@ -106,6 +106,7 @@ export function idsToEvict(rows: DeviceRow[], keepId: string, max: number = MAX_
 /** Only PIN accounts that still have an identity can be resolved from a device token. */
 export function isUsablePinProfile(
   p: { login_method?: string | null; name_key?: string | null; date_of_birth?: string | null } | null | undefined,
-): p is { login_method: "pin"; name_key: string; date_of_birth: string } {
-  return !!p && p.login_method === "pin" && !!p.name_key && !!p.date_of_birth;
+): p is { login_method: "pin"; name_key: string; date_of_birth: string | null } {
+  // The birthday is optional: members whose first name was free joined without one.
+  return !!p && p.login_method === "pin" && !!p.name_key;
 }

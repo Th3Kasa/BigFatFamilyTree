@@ -86,15 +86,16 @@ describe("PIN validation", () => {
     expect(pinNameSchema.safeParse("a".repeat(60)).success).toBe(true);
   });
 
-  it("join: everything valid passes; mismatched PINs, trivial PINs and a short family PIN fail with friendly codes", () => {
+  it("join: first name + PIN twice is enough; the birthday is optional but must be real; friendly codes", () => {
     const good = {
+      ticket: "t",
       firstName: "Omar",
-      lastName: "Haddad",
       dateOfBirth: "1990-04-12",
-      familyPin: "123456",
       pin: "4821",
       pinConfirm: "4821",
     };
+    expect(pinJoinSchema.safeParse({ ...good, dateOfBirth: "" }).success).toBe(true);
+    expect(pinJoinSchema.safeParse({ ticket: "t", firstName: "Omar", pin: "4821", pinConfirm: "4821" }).success).toBe(true);
     expect(pinJoinSchema.safeParse(good).success).toBe(true);
     const code = (patch: Partial<typeof good>) => {
       const r = pinJoinSchema.safeParse({ ...good, ...patch });
@@ -102,7 +103,6 @@ describe("PIN validation", () => {
     };
     expect(code({ pinConfirm: "4822" })).toBe("pin_mismatch");
     expect(code({ pin: "1234", pinConfirm: "1234" })).toBe("pin_trivial");
-    expect(code({ familyPin: "12345" })).toBe("family_pin_format");
     expect(code({ dateOfBirth: "1899-12-31" })).toBe("dob_invalid");
     expect(code({ dateOfBirth: "2999-01-01" })).toBe("dob_future");
     expect(code({ dateOfBirth: "1990-02-31" })).toBe("dob_invalid");
