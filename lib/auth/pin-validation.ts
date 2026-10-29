@@ -51,6 +51,15 @@ export const PIN_MESSAGES = {
   not_signed_in: ["Please sign in first.", "يرجى تسجيل الدخول أولًا."],
   old_pin_wrong: ["Your current PIN isn't right.", "رمزك الحالي غير صحيح."],
   same_pin: ["Choose a different PIN from your current one.", "اختر رمزًا مختلفًا عن رمزك الحالي."],
+  stale_session: [
+    "For your safety, sign out and sign in again with an email link, then try again.",
+    "لأمانك، سجّل الخروج ثم ادخل مجددًا عبر رابط البريد الإلكتروني، ثم حاول مرة أخرى.",
+  ],
+  link_required: [
+    "To set a new PIN without the old one, sign in with an email link first (\"Admins: sign in with email\"), then try again within 15 minutes.",
+    "لتعيين رمز جديد دون القديم، ادخل أولًا عبر رابط البريد الإلكتروني («للمشرفين: الدخول بالبريد»)، ثم حاول خلال ١٥ دقيقة.",
+  ],
+  not_allowed: ["This account can't do that.", "لا يمكن لهذا الحساب تنفيذ ذلك."],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type PinMessageCode = keyof typeof PIN_MESSAGES;

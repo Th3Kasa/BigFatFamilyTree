@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { avatarTone } from "@/lib/people/display";
 import type { Lang } from "@/lib/lang/server";
+import { hasRealEmail } from "@/lib/auth/pin-setup";
 
 interface UserMenuProps {
   user: SupabaseUser;
@@ -100,7 +101,9 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
             <UserAvatar user={user} size="md" />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-                {isPinAccount ? ((user.user_metadata?.full_name as string | undefined) ?? t("Family member", "فرد من العائلة")) : user.email}
+                {isPinAccount
+                  ? ((user.user_metadata?.full_name as string | undefined) ?? (hasRealEmail(user.email) ? user.email : null) ?? t("Family member", "فرد من العائلة"))
+                  : user.email}
               </p>
               {roleLabel && <p className="text-xs text-[var(--muted-foreground)]">{roleLabel}</p>}
             </div>
@@ -129,6 +132,14 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
             <Link href="/account/pin">
               <KeyRound />
               {t("Change my PIN", "غيّر رمزي السري")}
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {!isPinAccount && (
+          <DropdownMenuItem asChild>
+            <Link href="/account/pin/setup">
+              <KeyRound />
+              {t("Sign in with a PIN instead", "الدخول برمز سري بدلًا من ذلك")}
             </Link>
           </DropdownMenuItem>
         )}

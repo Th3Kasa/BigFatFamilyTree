@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getLang } from "@/lib/lang/server";
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
+import { hasRealEmail } from "@/lib/auth/pin-setup";
 import { ChangePinForm } from "@/components/auth/ChangePinForm";
 import { cardClass, displayFont } from "@/components/members/primitives";
 
@@ -35,6 +37,17 @@ export default async function ChangePinPage() {
       <div className={`${cardClass} p-5`}>
         <ChangePinForm lang={lang} />
       </div>
+      {hasRealEmail(user.email) ? (
+        <p className="text-center text-sm text-[var(--muted-foreground)]">
+          {t("Forgot your PIN?", "نسيت رمزك؟")}{" "}
+          <Link
+            href="/account/pin/setup"
+            className="inline-flex min-h-11 items-center font-semibold text-[var(--primary)] underline-offset-4 hover:underline"
+          >
+            {t("Set a new one with an email link", "عيّن رمزًا جديدًا برابط البريد")}
+          </Link>
+        </p>
+      ) : null}
     </div>
   );
 }
