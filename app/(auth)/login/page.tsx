@@ -5,16 +5,17 @@ import Image from "next/image";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
-import { signUpProfileSchema } from "@/lib/validation/members";
 import { safeNextPath } from "@/lib/auth/safe-next";
 import { SignupForm, useDocumentLang } from "@/components/auth/SignupForm";
+import { PinSignInForm } from "@/components/auth/PinSignInForm";
 import { LanguageToggle } from "@/components/shell/LanguageToggle";
 import { cardClass, fieldClass, pill, Spinner } from "@/components/members/primitives";
 import { ensureBootstrapUser, signInBootstrapAdmin } from "./actions";
 import { cn } from "@/lib/utils";
 
 type Lang = "ar" | "en";
-type Screen = "signin" | "magic" | "signup" | "forgot" | "sent-magic" | "sent-signup" | "sent-reset";
+// "signin" is the family PIN sign-in; "email" is the admins' email + password form.
+type Screen = "signin" | "email" | "magic" | "signup" | "forgot" | "sent-magic" | "sent-reset";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -67,27 +68,6 @@ function friendlyAuthError(error: { message: string; status?: number }, lang: La
     );
   }
   return error.message;
-}
-
-// Sign-up is the one flow used by the whole family (often on phones, often in
-// Arabic), so its errors are plain-language and bilingual. Anything unexpected
-// falls through to friendlyAuthError.
-function friendlySignupError(error: { message: string; status?: number }, lang: Lang): string {
-  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
-  const msg = error.message;
-  if (/already (registered|been registered)|already exists/i.test(msg)) {
-    return t(
-      "There's already an account with this email. Try signing in instead.",
-      "يوجد حساب بهذا البريد بالفعل. جرّب تسجيل الدخول.",
-    );
-  }
-  if (/password/i.test(msg) && /(weak|short|least|characters)/i.test(msg)) {
-    return t("Choose a longer, harder-to-guess password.", "اختر كلمة مرور أطول وأصعب في التخمين.");
-  }
-  if (/signups? (are )?(not allowed|disabled)/i.test(msg)) {
-    return t("Sign-ups are closed right now. Please ask a family admin.", "التسجيل مغلق حاليًا. اسأل مشرف العائلة.");
-  }
-  return friendlyAuthError(error, lang);
 }
 
 // Where to land after signing in: the ?next= the middleware adds when it
@@ -150,8 +130,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [dob, setDob] = useState("");
   // Where a magic link should land after sign-in ("/welcome" for new sign-ups).
   const [afterAuth, setAfterAuth] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>("signin");
@@ -166,7 +144,7 @@ export default function LoginPage() {
     if (new URLSearchParams(window.location.search).get("mode") === "signup") setScreen("signup");
   }, []);
 
-  const sent = screen === "sent-magic" || screen === "sent-signup" || screen === "sent-reset";
+  const sent = screen === "sent-magic" || screen === "sent-reset";
   const remaining = useCountdown(RESEND_COOLDOWN_SECONDS, sent ? `${screen}:${resendTick}` : null);
   const canResend = remaining === 0;
 
@@ -178,7 +156,7 @@ export default function LoginPage() {
   }
 
   const activeTab: "signin" | "signup" | null =
-    screen === "signup" ? "signup" : screen === "signin" || screen === "magic" ? "signin" : null;
+    screen === "signup" ? "signup" : screen === "signin" || screen === "email" || screen === "magic" ? "signin" : null;
 
   function onTabKey(e: React.KeyboardEvent, current: "signin" | "signup") {
     const order: Array<"signin" | "signup"> = lang === "ar" ? ["signup", "signin"] : ["signin", "signup"];
@@ -279,101 +257,6 @@ export default function LoginPage() {
     goTo("sent-magic");
   }
 
-  /* ── sign up ── */
-  // Validate the three things both sign-up routes need (name, date of birth,
-  // email). Returns the clean values, or null after showing the first problem.
-  function validateSignupBasics() {
-    const profile = signUpProfileSchema.safeParse({ fullName, dateOfBirth: dob });
-    if (!profile.success) {
-      const issue = profile.error.issues[0];
-      const field = issue?.path[0];
-      setErrorMsg(
-        field === "dateOfBirth"
-          ? dob && dob > new Date().toLocaleDateString("en-CA")
-            ? t("Date of birth can't be in the future.", "لا يمكن أن يكون تاريخ الميلاد في المستقبل.")
-            : t("Enter your date of birth.", "أدخل تاريخ ميلادك.")
-          : t("Enter your full name.", "أدخل اسمك الكامل."),
-      );
-      return null;
-    }
-    const emailOk = magicLinkSchema.safeParse({ email });
-    if (!emailOk.success) {
-      setErrorMsg(t("Enter a valid email address.", "أدخل بريدًا إلكترونيًا صحيحًا."));
-      return null;
-    }
-    return {
-      email: emailOk.data.email,
-      data: { full_name: profile.data.fullName, date_of_birth: profile.data.dateOfBirth },
-    };
-  }
-
-  async function handleSignUp(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorMsg(null);
-    const basics = validateSignupBasics();
-    if (!basics) return;
-    if (password.length < 8) {
-      setErrorMsg(t("Password must be at least 8 characters.", "يجب ألا تقل كلمة المرور عن ٨ أحرف."));
-      return;
-    }
-    setLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.signUp({
-      email: basics.email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome`,
-        data: basics.data,
-      },
-    });
-    if (error) {
-      setLoading(false);
-      setErrorMsg(friendlySignupError(error, lang));
-      return;
-    }
-    // Supabase hides "already registered" by returning a user with no identities.
-    if (data.user && data.user.identities?.length === 0) {
-      setLoading(false);
-      setErrorMsg(
-        t(
-          "There's already an account with this email. Try signing in instead.",
-          "يوجد حساب بهذا البريد بالفعل. جرّب تسجيل الدخول.",
-        ),
-      );
-      return;
-    }
-    // Email confirmation off: we already have a session, go straight to /welcome.
-    if (data.session) {
-      window.location.href = "/welcome";
-      return;
-    }
-    setLoading(false);
-    goTo("sent-signup");
-  }
-
-  async function handleSignUpMagicLink() {
-    setErrorMsg(null);
-    const basics = validateSignupBasics();
-    if (!basics) return;
-    setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email: basics.email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome`,
-        data: basics.data,
-      },
-    });
-    setLoading(false);
-    if (error) {
-      setErrorMsg(friendlySignupError(error, lang));
-      return;
-    }
-    setAfterAuth("/welcome");
-    goTo("sent-magic");
-  }
-
   /* ── forgot password ── */
   async function sendReset(): Promise<string | null> {
     const parsed = magicLinkSchema.safeParse({ email });
@@ -405,15 +288,7 @@ export default function LoginPage() {
     setResendNote(null);
     setLoading(true);
     let err: string | null;
-    if (screen === "sent-signup") {
-      const supabase = createClient();
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email: email.trim(),
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome` },
-      });
-      err = error ? friendlySignupError(error, lang) : null;
-    } else if (screen === "sent-reset") {
+    if (screen === "sent-reset") {
       err = await sendReset();
     } else {
       err = await sendMagicLink();
@@ -441,21 +316,21 @@ export default function LoginPage() {
 
   const subheading =
     screen === "signup"
-      ? t("Four quick details, then we'll help you find your place in the family tree.", "أربع خانات صغيرة، ثم نساعدك على إيجاد مكانك في شجرة العائلة.")
+      ? t("A few quick details, then we'll help you find your place in the family tree.", "بضع خانات سريعة، ثم نساعدك على إيجاد مكانك في شجرة العائلة.")
       : screen === "forgot"
         ? t("Enter your email and we'll send you a reset link.", "أدخل بريدك وسنرسل لك رابط إعادة التعيين.")
         : screen === "magic"
           ? t("Enter your email and we'll send you a link. No password needed.", "أدخل بريدك وسنرسل لك رابطًا. لا حاجة لكلمة مرور.")
           : sent
             ? null
-            : t("Sign in to see the family tree.", "سجّل الدخول لترى شجرة العائلة.");
+            : screen === "email"
+              ? t("Admins and invited members: sign in with your email and password.", "للمشرفين والمدعوّين: سجّل الدخول ببريدك وكلمة المرور.")
+              : t("Your name, birthday and PIN. That's all.", "اسمك وتاريخ ميلادك ورمزك السري. هذا كل شيء.");
 
   const sentCopy =
-    screen === "sent-signup"
-      ? t("We sent a link to confirm your account to", "أرسلنا رابط تأكيد حسابك إلى")
-      : screen === "sent-reset"
-        ? t("We sent a password reset link to", "أرسلنا رابط إعادة تعيين كلمة المرور إلى")
-        : t("We sent a sign-in link to", "أرسلنا رابط تسجيل الدخول إلى");
+    screen === "sent-reset"
+      ? t("We sent a password reset link to", "أرسلنا رابط إعادة تعيين كلمة المرور إلى")
+      : t("We sent a sign-in link to", "أرسلنا رابط تسجيل الدخول إلى");
 
   return (
     <div className="flex min-h-dvh flex-col items-center bg-[var(--background)] px-4 pb-10 pt-4 sm:pt-6">
@@ -528,12 +403,7 @@ export default function LoginPage() {
                 .
               </p>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                {screen === "sent-signup"
-                  ? t(
-                      "Once confirmed, we'll help you find your place in the family tree. Not there? Check your spam folder.",
-                      "بعد التأكيد سنساعدك على إيجاد مكانك في شجرة العائلة. لم تصلك؟ تحقق من البريد المزعج.",
-                    )
-                  : t("Not there? Check your spam folder.", "لم تصلك؟ تحقق من البريد المزعج.")}
+                {t("Not there? Check your spam folder.", "لم تصلك؟ تحقق من البريد المزعج.")}
               </p>
 
               <div className="mt-5 flex w-full flex-col gap-2" aria-live="polite">
@@ -557,10 +427,10 @@ export default function LoginPage() {
               </div>
 
               <div className="mt-2 flex flex-wrap justify-center gap-x-2">
-                <LinkButton onClick={() => goTo(screen === "sent-signup" ? "signup" : screen === "sent-reset" ? "forgot" : "magic")}>
+                <LinkButton onClick={() => goTo(screen === "sent-reset" ? "forgot" : "magic")}>
                   {t("Wrong email? Change it", "بريد خاطئ؟ غيّره")}
                 </LinkButton>
-                <LinkButton onClick={() => goTo("signin")}>{t("Back to sign in", "العودة لتسجيل الدخول")}</LinkButton>
+                <LinkButton onClick={() => goTo("email")}>{t("Back to sign in", "العودة لتسجيل الدخول")}</LinkButton>
               </div>
             </div>
           ) : (
@@ -571,8 +441,19 @@ export default function LoginPage() {
               ) : null}
 
               <div className="mt-5">
-                {/* ── sign in (password) ── */}
+                {/* ── sign in (family PIN) ── */}
                 {screen === "signin" && (
+                  <PinSignInForm
+                    lang={lang}
+                    onDone={() => {
+                      window.location.href = nextFromUrl();
+                    }}
+                    onAdminEmail={() => goTo("email")}
+                  />
+                )}
+
+                {/* ── sign in (admins: email + password) ── */}
+                {screen === "email" && (
                   <form onSubmit={handleSignIn} className="flex flex-col gap-4" noValidate>
                     <Field id={`${uid}-email`} label={t("Email", "البريد الإلكتروني")}>
                       <input
@@ -635,6 +516,9 @@ export default function LoginPage() {
                     <button type="button" onClick={() => goTo("magic")} className={cn(pill.outline, "min-h-[52px] text-base")}>
                       {t("Email me a magic link", "أرسل لي رابطًا سحريًا")}
                     </button>
+                    <button type="button" onClick={() => goTo("signin")} className={cn(pill.ghost, "min-h-11")}>
+                      {t("Family sign-in with your PIN", "دخول العائلة بالرمز السري")}
+                    </button>
                   </form>
                 )}
 
@@ -662,28 +546,19 @@ export default function LoginPage() {
                       {loading ? <Spinner /> : null}
                       {loading ? t("Sending…", "جارٍ الإرسال…") : t("Send magic link", "أرسل الرابط السحري")}
                     </button>
-                    <button type="button" onClick={() => goTo("signin")} className={cn(pill.ghost, "min-h-11")}>
+                    <button type="button" onClick={() => goTo("email")} className={cn(pill.ghost, "min-h-11")}>
                       {t("Use email and password instead", "استخدم البريد وكلمة المرور بدلًا من ذلك")}
                     </button>
                   </form>
                 )}
 
-                {/* ── sign up ── */}
+                {/* ── sign up (family PIN) ── */}
                 {screen === "signup" && (
                   <SignupForm
                     lang={lang}
-                    fullName={fullName}
-                    onFullName={setFullName}
-                    dob={dob}
-                    onDob={setDob}
-                    email={email}
-                    onEmail={setEmail}
-                    password={password}
-                    onPassword={setPassword}
-                    loading={loading}
-                    errorMsg={errorMsg}
-                    onSubmit={handleSignUp}
-                    onMagicLink={handleSignUpMagicLink}
+                    onDone={(to) => {
+                      window.location.href = to;
+                    }}
                     onSignIn={() => goTo("signin")}
                   />
                 )}
@@ -712,7 +587,7 @@ export default function LoginPage() {
                       {loading ? <Spinner /> : null}
                       {loading ? t("Sending…", "جارٍ الإرسال…") : t("Send reset link", "أرسل رابط إعادة التعيين")}
                     </button>
-                    <button type="button" onClick={() => goTo("signin")} className={cn(pill.ghost, "min-h-11")}>
+                    <button type="button" onClick={() => goTo("email")} className={cn(pill.ghost, "min-h-11")}>
                       {t("Back to sign in", "العودة لتسجيل الدخول")}
                     </button>
                   </form>

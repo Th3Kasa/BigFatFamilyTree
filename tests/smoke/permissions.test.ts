@@ -30,6 +30,8 @@ describe("permission matrix: caller x action", () => {
     change_admin_role: [false, false, false, true],
     invite_member: [false, false, false, true],
     delete_account: [false, false, false, true],
+    reset_pin: [false, false, true, true],
+    family_pin: [false, false, false, true],
   };
 
   for (const [action, row] of Object.entries(matrix) as Array<[AdminAction, boolean[]]>) {

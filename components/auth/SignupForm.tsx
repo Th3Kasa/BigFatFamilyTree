@@ -1,10 +1,12 @@
 "use client";
 
-import { useId, useState, useSyncExternalStore } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import { fieldClass, pill, Spinner } from "@/components/members/primitives";
-import { MIN_DOB } from "@/lib/validation/members";
+import { pill, Spinner } from "@/components/members/primitives";
+import { IdentityFields, type Identity } from "@/components/auth/IdentityFields";
+import { PinField } from "@/components/auth/PinField";
+import { pinJoinAction } from "@/lib/actions/pin";
+import { firstIssueCode, pinJoinSchema, pinMessage } from "@/lib/auth/pin-validation";
 
 type Lang = "ar" | "en";
 
@@ -24,173 +26,119 @@ export function useDocumentLang(): Lang {
   );
 }
 
+export function ErrorNote({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="rounded-2xl border border-[#F6D3BC] bg-[#FFF4EC] px-4 py-3 text-sm font-medium text-[#9A3412]">
+      {message}
+    </p>
+  );
+}
+
 type Props = {
   lang: Lang;
-  fullName: string;
-  onFullName: (v: string) => void;
-  dob: string;
-  onDob: (v: string) => void;
-  email: string;
-  onEmail: (v: string) => void;
-  password: string;
-  onPassword: (v: string) => void;
-  loading: boolean;
-  errorMsg: string | null;
-  onSubmit: (e: React.FormEvent) => void;
-  onMagicLink: () => void;
+  /** Called with where to go once the account is created and signed in. */
+  onDone: (redirectTo: string) => void;
   onSignIn: () => void;
 };
 
 /**
- * Sign-up: one column, big inputs, four fields. A magic link is offered as the
- * no-password alternative. Name + date of birth travel with the sign-up (see
- * handle_new_user) so /welcome can pre-fill the "find yourself" search.
+ * "Join the family": first name, last name, date of birth, the family PIN the
+ * owner shares in the group, and your own 4-digit PIN typed twice. No email.
+ * The account is created waiting for approval and signed in straight away.
  */
-export function SignupForm({
-  lang,
-  fullName,
-  onFullName,
-  dob,
-  onDob,
-  email,
-  onEmail,
-  password,
-  onPassword,
-  loading,
-  errorMsg,
-  onSubmit,
-  onMagicLink,
-  onSignIn,
-}: Props) {
+export function SignupForm({ lang, onDone, onSignIn }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
-  const uid = useId();
-  const [showPassword, setShowPassword] = useState(false);
-  const todayLocal = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, viewer's timezone
+  const [who, setWho] = useState<Identity>({ firstName: "", lastName: "", dob: "" });
+  const [familyPin, setFamilyPin] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMsg(null);
+    const input = {
+      firstName: who.firstName,
+      lastName: who.lastName,
+      dateOfBirth: who.dob,
+      familyPin,
+      pin,
+      pinConfirm,
+    };
+    const parsed = pinJoinSchema.safeParse(input);
+    if (!parsed.success) {
+      setErrorMsg(pinMessage(firstIssueCode(parsed.error), lang));
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await pinJoinAction(input);
+      if (res.ok) {
+        onDone(res.redirectTo);
+        return;
+      }
+      setErrorMsg(res.error);
+    } catch {
+      setErrorMsg(pinMessage("failed", lang));
+    }
+    setLoading(false);
+  }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${uid}-name`} className="text-sm font-semibold">
-          {t("Full name", "الاسم الكامل")}
-        </label>
-        <input
-          id={`${uid}-name`}
-          name="name"
-          type="text"
-          autoComplete="name"
-          required
-          maxLength={120}
-          value={fullName}
-          onChange={(e) => onFullName(e.target.value)}
-          disabled={loading}
-          placeholder={t("e.g. Basem Morkos", "مثال: باسم مرقس")}
-          className={fieldClass}
-        />
-      </div>
+      <IdentityFields
+        lang={lang}
+        value={who}
+        onChange={setWho}
+        disabled={loading}
+        dobHint={t(
+          "Used with your name to sign you in, and to match you with the right person in the family tree.",
+          "نستخدمه مع اسمك لتسجيل دخولك ولمطابقتك مع الشخص الصحيح في شجرة العائلة.",
+        )}
+      />
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${uid}-dob`} className="text-sm font-semibold">
-          {t("Date of birth", "تاريخ الميلاد")}
-        </label>
-        <input
-          id={`${uid}-dob`}
-          name="bday"
-          type="date"
-          autoComplete="bday"
-          required
-          min={MIN_DOB}
-          max={todayLocal}
-          value={dob}
-          onChange={(e) => onDob(e.target.value)}
-          disabled={loading}
-          aria-describedby={`${uid}-dob-hint`}
-          className={fieldClass}
-        />
-        <p id={`${uid}-dob-hint`} className="text-xs text-[var(--muted-foreground)]">
-          {t(
-            "Only used to match you with the right person in the family tree.",
-            "نستخدمه فقط لمطابقتك مع الشخص الصحيح في شجرة العائلة.",
-          )}
-        </p>
-      </div>
+      <PinField
+        lang={lang}
+        name="family-pin"
+        label={t("Family PIN", "رمز العائلة")}
+        hint={t("6 digits. Find it in the family group.", "٦ أرقام. ستجده في مجموعة العائلة.")}
+        length={6}
+        autoComplete="off"
+        value={familyPin}
+        onChange={setFamilyPin}
+        disabled={loading}
+      />
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${uid}-email`} className="text-sm font-semibold">
-          {t("Email", "البريد الإلكتروني")}
-        </label>
-        <input
-          id={`${uid}-email`}
-          name="email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          required
-          dir="ltr"
-          value={email}
-          onChange={(e) => onEmail(e.target.value)}
-          disabled={loading}
-          placeholder="name@example.com"
-          className={cn(fieldClass, lang === "ar" && "text-end")}
-        />
-      </div>
+      <PinField
+        lang={lang}
+        name="new-pin"
+        label={t("Choose your own 4-digit PIN", "اختر رمزك السري الخاص (٤ أرقام)")}
+        hint={t("You'll use it to sign in. Avoid 1234 or 1111.", "ستستخدمه لتسجيل الدخول. تجنّب 1234 أو 1111.")}
+        length={4}
+        autoComplete="new-password"
+        value={pin}
+        onChange={setPin}
+        disabled={loading}
+      />
+      <PinField
+        lang={lang}
+        name="new-pin-confirm"
+        label={t("Type your PIN again", "أعد كتابة رمزك السري")}
+        length={4}
+        autoComplete="new-password"
+        value={pinConfirm}
+        onChange={setPinConfirm}
+        disabled={loading}
+      />
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${uid}-password`} className="text-sm font-semibold">
-          {t("Password", "كلمة المرور")}
-        </label>
-        <div className="relative">
-          <input
-            id={`${uid}-password`}
-            name="new-password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="new-password"
-            required
-            minLength={8}
-            dir="ltr"
-            value={password}
-            onChange={(e) => onPassword(e.target.value)}
-            disabled={loading}
-            aria-describedby={`${uid}-pw-hint`}
-            className={cn(fieldClass, "pe-14")}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword((v) => !v)}
-            aria-label={showPassword ? t("Hide password", "إخفاء كلمة المرور") : t("Show password", "إظهار كلمة المرور")}
-            aria-pressed={showPassword}
-            className="absolute end-1.5 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-white hover:text-[#241517] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
-          >
-            {showPassword ? <EyeOff aria-hidden="true" className="size-5" /> : <Eye aria-hidden="true" className="size-5" />}
-          </button>
-        </div>
-        <p id={`${uid}-pw-hint`} className="text-xs text-[var(--muted-foreground)]">
-          {t("At least 8 characters.", "٨ أحرف على الأقل.")}
-        </p>
-      </div>
-
-      {errorMsg ? (
-        <p role="alert" className="rounded-2xl border border-[#F6D3BC] bg-[#FFF4EC] px-4 py-3 text-sm font-medium text-[#9A3412]">
-          {errorMsg}
-        </p>
-      ) : null}
+      <ErrorNote message={errorMsg} />
 
       <button type="submit" disabled={loading} className={cn(pill.primary, "min-h-[52px] text-base")}>
         {loading ? <Spinner /> : null}
-        {loading ? t("Creating account…", "جارٍ إنشاء الحساب…") : t("Create account", "أنشئ حسابًا")}
+        {loading ? t("Joining…", "جارٍ الانضمام…") : t("Join the family", "انضم إلى العائلة")}
       </button>
-
-      <div className="flex items-center gap-3 text-xs text-[var(--muted-foreground)]" aria-hidden="true">
-        <span className="h-px flex-1 bg-[#ECE2DE]" />
-        {t("or", "أو")}
-        <span className="h-px flex-1 bg-[#ECE2DE]" />
-      </div>
-
-      <button type="button" onClick={onMagicLink} disabled={loading} className={cn(pill.outline, "min-h-[52px] text-base")}>
-        {t("Sign up with a magic link", "سجّل برابط سحري")}
-      </button>
-      <p className="-mt-2 text-center text-xs text-[var(--muted-foreground)]">
-        {t("No password needed. We email you a link to sign in.", "لا حاجة لكلمة مرور. نرسل لك رابط الدخول بالبريد.")}
-      </p>
 
       <p className="text-center text-sm text-[var(--muted-foreground)]">
         {t("Already have an account?", "لديك حساب بالفعل؟")}{" "}

@@ -25,13 +25,16 @@ type ProfileRow = {
   person_id: string | null;
   approved_at: string | null;
   is_super_admin: boolean;
+  login_method: "email" | "pin";
+  pin_must_change: boolean;
 };
 
 type AuthStatus = { email: string | null; email_confirmed_at: string | null };
 
 function toAccount(p: ProfileRow, auth: AuthStatus | undefined): MemberAccount {
   // auth.users is the live address; profiles.email is a sign-up-time copy.
-  const email = auth?.email ?? p.email;
+  // PIN accounts have only a placeholder address; never show it.
+  const email = p.login_method === "pin" ? null : (auth?.email ?? p.email);
   return {
     id: p.id,
     fullName: p.full_name ?? p.display_name ?? email?.split("@")[0] ?? "—",
@@ -43,6 +46,8 @@ function toAccount(p: ProfileRow, auth: AuthStatus | undefined): MemberAccount {
     personId: p.person_id,
     approved: isApproved(p),
     isSuperAdmin: p.is_super_admin,
+    loginMethod: p.login_method ?? "email",
+    pinMustChange: !!p.pin_must_change,
   };
 }
 
@@ -51,7 +56,7 @@ export async function loadMembersAdminData(supabase: Client): Promise<MembersAdm
   const [profilesRes, requestsRes, peopleRes, authRes, suggestionsRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, display_name, full_name, email, date_of_birth, created_at, role, person_id, approved_at, is_super_admin")
+      .select("id, display_name, full_name, email, date_of_birth, created_at, role, person_id, approved_at, is_super_admin, login_method, pin_must_change")
       .order("created_at", { ascending: false }),
     supabase
       .from("link_requests")
