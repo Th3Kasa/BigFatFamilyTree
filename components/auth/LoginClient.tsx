@@ -345,7 +345,7 @@ export function LoginClient({ member: initialMember, staleDevice }: LoginClientP
               ? t("Admins and invited members: sign in with your email and password.", "للمشرفين والمدعوّين: سجّل الدخول ببريدك وكلمة المرور.")
               : member
                 ? t("Type your PIN to continue.", "اكتب رمزك السري للمتابعة.")
-                : t("Your name, birthday and PIN. That's all.", "اسمك وتاريخ ميلادك ورمزك السري. هذا كل شيء.");
+                : t("Your first name and PIN. That's all.", "اسمك الأول ورمزك السري. هذا كل شيء.");
 
   const sentCopy =
     screen === "sent-reset"

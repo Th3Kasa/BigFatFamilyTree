@@ -11,6 +11,8 @@ let _limiters: {
   pinIp: Ratelimit;
   pinFail: Ratelimit;
   pinFailDay: Ratelimit;
+  pinFirst: Ratelimit;
+  pinFirstDay: Ratelimit;
   familyPin: Ratelimit;
 } | null = null;
 
@@ -45,6 +47,11 @@ function getLimiters() {
     pinIp: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, "15 m"), prefix: "rl:pin-ip" }),
     pinFail: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(5, "15 m"), prefix: "rl:pin-fail" }),
     pinFailDay: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "24 h"), prefix: "rl:pin-fail-day" }),
+    // Sign-in by first name + PIN: a first name alone is guessable, so tries are
+    // also capped per normalised first name (20 / 15 minutes, 50 / day), before
+    // the account is even resolved. Never reset on success.
+    pinFirst: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "15 m"), prefix: "rl:pin-first" }),
+    pinFirstDay: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(50, "24 h"), prefix: "rl:pin-first-day" }),
     familyPin: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(10, "1 h"), prefix: "rl:family-pin" }),
   };
   return _limiters;

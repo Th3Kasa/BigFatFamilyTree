@@ -10,6 +10,7 @@ import { writeAudit } from "@/lib/members/account-admin";
 import { getOrCreateFamilyPin } from "@/lib/auth/family-pin";
 import { constantTimeEqual, derivePinPassword, memberEmail } from "@/lib/auth/pin-crypto";
 import { accountLockKey, remainingDelayMs } from "@/lib/auth/pin-lockout";
+import { firstNameKey, resolvePinCandidates, type PinCandidate } from "@/lib/auth/pin-resolve";
 import {
   clearDeviceCookie,
   lookupRememberedDevice,
@@ -130,6 +131,11 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
   if (ipCheck.unavailable) return fail("busy", lang);
   if (!ipCheck.success) return fail("too_many_ip", lang);
 
+  // New-device sign-in by first name (+ optional last name / birthday).
+  if (!lastName || !dateOfBirth) {
+    return signInByFirstName({ firstName, lastName, dateOfBirth, pin, startedAt, lang, secret });
+  }
+
   // 2. Per account, keyed on the normalised name + birthday (the same key the
   // account is looked up by): 5 tries / 15 minutes and 10 tries / 24 hours.
   // Counted for names that do not exist too, so a lock reveals nothing.
@@ -143,6 +149,82 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
 
   // 3 + 4. Look the account up and try the derived password.
   const profile = await findPinProfile(nameKey, dateOfBirth);
+  const result = await attemptPinSignIn({ profile, lockId, gate, pin, startedAt, lang, secret });
+  if (result.ok && profile) await rememberDevice(profile.id);
+  return result;
+}
+
+/**
+ * Per normalised first name: 20 tries / 15 minutes and 50 / day, taken BEFORE
+ * the account is resolved. Fail closed. Not reset by a correct PIN.
+ */
+async function takeFirstNameAttempt(fkey: string): Promise<{ ok: true } | { ok: false; code: "busy" | "locked" | "locked_day" }> {
+  const id = sha(`first:${fkey}`);
+  const short = await checkLimitStrict("pinFirst", id);
+  if (short.unavailable) return { ok: false, code: "busy" };
+  if (!short.success) return { ok: false, code: "locked" };
+  const day = await checkLimitStrict("pinFirstDay", id);
+  if (day.unavailable) return { ok: false, code: "busy" };
+  if (!day.success) return { ok: false, code: "locked_day" };
+  return { ok: true };
+}
+
+/**
+ * First name + PIN (the birthday and last name are asked for only when needed).
+ *  * 0 matches: the usual dummy attempt, then the generic message;
+ *  * 1 match: attempt it, under that account's shared lockout;
+ *  * 2+ matches: need_birthday (or need_last_name when the birthday is also shared),
+ *    WITHOUT trying any PIN and without touching an account lockout. These still
+ *    count against the first-name and IP limiters and take the usual response time.
+ * A birthday given for a unique name must match too, otherwise it is a mismatch.
+ */
+async function signInByFirstName(args: {
+  firstName: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  pin: string;
+  startedAt: number;
+  lang: Lang;
+  secret: string;
+}): Promise<PinResult> {
+  const { firstName, lastName, dateOfBirth, pin, startedAt, lang, secret } = args;
+  const fkey = firstNameKey(firstName);
+
+  const firstGate = await takeFirstNameAttempt(fkey);
+  if (!firstGate.ok) {
+    await padTo(startedAt);
+    return fail(firstGate.code, lang);
+  }
+
+  const { data, error } = await createServiceClient()
+    .from("profiles")
+    .select("id, first_name, name_key, date_of_birth")
+    .eq("login_method", "pin");
+  if (error) {
+    console.error("[pin-signin] could not list PIN accounts:", error.message);
+    await padTo(startedAt);
+    return fail("busy", lang);
+  }
+
+  const resolution = resolvePinCandidates((data ?? []) as PinCandidate[], { firstName, lastName, dateOfBirth });
+  if (resolution.kind === "need_birthday" || resolution.kind === "need_last_name") {
+    await padTo(startedAt);
+    return fail(resolution.kind, lang);
+  }
+
+  const profile = resolution.kind === "one" ? { id: resolution.profile.id } : null;
+  // A real account shares its lockout with every other form. No account (or a
+  // mismatched birthday) is counted against a bucket of its own, so a lock reveals nothing.
+  const lockId =
+    resolution.kind === "one"
+      ? pinAccountLockId(resolution.profile.name_key, resolution.profile.date_of_birth)
+      : pinAccountLockId(`first:${fkey}`, dateOfBirth ?? "");
+  const gate = await takeAttempt(lockId);
+  if (!gate.ok) {
+    await padTo(startedAt);
+    return fail(gate.code, lang);
+  }
+
   const result = await attemptPinSignIn({ profile, lockId, gate, pin, startedAt, lang, secret });
   if (result.ok && profile) await rememberDevice(profile.id);
   return result;

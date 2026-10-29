@@ -13,10 +13,14 @@ type Props = {
   disabled?: boolean;
   /** Shown under the birthday field. */
   dobHint?: string;
+  /** Which of the last name / birthday fields to show (default: both). The first name is always shown. */
+  show?: { lastName?: boolean; dob?: boolean };
 };
 
 /** First name, last name and date of birth: the "username" of a PIN account. */
-export function IdentityFields({ lang, value, onChange, disabled, dobHint }: Props) {
+export function IdentityFields({ lang, value, onChange, disabled, dobHint, show }: Props) {
+  const showLast = show?.lastName ?? true;
+  const showDob = show?.dob ?? true;
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const uid = useId();
 
@@ -40,6 +44,7 @@ export function IdentityFields({ lang, value, onChange, disabled, dobHint }: Pro
           className={fieldClass}
         />
       </div>
+      {showLast ? (
       <div className="flex flex-col gap-1.5">
         <label htmlFor={`${uid}-last`} className="text-sm font-semibold">
           {t("Last name", "اسم العائلة")}
@@ -58,7 +63,10 @@ export function IdentityFields({ lang, value, onChange, disabled, dobHint }: Pro
           className={fieldClass}
         />
       </div>
-      <DobSelect lang={lang} value={value.dob} onChange={(dob) => onChange({ ...value, dob })} disabled={disabled} hint={dobHint} />
+      ) : null}
+      {showDob ? (
+        <DobSelect lang={lang} value={value.dob} onChange={(dob) => onChange({ ...value, dob })} disabled={disabled} hint={dobHint} />
+      ) : null}
     </>
   );
 }

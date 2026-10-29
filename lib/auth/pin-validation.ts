@@ -59,6 +59,14 @@ export const PIN_MESSAGES = {
     "To set a new PIN without the old one, sign in with an email link first (\"Admins: sign in with email\"), then try again within 15 minutes.",
     "لتعيين رمز جديد دون القديم، ادخل أولًا عبر رابط البريد الإلكتروني («للمشرفين: الدخول بالبريد»)، ثم حاول خلال ١٥ دقيقة.",
   ],
+  need_birthday: [
+    "We need your birthday too, as more than one person has this name.",
+    "نحتاج تاريخ ميلادك أيضًا، لأن أكثر من شخص يحمل هذا الاسم.",
+  ],
+  need_last_name: [
+    "We need your last name too, as more than one person has this name and birthday.",
+    "نحتاج اسم عائلتك أيضًا، لأن أكثر من شخص يحمل هذا الاسم وتاريخ الميلاد.",
+  ],
   device_unknown: [
     "Please sign in with your name, birthday and PIN.",
     "يرجى تسجيل الدخول باسمك وتاريخ ميلادك ورمزك السري.",
@@ -161,10 +169,19 @@ export const pinSchema = z.preprocess(digitsPreprocess, z.string().regex(/^\d{4}
 
 export const familyPinSchema = z.preprocess(digitsPreprocess, z.string().regex(/^\d{6}$/, "family_pin_format"));
 
+/** An optional field: missing, null or "" all mean "not given". */
+const optionalField = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === undefined || v === null || (typeof v === "string" && v.trim() === "") ? undefined : v), schema.optional());
+
+/**
+ * Sign-in on a new device: first name + PIN. The last name and birthday are
+ * optional; the server asks for them (need_birthday / need_last_name) only when
+ * more than one person has the first name. Giving both is the original full form.
+ */
 export const pinSignInSchema = z.object({
   firstName: pinNameSchema,
-  lastName: pinNameSchema,
-  dateOfBirth: pinDobSchema,
+  lastName: optionalField(pinNameSchema),
+  dateOfBirth: optionalField(pinDobSchema),
   pin: pinSchema,
 });
 export type PinSignInInput = z.input<typeof pinSignInSchema>;
