@@ -4,13 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReactFlowProvider, ViewportPortal, useEdgesState, useNodesInitialized, useNodesState, useReactFlow, useStore, type Edge, type Node, type NodeChange, type NodeMouseHandler, type OnMoveStart, type OnNodeDrag } from "@xyflow/react";
 import { toast } from "sonner";
-import { Hand, LayoutGrid, LocateFixed, Maximize2, Minus, MousePointer2, Plus, Route } from "lucide-react";
+import { LayoutGrid, LocateFixed, Maximize2, Minus, Plus, Route } from "lucide-react";
 import { FamilyGraph } from "./FamilyGraph";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { FamilyHub } from "@/components/family/FamilyHub";
 import { FamilyView } from "@/components/family/FamilyView";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { saveCardOffset, autoLayoutAll } from "@/lib/actions/canvas";
 import { clusterMates, manualOffset, nudgeFor, ROW_HEIGHT } from "@/lib/graph/layout";
 import { buildFamilyModel } from "@/lib/graph/units";
@@ -43,7 +42,6 @@ type Props = {
   meId?: string | null;
 };
 
-type ToolMode = "select" | "pan";
 type View = "tree" | "family";
 
 /** Width the desktop family panel covers, so a focused card isn't hidden behind it. */
@@ -98,10 +96,8 @@ function ViewControls({ lang, onZoomOut, onZoomIn, onFit, onFocusPath, onCenterM
 }
 
 /** Editor tools: pointer vs. hand mode, and (admins) a labelled "Tidy up". */
-function EditTools({ lang, mode, onMode, onTidy, canTidy, moved, busy, besidePanel }: {
+function EditTools({ lang, onTidy, canTidy, moved, busy, besidePanel }: {
   lang: "ar" | "en";
-  mode: ToolMode;
-  onMode: (m: ToolMode) => void;
   onTidy: () => void;
   canTidy: boolean;
   /** Cards nudged by hand; "Tidy up" puts them back. */
@@ -110,10 +106,6 @@ function EditTools({ lang, mode, onMode, onTidy, canTidy, moved, busy, besidePan
   besidePanel?: boolean;
 }) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
-  const tools = [
-    { id: "select" as const, icon: MousePointer2, label: t("Select", "تحديد") },
-    { id: "pan" as const, icon: Hand, label: t("Move around", "تحريك") },
-  ];
   return (
     <div className={cn("absolute end-3 top-3 z-20 flex items-start gap-2 md:end-4 md:top-4", besidePanel && "md:end-[404px]")}>
       {canTidy && (
@@ -133,38 +125,6 @@ function EditTools({ lang, mode, onMode, onTidy, canTidy, moved, busy, besidePan
           )}
         </button>
       )}
-      <TooltipProvider delayDuration={300}>
-        <div
-          role="toolbar"
-          aria-orientation="vertical"
-          aria-label={t("Editing tools", "أدوات التحرير")}
-          className="flex flex-col gap-1 rounded-full border border-[var(--border-strong)] bg-[var(--card)] p-1 shadow-[var(--shadow-floating)]"
-        >
-          {tools.map((tool) => {
-            const Icon = tool.icon;
-            const active = tool.id === mode;
-            return (
-              <Tooltip key={tool.id}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => onMode(tool.id)}
-                    aria-label={tool.label}
-                    aria-pressed={active}
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-                      active ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side={lang === "ar" ? "right" : "left"}>{tool.label}</TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
-      </TooltipProvider>
     </div>
   );
 }
@@ -228,7 +188,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
   const me = useCurrentPerson();
   const meId = meIdProp ?? me?.id ?? null;
   const desktop = useMediaQuery(DESKTOP_QUERY, true);
-  const { fitView, zoomIn, zoomOut, setCenter, getZoom } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, setCenter, getZoom, getViewport, setViewport } = useReactFlow();
   const nodesReady = useNodesInitialized();
 
   const relationships = useMemo(() => relationshipsFromEdges(initialEdges), [initialEdges]);
@@ -269,7 +229,6 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hub, setHub] = useState<{ personId: string; slot: RelativeSlot | null; nonce: number } | null>(null);
-  const [toolMode, setToolMode] = useState<ToolMode>("select");
   const [tidyConfirm, setTidyConfirm] = useState(false);
   const focusHubOnOpen = useRef(false);
 
@@ -309,6 +268,41 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
   const fitAll = useCallback((duration = 300) => {
     fitView({ ...FIT_ALL, duration });
   }, [fitView]);
+
+  // Keyboard: arrows (or WASD) move around, + / − zoom, 0 or F fits the whole tree.
+  // Ignored while typing, on buttons, and inside dialogs or the family panel's fields.
+  useEffect(() => {
+    if (view !== "tree") return;
+    const STEP = 120;
+    const pan: Record<string, [number, number]> = {
+      arrowleft: [STEP, 0], a: [STEP, 0], arrowright: [-STEP, 0], d: [-STEP, 0],
+      arrowup: [0, STEP], w: [0, STEP], arrowdown: [0, -STEP], s: [0, -STEP],
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(el.tagName) || el.closest('[role="dialog"]'))) return;
+      const k = e.key.toLowerCase();
+      if (pan[k]) {
+        const v = getViewport();
+        setViewport({ x: v.x + pan[k][0], y: v.y + pan[k][1], zoom: v.zoom }, { duration: 120 });
+        userMoved.current = true;
+      } else if (k === "+" || k === "=") {
+        zoomIn({ duration: 150 });
+        userMoved.current = true;
+      } else if (k === "-" || k === "_") {
+        zoomOut({ duration: 150 });
+        userMoved.current = true;
+      } else if (k === "0" || k === "f") {
+        fitAll(300);
+      } else {
+        return;
+      }
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, getViewport, setViewport, zoomIn, zoomOut, fitAll]);
 
   /** Centre a person, leaving room for the desktop family panel beside them. */
   const centreOn = useCallback(
@@ -598,15 +592,14 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
           onNodeClick={onNodeClick}
           onPaneClick={() => hub && view === "tree" && closeHub()}
           onMoveStart={onMoveStart}
-          panOnDrag={toolMode === "pan" ? [0, 1] : [1, 2]}
-          selectionMode={canEdit && toolMode === "select"}
+          panOnDrag
           nodesDraggable={canEdit}
         >
           {view === "tree" && <RowLabels nodes={nodes as unknown as GraphNode[]} lang={lang} />}
         </FamilyGraph>
 
         {canEdit && view === "tree" && (
-          <EditTools lang={lang} mode={toolMode} onMode={setToolMode} onTidy={() => setTidyConfirm(true)} canTidy={isAdmin} moved={moved} busy={tidying} besidePanel={!!hub && desktop} />
+          <EditTools lang={lang} onTidy={() => setTidyConfirm(true)} canTidy={isAdmin} moved={moved} busy={tidying} besidePanel={!!hub && desktop} />
         )}
 
         <ViewControls
