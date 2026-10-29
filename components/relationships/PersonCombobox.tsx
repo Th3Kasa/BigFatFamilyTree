@@ -15,7 +15,8 @@ type Props = {
   lang: Lang;
 };
 
-const MAX_OPTIONS = 50;
+/** Rows drawn at once; the rest are reached by typing more of the name (the list says so). */
+const MAX_OPTIONS = 100;
 
 function initials(p: ViewPerson, lang: Lang) {
   const name = personName(p, lang, true);
@@ -47,7 +48,9 @@ export function PersonCombobox({ label, people, value, onChange, lang }: Props) 
   const selected = value ? people.find((p) => p.id === value) : undefined;
   const shown = editing ? query : selected ? personName(selected, lang, true) : "";
 
-  const options = useMemo(() => searchPeople(people, editing ? query : "", MAX_OPTIONS), [people, editing, query]);
+  const matches = useMemo(() => searchPeople(people, editing ? query : ""), [people, editing, query]);
+  const options = matches.length > MAX_OPTIONS ? matches.slice(0, MAX_OPTIONS) : matches;
+  const hidden = matches.length - options.length;
   const noMatches = open && options.length === 0;
 
   // Keep the highlighted option visible while arrowing through a long list.
@@ -119,7 +122,7 @@ export function PersonCombobox({ label, people, value, onChange, lang }: Props) 
   }
 
   const countText =
-    lang === "ar" ? `تم العثور على ${options.length}` : `${options.length} ${options.length === 1 ? "person" : "people"} found`;
+    lang === "ar" ? `تم العثور على ${matches.length}` : `${matches.length} ${matches.length === 1 ? "person" : "people"} found`;
 
   return (
     <div className="relative">
@@ -237,6 +240,13 @@ export function PersonCombobox({ label, people, value, onChange, lang }: Props) 
                   <span className="truncate">{personName(p, lang, true)}</span>
                 </li>
               ))}
+              {hidden > 0 && (
+                <li role="presentation" className="px-3 py-2.5 text-xs text-[var(--muted-foreground)]">
+                  {lang === "ar"
+                    ? `و${hidden} آخرون. اكتب المزيد من الاسم لتضييق النتائج.`
+                    : `${hidden} more. Type more of the name to narrow the list.`}
+                </li>
+              )}
             </ul>
           )}
         </div>
