@@ -19,13 +19,15 @@ type Props = {
   name: string;
   disabled?: boolean;
   invalid?: boolean;
+  /** Focus the field when it appears (a step that just slid in). */
+  autoFocus?: boolean;
 };
 
 /**
  * A big numeric-keypad field for a PIN. Digits only (Arabic-Indic digits are
  * converted), show/hide toggle, always left-to-right so digits never reorder in Arabic.
  */
-export function PinField({ lang, label, hint, value, onChange, length, autoComplete, name, disabled, invalid }: Props) {
+export function PinField({ lang, label, hint, value, onChange, length, autoComplete, name, disabled, invalid, autoFocus }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const uid = useId();
   const [shown, setShown] = useState(false);
@@ -49,6 +51,7 @@ export function PinField({ lang, label, hint, value, onChange, length, autoCompl
           value={value}
           onChange={(e) => onChange(normaliseDigits(e.target.value).replace(/\D/g, "").slice(0, length))}
           disabled={disabled}
+          autoFocus={autoFocus}
           aria-invalid={invalid || undefined}
           aria-describedby={hint ? `${uid}-hint` : undefined}
           placeholder={"•".repeat(length)}

@@ -24,7 +24,7 @@ export type RememberedDevice = {
   deviceId: string;
   profileId: string;
   nameKey: string;
-  dateOfBirth: string;
+  dateOfBirth: string | null;
   firstName: string;
   /** Initials for the avatar, e.g. "AM". The last name itself is not exposed. */
   initials: string;

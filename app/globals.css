@@ -261,3 +261,7 @@ html[dir="rtl"] body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Join the family: each step slides in once the one before it is done. */
+@keyframes step-in { 0% { transform: translateY(14px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+.step-in { animation: step-in .4s ease-out both; }

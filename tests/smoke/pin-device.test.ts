@@ -97,11 +97,11 @@ describe("resolving a stored device", () => {
     expect(deviceStatus({ last_used_at: daysAgo(366) }, NOW)).toBe("expired");
     expect(deviceStatus({ last_used_at: "garbage" }, NOW)).toBe("expired");
   });
-  it("only a PIN profile with a name key and birthday can be resolved", () => {
+  it("only a PIN profile with a name key can be resolved (the birthday is optional)", () => {
     expect(isUsablePinProfile({ login_method: "pin", name_key: "a b", date_of_birth: "1990-01-01" })).toBe(true);
     expect(isUsablePinProfile({ login_method: "email", name_key: "a b", date_of_birth: "1990-01-01" })).toBe(false);
     expect(isUsablePinProfile({ login_method: "pin", name_key: null, date_of_birth: "1990-01-01" })).toBe(false);
-    expect(isUsablePinProfile({ login_method: "pin", name_key: "a b", date_of_birth: null })).toBe(false);
+    expect(isUsablePinProfile({ login_method: "pin", name_key: "a", date_of_birth: null })).toBe(true);
     expect(isUsablePinProfile(null)).toBe(false);
   });
 });

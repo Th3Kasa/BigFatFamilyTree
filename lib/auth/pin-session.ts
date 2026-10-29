@@ -10,7 +10,8 @@ import { writeAudit } from "@/lib/members/account-admin";
 import { getOrCreateFamilyPin } from "@/lib/auth/family-pin";
 import { constantTimeEqual, derivePinPassword, memberEmail } from "@/lib/auth/pin-crypto";
 import { accountLockKey, remainingDelayMs } from "@/lib/auth/pin-lockout";
-import { firstNameKey, resolvePinCandidates, type PinCandidate } from "@/lib/auth/pin-resolve";
+import { checkJoinName, firstNameKey, resolvePinCandidates, type PinCandidate } from "@/lib/auth/pin-resolve";
+import { issueJoinTicket, verifyJoinTicket } from "@/lib/auth/join-ticket";
 import {
   clearDeviceCookie,
   lookupRememberedDevice,
@@ -21,9 +22,12 @@ import {
 import {
   changePinSchema,
   firstIssueCode,
+  familyPinSchema,
   isDuplicateIdentityError,
   makeNameKey,
+  normaliseName,
   pinJoinSchema,
+  pinNameSchema,
   pinMessage,
   pinSchema,
   pinSignInSchema,
@@ -71,9 +75,12 @@ export function pinUserLockId(userId: string): string {
   return sha(`user:${userId}`);
 }
 
-/** The Redis identifier of one PIN account's lockout counters (never the raw name or birthday). */
-export function pinAccountLockId(nameKey: string, dateOfBirth: string): string {
-  return sha(accountLockKey(nameKey, dateOfBirth));
+/**
+ * The Redis identifier of one PIN account's lockout counters (never the raw name
+ * or birthday). An account that joined without a birthday uses an empty one.
+ */
+export function pinAccountLockId(nameKey: string, dateOfBirth: string | null): string {
+  return sha(accountLockKey(nameKey, dateOfBirth ?? ""));
 }
 
 type AttemptGate =
@@ -154,6 +161,19 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
   return result;
 }
 
+/** Every PIN account's identity (a few hundred rows at most). Null when the database could not be read. */
+async function listPinCandidates(): Promise<PinCandidate[] | null> {
+  const { data, error } = await createServiceClient()
+    .from("profiles")
+    .select("id, first_name, name_key, date_of_birth")
+    .eq("login_method", "pin");
+  if (error) {
+    console.error("[pin] could not list PIN accounts:", error.message);
+    return null;
+  }
+  return (data ?? []) as PinCandidate[];
+}
+
 /**
  * Per normalised first name: 20 tries / 15 minutes and 50 / day, taken BEFORE
  * the account is resolved. Fail closed. Not reset by a correct PIN.
@@ -196,17 +216,13 @@ async function signInByFirstName(args: {
     return fail(firstGate.code, lang);
   }
 
-  const { data, error } = await createServiceClient()
-    .from("profiles")
-    .select("id, first_name, name_key, date_of_birth")
-    .eq("login_method", "pin");
-  if (error) {
-    console.error("[pin-signin] could not list PIN accounts:", error.message);
+  const candidates = await listPinCandidates();
+  if (!candidates) {
     await padTo(startedAt);
     return fail("busy", lang);
   }
 
-  const resolution = resolvePinCandidates((data ?? []) as PinCandidate[], { firstName, lastName, dateOfBirth });
+  const resolution = resolvePinCandidates(candidates, { firstName, lastName, dateOfBirth });
   if (resolution.kind === "need_birthday" || resolution.kind === "need_last_name") {
     await padTo(startedAt);
     return fail(resolution.kind, lang);
@@ -226,8 +242,32 @@ async function signInByFirstName(args: {
   }
 
   const result = await attemptPinSignIn({ profile, lockId, gate, pin, startedAt, lang, secret });
-  if (result.ok && profile) await rememberDevice(profile.id);
+  if (result.ok && profile) {
+    await rememberDevice(profile.id);
+    // Reached through the "no birthday" fallback: keep the birthday they just
+    // gave (proven by the PIN), so from now on that first name is matched on
+    // exact birthdays only and a namesake's typo can never reach this account.
+    if (resolution.kind === "one" && !resolution.profile.date_of_birth && dateOfBirth) {
+      await saveFallbackBirthday(resolution.profile, dateOfBirth);
+    }
+  }
   return result;
+}
+
+/** Best effort: skipped if another account already has this name + birthday. */
+async function saveFallbackBirthday(profile: { id: string; name_key: string }, dateOfBirth: string): Promise<void> {
+  const { error } = await createServiceClient()
+    .from("profiles")
+    .update({ date_of_birth: dateOfBirth })
+    .eq("id", profile.id)
+    .is("date_of_birth", null);
+  if (error) {
+    if (!isDuplicateIdentityError(error)) console.error("[pin-signin] could not save the birthday:", error.message);
+    return;
+  }
+  // Its lockout key moves from (name, no birthday) to (name, birthday).
+  await clearPinLockout(pinAccountLockId(profile.name_key, null));
+  await writeAudit({ actorId: profile.id, rowId: profile.id, operation: "update", before: null, after: { event: "pin_birthday_added" } });
 }
 
 /**
@@ -328,41 +368,109 @@ export async function signInWithDevice(rawPin: string, lang: Lang): Promise<PinR
 }
 
 // ── join ─────────────────────────────────────────────────────────────────────
+//
+// Three steps, each re-checked on the server:
+//  1. checkFamilyPinForJoin: the family PIN, 10 tries / hour / IP; a right
+//     answer returns a 30-minute ticket (lib/auth/join-ticket.ts).
+//  2. checkJoinFirstName: with the ticket, is this first name free, or does
+//     the person need to add a birthday to be told apart?
+//  3. joinWithPin: with the ticket, first name (+ birthday when needed) and PIN.
 
-export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinResult> {
-  const parsed = pinJoinSchema.safeParse(raw);
-  if (!parsed.success) return fail(firstIssueCode(parsed.error), lang);
-  const { firstName, lastName, dateOfBirth, familyPin, pin } = parsed.data;
-  const secret = env().SUPABASE_SERVICE_ROLE_KEY;
+export type JoinStepResult<T> = ({ ok: true } & T) | { ok: false; code: PinMessageCode; error: string };
 
-  const ip = await clientIp();
-  const ipId = sha(`ip:${ip}`);
+const failStep = (code: PinMessageCode, lang: Lang) => ({ ok: false as const, code, error: pinMessage(code, lang) });
 
-  // Cap how many accounts one connection can try to create.
-  const ipCheck = await checkLimitStrict("pinIp", ipId);
-  if (ipCheck.unavailable) return fail("busy", lang);
-  if (!ipCheck.success) return fail("too_many_ip", lang);
+export async function checkFamilyPinForJoin(rawFamilyPin: string, lang: Lang): Promise<JoinStepResult<{ ticket: string }>> {
+  const parsed = familyPinSchema.safeParse(rawFamilyPin);
+  if (!parsed.success) return failStep(firstIssueCode(parsed.error), lang);
 
-  // Family PIN: 10 tries / hour / IP, taken BEFORE comparing (atomic, so
-  // parallel requests cannot all pass a "tries left" read); constant time.
-  const famCheck = await checkLimitStrict("familyPin", ipId);
-  if (famCheck.unavailable) return fail("busy", lang);
-  if (!famCheck.success) return fail("too_many_ip", lang);
+  // 10 tries / hour / IP, taken BEFORE comparing (atomic, so parallel requests
+  // cannot all pass a "tries left" read); constant time.
+  const famCheck = await checkLimitStrict("familyPin", sha(`ip:${await clientIp()}`));
+  if (famCheck.unavailable) return failStep("busy", lang);
+  if (!famCheck.success) return failStep("too_many_ip", lang);
 
   let expected: string;
   try {
     expected = await getOrCreateFamilyPin();
   } catch (e) {
     console.error("[pin-join] family PIN unavailable:", e instanceof Error ? e.message : e);
-    return fail("failed", lang);
+    return failStep("failed", lang);
   }
-  if (!constantTimeEqual(familyPin, expected)) return fail("family_pin_wrong", lang);
+  if (!constantTimeEqual(parsed.data, expected)) return failStep("family_pin_wrong", lang);
+  return { ok: true, ticket: issueJoinTicket(expected, env().SUPABASE_SERVICE_ROLE_KEY) };
+}
 
-  const nameKey = makeNameKey(firstName, lastName);
-  if (await findPinProfile(nameKey, dateOfBirth)) return fail("duplicate", lang);
+/** The ticket is valid for the current family PIN. */
+async function ticketIsValid(ticket: string): Promise<boolean | "unavailable"> {
+  try {
+    return verifyJoinTicket(ticket, await getOrCreateFamilyPin(), env().SUPABASE_SERVICE_ROLE_KEY);
+  } catch (e) {
+    console.error("[pin-join] family PIN unavailable:", e instanceof Error ? e.message : e);
+    return "unavailable";
+  }
+}
+
+/**
+ * Does this first name need a birthday? Only for holders of a valid ticket, so
+ * strangers cannot ask which first names have accounts. Counted per IP.
+ */
+export async function checkJoinFirstName(
+  raw: { ticket: unknown; firstName: unknown },
+  lang: Lang,
+): Promise<JoinStepResult<{ needBirthday: boolean }>> {
+  const name = pinNameSchema.safeParse(raw.firstName);
+  if (!name.success) return failStep(firstIssueCode(name.error), lang);
+
+  const ipCheck = await checkLimitStrict("pinIp", sha(`ip:${await clientIp()}`));
+  if (ipCheck.unavailable) return failStep("busy", lang);
+  if (!ipCheck.success) return failStep("too_many_ip", lang);
+
+  const valid = typeof raw.ticket === "string" ? await ticketIsValid(raw.ticket) : false;
+  if (valid === "unavailable") return failStep("failed", lang);
+  if (!valid) return failStep("join_expired", lang);
+
+  const candidates = await listPinCandidates();
+  if (!candidates) return failStep("busy", lang);
+  return { ok: true, needBirthday: checkJoinName(candidates, name.data).kind !== "free" };
+}
+
+export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinResult> {
+  const parsed = pinJoinSchema.safeParse(raw);
+  if (!parsed.success) return fail(firstIssueCode(parsed.error), lang);
+  const { ticket, firstName, dateOfBirth, pin } = parsed.data;
+  const secret = env().SUPABASE_SERVICE_ROLE_KEY;
+
+  // Cap how many accounts one connection can try to create.
+  const ipCheck = await checkLimitStrict("pinIp", sha(`ip:${await clientIp()}`));
+  if (ipCheck.unavailable) return fail("busy", lang);
+  if (!ipCheck.success) return fail("too_many_ip", lang);
+
+  const valid = await ticketIsValid(ticket);
+  if (valid === "unavailable") return fail("failed", lang);
+  if (!valid) return fail("join_expired", lang);
+
+  // Re-decide here (never trust the browser): a birthday is required when the
+  // first name is taken, and two people may not share first name + birthday.
+  const candidates = await listPinCandidates();
+  if (!candidates) return fail("busy", lang);
+  const check = checkJoinName(candidates, firstName, dateOfBirth);
+  if (check.kind === "need_birthday") return fail("join_need_birthday", lang);
+  if (check.kind === "taken") return fail("duplicate", lang);
+
+  // New accounts are keyed on the first name alone (older ones on first + last).
+  const nameKey = normaliseName(firstName);
+  const dob = dateOfBirth ?? null;
+  // Lost a race with someone joining under the same name at the same moment.
+  const raceCode: PinMessageCode = dob ? "duplicate" : "join_need_birthday";
+
+  // A ticket can be reused for 30 minutes, so cap the accounts one connection
+  // can actually create (a household joining together fits; a flood does not).
+  const joinCheck = await checkLimitStrict("pinJoin", sha(`ip:${await clientIp()}`));
+  if (joinCheck.unavailable) return fail("busy", lang);
+  if (!joinCheck.success) return fail("too_many_ip", lang);
 
   const svc = createServiceClient();
-  const fullName = `${firstName} ${lastName}`;
   // The password starts as random bytes nobody knows; the real (derived) one is
   // set as soon as we know the user id, which the derivation needs.
   const { data: created, error: createErr } = await svc.auth.admin.createUser({
@@ -370,19 +478,20 @@ export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinRes
     email_confirm: true,
     password: randomBytes(32).toString("base64url"),
     user_metadata: {
-      full_name: fullName,
+      full_name: firstName,
       first_name: firstName,
-      last_name: lastName,
-      date_of_birth: dateOfBirth,
+      ...(dob ? { date_of_birth: dob } : {}),
       login: "pin",
     },
     // app_metadata cannot be set from a browser; handle_new_user trusts only this.
     app_metadata: { login: "pin", name_key: nameKey },
   });
   if (createErr || !created.user) {
-    if (isDuplicateIdentityError(createErr) || (await findPinProfile(nameKey, dateOfBirth))) {
-      return fail("duplicate", lang);
-    }
+    if (isDuplicateIdentityError(createErr)) return fail(raceCode, lang);
+    // GoTrue reports a trigger's unique violation as a plain "Database error":
+    // look again in case someone with this name joined at the same moment.
+    const now = await listPinCandidates();
+    if (now && checkJoinName(now, firstName, dateOfBirth).kind !== "free") return fail(raceCode, lang);
     console.error("[pin-join] createUser failed:", createErr?.message);
     return fail("failed", lang);
   }
@@ -397,16 +506,16 @@ export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinRes
       login_method: "pin",
       name_key: nameKey,
       first_name: firstName,
-      last_name: lastName,
-      date_of_birth: dateOfBirth,
-      full_name: fullName,
-      display_name: fullName,
+      last_name: null,
+      date_of_birth: dob,
+      full_name: firstName,
+      display_name: firstName,
       email: null,
     })
     .eq("id", userId);
   if (profileErr) {
     await svc.auth.admin.deleteUser(userId);
-    if (isDuplicateIdentityError(profileErr)) return fail("duplicate", lang);
+    if (isDuplicateIdentityError(profileErr)) return fail(raceCode, lang);
     console.error("[pin-join] could not mark the profile as PIN:", profileErr.message);
     return fail("failed", lang);
   }
@@ -425,7 +534,7 @@ export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinRes
     rowId: userId,
     operation: "insert",
     before: null,
-    after: { event: "pin_join", name: fullName },
+    after: { event: "pin_join", name: firstName },
   });
 
   const supabase = await createClient();

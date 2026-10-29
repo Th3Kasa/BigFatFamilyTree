@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { derivePinPassword } from "@/lib/auth/pin-crypto";
-import { resolvePinCandidates, type PinCandidate } from "@/lib/auth/pin-resolve";
+import { checkJoinName, resolvePinCandidates, type PinCandidate } from "@/lib/auth/pin-resolve";
+import { issueJoinTicket, JOIN_TICKET_TTL_MS, verifyJoinTicket } from "@/lib/auth/join-ticket";
 import { pinSignInSchema } from "@/lib/auth/pin-validation";
 
 // New-device sign-in by first name + PIN, against an in-memory account list and
@@ -25,10 +26,14 @@ const PEOPLE: P[] = [
   person("s2", "Samuel", "Khoury", "1990-02-02"),
   person("r1", "Rosa", "Haddad", "2000-01-01"),
   person("r2", "Rosa", "Nassif", "2000-01-01"),
+  // Joined with a first name only (it was free then), and a later Nabil who had to add a birthday.
+  { id: "n1", first_name: "Nabil", last_name: "", name_key: "nabil", date_of_birth: null, login_method: "pin" },
+  person("n2", "Nabil", "Saad", "1985-03-03"),
 ];
 
 const counters = new Map<string, number>();
-const LIMITS: Record<string, number> = { pinIp: 10_000, pinFail: 5, pinFailDay: 10, pinFirst: 20, pinFirstDay: 50, familyPin: 10 };
+const LIMITS: Record<string, number> = { pinIp: 10_000, pinFail: 5, pinFailDay: 10, pinFirst: 20, pinFirstDay: 50, familyPin: 10, pinJoin: 5 };
+const updates: Array<Record<string, unknown>> = [];
 const signInCalls = { n: 0 };
 const pad = vi.fn((_a: number, _b: number) => 0);
 
@@ -51,6 +56,8 @@ vi.mock("@/lib/supabase/service", () => ({
       const filters: Array<(r: P) => boolean> = [];
       const q = {
         select: () => q,
+        update: (patch: Record<string, unknown>) => (updates.push(patch), q),
+        is: () => q,
         eq: (k: keyof P, v: unknown) => (filters.push((r) => r[k] === v), q),
         maybeSingle: async () => ({ data: PEOPLE.find((r) => filters.every((f) => f(r))) ?? null }),
         then: (res: (v: unknown) => unknown) => res({ data: PEOPLE.filter((r) => filters.every((f) => f(r))), error: null }),
@@ -93,6 +100,7 @@ const accountCounters = () => [...counters.keys()].filter((k) => k.startsWith("p
 beforeEach(() => {
   counters.clear();
   signInCalls.n = 0;
+  updates.length = 0;
   pad.mockClear();
 });
 
@@ -225,5 +233,87 @@ describe("limits on the first-name path", () => {
     expect(await signInWithPin(full(GOOD_PIN), "en")).toMatchObject({ ok: false, code: "locked" });
     expect(await signInWithPin(quick("Adel"), "en")).toMatchObject({ ok: false, code: "locked" });
     expect(signInCalls.n).toBe(5);
+  });
+});
+
+describe("members who joined without a birthday", () => {
+  it("resolve by first name; a birthday nobody has falls back to the one without a birthday", () => {
+    expect(resolvePinCandidates(PEOPLE, { firstName: "Nabil" })).toEqual({ kind: "need_birthday" });
+    expect(resolvePinCandidates(PEOPLE, { firstName: "Nabil", dateOfBirth: "1985-03-03" })).toMatchObject({ kind: "one", profile: { id: "n2" } });
+    expect(resolvePinCandidates(PEOPLE, { firstName: "Nabil", dateOfBirth: "1960-06-06" })).toMatchObject({ kind: "one", profile: { id: "n1" } });
+    const alone = PEOPLE.filter((p) => p.id === "n1");
+    expect(resolvePinCandidates(alone, { firstName: "nabil" })).toMatchObject({ kind: "one", profile: { id: "n1" } });
+  });
+
+  it("sign in with first name + birthday + PIN; a wrong PIN is the generic mismatch", async () => {
+    const { signInWithPin } = await import("@/lib/auth/pin-session");
+    expect(await signInWithPin(quick("Nabil", GOOD_PIN, { dateOfBirth: "1960-06-06" }), "en")).toMatchObject({ ok: true });
+    // The birthday is kept, so the fallback is used only once.
+    expect(updates).toContainEqual({ date_of_birth: "1960-06-06" });
+    expect(await signInWithPin(quick("Nabil", "9999", { dateOfBirth: "1960-06-06" }), "en")).toMatchObject({ ok: false, code: "generic_signin" });
+  });
+});
+
+describe("join: is this first name free?", () => {
+  it("free, needs a birthday, or taken by someone with the same birthday", () => {
+    expect(checkJoinName(PEOPLE, "Zed")).toEqual({ kind: "free" });
+    expect(checkJoinName(PEOPLE, " adel ")).toEqual({ kind: "need_birthday" });
+    expect(checkJoinName(PEOPLE, "Samuel", "1999-01-01")).toEqual({ kind: "free" });
+    expect(checkJoinName(PEOPLE, "Samuel", "1970-05-05")).toEqual({ kind: "taken" });
+    expect(checkJoinName(PEOPLE, "Nabil")).toEqual({ kind: "need_birthday" });
+  });
+});
+
+describe("join ticket", () => {
+  const now = 1_800_000_000_000;
+  it("is valid for 30 minutes with the same family PIN and secret", () => {
+    const ticket = issueJoinTicket("123456", SECRET, now);
+    expect(verifyJoinTicket(ticket, "123456", SECRET, now)).toBe(true);
+    expect(verifyJoinTicket(ticket, "123456", SECRET, now + JOIN_TICKET_TTL_MS - 1)).toBe(true);
+    expect(verifyJoinTicket(ticket, "123456", SECRET, now + JOIN_TICKET_TTL_MS)).toBe(false);
+  });
+  it("dies when the family PIN changes, and cannot be forged or stretched", () => {
+    const ticket = issueJoinTicket("123456", SECRET, now);
+    const [exp, sig] = ticket.split(".");
+    expect(verifyJoinTicket(ticket, "654321", SECRET, now)).toBe(false);
+    expect(verifyJoinTicket(ticket, "123456", "other-secret", now)).toBe(false);
+    expect(verifyJoinTicket(`${Number(exp) + 60_000}.${sig}`, "123456", SECRET, now)).toBe(false);
+    expect(verifyJoinTicket(`${exp}.${sig.slice(0, -1)}${sig.endsWith("A") ? "B" : "A"}`, "123456", SECRET, now)).toBe(false);
+    expect(verifyJoinTicket("", "123456", SECRET, now)).toBe(false);
+    expect(verifyJoinTicket("garbage", "123456", SECRET, now)).toBe(false);
+  });
+});
+
+describe("join steps on the server", () => {
+  it("the family PIN step gives a ticket only for the right PIN", async () => {
+    const { checkFamilyPinForJoin } = await import("@/lib/auth/pin-session");
+    expect(await checkFamilyPinForJoin("111111", "en")).toMatchObject({ ok: false, code: "family_pin_wrong" });
+    expect(await checkFamilyPinForJoin("12345", "en")).toMatchObject({ ok: false, code: "family_pin_format" });
+    const res = await checkFamilyPinForJoin("123456", "en");
+    expect(res.ok && verifyJoinTicket(res.ticket, "123456", SECRET)).toBe(true);
+  });
+
+  it("the family PIN step is capped at 10 tries per connection", async () => {
+    const { checkFamilyPinForJoin } = await import("@/lib/auth/pin-session");
+    for (let i = 0; i < 10; i++) await checkFamilyPinForJoin("111111", "en");
+    expect(await checkFamilyPinForJoin("123456", "en")).toMatchObject({ ok: false, code: "too_many_ip" });
+  });
+
+  it("the first-name step needs a valid ticket, then says whether a birthday is needed", async () => {
+    const { checkJoinFirstName } = await import("@/lib/auth/pin-session");
+    expect(await checkJoinFirstName({ ticket: "nope", firstName: "Zed" }, "en")).toMatchObject({ ok: false, code: "join_expired" });
+    expect(await checkJoinFirstName({ ticket: undefined, firstName: "Zed" }, "en")).toMatchObject({ ok: false, code: "join_expired" });
+    const ticket = issueJoinTicket("123456", SECRET);
+    expect(await checkJoinFirstName({ ticket, firstName: "Zed" }, "en")).toEqual({ ok: true, needBirthday: false });
+    expect(await checkJoinFirstName({ ticket, firstName: "samuel" }, "en")).toEqual({ ok: true, needBirthday: true });
+  });
+
+  it("join re-checks the ticket and the name rules before creating anything", async () => {
+    const { joinWithPin } = await import("@/lib/auth/pin-session");
+    const ticket = issueJoinTicket("123456", SECRET);
+    const base = { ticket, firstName: "Samuel", pin: "4821", pinConfirm: "4821" };
+    expect(await joinWithPin({ ...base, ticket: issueJoinTicket("999999", SECRET) }, "en")).toMatchObject({ ok: false, code: "join_expired" });
+    expect(await joinWithPin(base, "en")).toMatchObject({ ok: false, code: "join_need_birthday" });
+    expect(await joinWithPin({ ...base, dateOfBirth: "1970-05-05" }, "en")).toMatchObject({ ok: false, code: "duplicate" });
   });
 });
