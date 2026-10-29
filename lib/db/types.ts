@@ -256,6 +256,7 @@ export type Database = {
           great_grandfather_name_ar: string | null
           great_grandfather_name_en: string | null
           birth_date: string | null
+          birth_order: number | null
           death_date: string | null
           id: string
           is_placeholder: boolean
@@ -270,6 +271,7 @@ export type Database = {
         }
         Insert: {
           birth_date?: string | null
+          birth_order?: number | null
           created_at?: string
           death_date?: string | null
           deleted_at?: string | null
@@ -298,6 +300,7 @@ export type Database = {
         }
         Update: {
           birth_date?: string | null
+          birth_order?: number | null
           created_at?: string
           death_date?: string | null
           deleted_at?: string | null
@@ -691,6 +694,10 @@ export type Database = {
           mother_name_en: string | null
           mother_name_ar: string | null
         }[]
+      }
+      set_children_order: {
+        Args: { p_parent: string; p_children: string[] }
+        Returns: undefined
       }
       search_people_for_claim: {
         Args: { q: string; dob?: string | null }

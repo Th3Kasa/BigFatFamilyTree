@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { toast } from "sonner";
-import { ChevronRight, ChevronLeft, ExternalLink, MoreHorizontal, Pencil, Plus, Waypoints, X } from "lucide-react";
+import { ChevronRight, ChevronLeft, ExternalLink, GripVertical, MoreHorizontal, Pencil, Plus, Waypoints, X } from "lucide-react";
 import { cn, getDisplayName, getNameParts } from "@/lib/utils";
 import { avatarTone, initialsOf, lifeYears } from "@/lib/people/display";
 import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
@@ -21,12 +21,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { deletePersonCanvas, linkSpouse } from "@/lib/actions/people";
+import { saveChildrenOrder } from "@/lib/actions/canvas";
+import { compareByBirth } from "@/lib/graph/units";
 import { familyView, halfSiblingHeading, marriageName, type FamilyUnitView } from "@/lib/graph/family-view";
 import { useMediaQuery, DESKTOP_QUERY } from "@/lib/client/use-media-query";
 import { familyTitle, relativeNoun, type PartnerStatus, type RelativeSlot } from "@/lib/people/relative-copy";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 import { AddRelative } from "./AddRelative";
 import { linkExistingRelative, removeRelative, setPartnerStatus, sharedParents } from "./link-actions";
+import { moveItem, useDragReorder } from "./use-drag-reorder";
 
 export type FamilyHubProps = {
   person: PersonInput | null;
@@ -93,6 +96,8 @@ export function FamilyHub(props: FamilyHubProps) {
 
 type View = { kind: "overview" } | { kind: "add"; slot: RelativeSlot; replace?: { previous: PersonInput; relationshipId?: string | null; status?: PartnerStatus } };
 type Confirm = { slot: RelativeSlot; other: PersonInput; relationshipId?: string | null; label: string } | null;
+/** Where a child sits in the birth-order list, for the "Move older / younger" menu items. */
+type OrderSlot = { index: number; count: number; move: (to: number) => void };
 
 const sectionTitle = "mb-2 text-xs font-bold uppercase tracking-[0.05em] text-[var(--muted-foreground)]";
 const linkPill =
@@ -143,6 +148,50 @@ function HubBody({
     return (missing === "mother" ? p.gender === "f" : p.gender !== "f") ? p.id : null;
   };
   const [dismissed, setDismissed] = useState<("father" | "mother")[]>([]);
+
+  // Children oldest first (birth order set by hand, then birth date, then name),
+  // across every marriage, so the whole list can be put in birth order.
+  const childRows = useMemo(() => {
+    if (!fv) return [];
+    const rows = [
+      ...fv.unions.flatMap((u) => u.children.map((c) => ({ person: c, partner: u.partner }))),
+      ...fv.soloChildren.map((c) => ({ person: c, partner: null as PersonInput | null })),
+    ];
+    return rows.sort((x, y) => compareByBirth(x.person, y.person));
+  }, [fv]);
+  // Optimistic order while saving; dropped as soon as fresh data arrives (new childRows).
+  const [saved, setSaved] = useState<{ base: typeof childRows; ids: string[] } | null>(null);
+  const orderIds = saved && saved.base === childRows ? saved.ids : childRows.map((r) => r.person.id);
+  const [announce, setAnnounce] = useState("");
+
+  function saveOrder(next: string[], movedId: string) {
+    setSaved({ base: childRows, ids: next });
+    const moved = childRows.find((r) => r.person.id === movedId)?.person;
+    const pos = next.indexOf(movedId) + 1;
+    const name = moved ? getNameParts(moved, lang).given || getDisplayName(moved, lang) : "";
+    setAnnounce(
+      pos === 1
+        ? t(`${name} is now the oldest`, `${name} الآن الأكبر`)
+        : pos === next.length
+          ? t(`${name} is now the youngest`, `${name} الآن الأصغر`)
+          : t(`${name} moved to ${pos} of ${next.length}`, `${name} في المرتبة ${pos} من ${next.length}`),
+    );
+    startTransition(async () => {
+      const r = await saveChildrenOrder(person.id, next);
+      if (r.success) router.refresh();
+      else {
+        setSaved(null);
+        setAnnounce("");
+        fail(r.error);
+      }
+    });
+  }
+  const moveChild = (id: string, to: number) => {
+    const from = orderIds.indexOf(id);
+    if (from < 0 || to === from || to < 0 || to >= orderIds.length) return;
+    saveOrder(moveItem(orderIds, from, to), id);
+  };
+  const reorder = useDragReorder(orderIds, saveOrder, (id, delta) => moveChild(id, orderIds.indexOf(id) + delta));
 
   function acceptSuggestion(missing: "father" | "mother", parent: PersonInput) {
     startTransition(async () => {
@@ -199,7 +248,7 @@ function HubBody({
     });
   }
 
-  const menuFor = (slotKind: RelativeSlot, other: PersonInput, unit?: FamilyUnitView) => {
+  const menuFor = (slotKind: RelativeSlot, other: PersonInput, unit?: FamilyUnitView, order?: OrderSlot) => {
     if (!canEdit) return null;
     const otherName = getDisplayName(other, lang);
     const noun = relativeNoun(slotKind, other.gender, lang, unit?.status ?? "current");
@@ -229,6 +278,24 @@ function HubBody({
             <Link href={`/person/${other.slug ?? other.id}`}>{t("Open profile", "فتح الملف")}</Link>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onShowPerson(other.id)}>{t("Show their family", "عرض عائلته")}</DropdownMenuItem>
+          {order && order.count > 1 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-[var(--muted-foreground)]">{t("Birth order", "ترتيب الولادة")}</DropdownMenuLabel>
+              {order.index > 0 && (
+                <>
+                  <DropdownMenuItem onSelect={() => order.move(order.index - 1)}>{t("Move up (older)", "نقل للأعلى (أكبر)")}</DropdownMenuItem>
+                  {order.index > 1 && <DropdownMenuItem onSelect={() => order.move(0)}>{t("Make oldest", "اجعله الأكبر")}</DropdownMenuItem>}
+                </>
+              )}
+              {order.index < order.count - 1 && (
+                <>
+                  <DropdownMenuItem onSelect={() => order.move(order.index + 1)}>{t("Move down (younger)", "نقل للأسفل (أصغر)")}</DropdownMenuItem>
+                  {order.index < order.count - 2 && <DropdownMenuItem onSelect={() => order.move(order.count - 1)}>{t("Make youngest", "اجعله الأصغر")}</DropdownMenuItem>}
+                </>
+              )}
+            </>
+          )}
           {slotKind === "partner" && unit && !unit.implicit && unit.relationshipId && (
             <>
               <DropdownMenuSeparator />
@@ -427,22 +494,49 @@ function HubBody({
 
               <section aria-labelledby="hub-children">
                 <h3 id="hub-children" className={sectionTitle}>{t("Children", "الأبناء")}</h3>
+                {canEdit && childRows.length > 1 && (
+                  <p id="hub-children-hint" className="mb-2 text-xs text-[var(--muted-foreground)]">
+                    {t(
+                      "Oldest at the top. Drag the handle, use the arrow keys on it, or the ••• menu. The tree shows them oldest to youngest, left to right.",
+                      "الأكبر في الأعلى. اسحب المقبض، أو استخدم مفاتيح الأسهم عليه، أو قائمة •••. تعرضهم الشجرة من الأكبر إلى الأصغر، من اليسار إلى اليمين.",
+                    )}
+                  </p>
+                )}
+                <p aria-live="polite" className="sr-only">{announce}</p>
                 <div className="flex flex-col gap-2">
-                  {fv.unions.flatMap((u) =>
-                    u.children.map((c) => (
+                  {reorder.order.map((id, i) => {
+                    const row = childRows.find((r) => r.person.id === id);
+                    if (!row) return null;
+                    const c = row.person;
+                    const sortable = canEdit && childRows.length > 1;
+                    const name = getDisplayName(c, lang);
+                    return (
                       <Row
                         key={c.id}
+                        rowRef={reorder.rowRef(c.id)}
+                        style={reorder.rowStyle(c.id)}
+                        lifted={reorder.draggingId === c.id}
                         person={c}
                         lang={lang}
-                        sub={[relativeNoun("child", c.gender, lang), u.partner ? t(`with ${getNameParts(u.partner, lang).given}`, `من ${getNameParts(u.partner, lang).given}`) : ""].filter(Boolean).join(" · ")}
-                        menu={menuFor("child", c)}
+                        sub={[relativeNoun("child", c.gender, lang), row.partner ? t(`with ${getNameParts(row.partner, lang).given}`, `من ${getNameParts(row.partner, lang).given}`) : ""].filter(Boolean).join(" · ")}
+                        handle={
+                          sortable ? (
+                            <button
+                              type="button"
+                              aria-label={t(`Reorder ${name}, ${i + 1} of ${childRows.length}`, `ترتيب ${name}، ${i + 1} من ${childRows.length}`)}
+                              aria-describedby="hub-children-hint"
+                              {...reorder.handleProps(c.id)}
+                              className="flex h-11 w-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] active:cursor-grabbing"
+                            >
+                              <GripVertical className="h-5 w-5" aria-hidden />
+                            </button>
+                          ) : null
+                        }
+                        menu={menuFor("child", c, undefined, sortable ? { index: i, count: childRows.length, move: (to) => moveChild(c.id, to) } : undefined)}
                         chevron={Chevron}
                       />
-                    )),
-                  )}
-                  {fv.soloChildren.map((c) => (
-                    <Row key={c.id} person={c} lang={lang} sub={relativeNoun("child", c.gender, lang)} menu={menuFor("child", c)} chevron={Chevron} />
-                  ))}
+                    );
+                  })}
                   {children.length === 0 && !canEdit && <EmptyRow text={t("No children recorded", "لا يوجد أبناء مسجّلون")} />}
                   {canEdit && <AddRow label={t("Add child", "أضف ابنًا أو ابنة")} onClick={() => setView({ kind: "add", slot: "child" })} />}
                 </div>
@@ -530,6 +624,10 @@ function Row({
   chip,
   chipTone = "soft",
   menu,
+  handle,
+  rowRef,
+  style,
+  lifted,
   chevron: Chevron,
 }: {
   person: PersonInput;
@@ -538,12 +636,27 @@ function Row({
   chip?: string;
   chipTone?: "strong" | "soft";
   menu: React.ReactNode;
+  /** Drag handle for reordering, shown at the start of the row. */
+  handle?: React.ReactNode;
+  rowRef?: (el: HTMLDivElement | null) => void;
+  style?: React.CSSProperties;
+  /** Being dragged: lift it above its neighbours. */
+  lifted?: boolean;
   chevron: typeof ChevronRight;
 }) {
   const name = person.is_placeholder ? (lang === "ar" ? "والد غير معروف" : "Unknown parent") : getDisplayName(person, lang);
   const years = lifeYears(person.birth_date, person.death_date, lang);
   return (
-    <div className="flex min-h-[56px] items-center gap-1 rounded-2xl border border-[var(--border)] ps-2.5">
+    <div
+      ref={rowRef}
+      style={style}
+      className={cn(
+        "flex min-h-[56px] items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)]",
+        handle ? "ps-0.5" : "ps-2.5",
+        lifted && "shadow-[0_8px_24px_rgba(36,21,23,0.18)]",
+      )}
+    >
+      {handle}
       <Link
         href={`/person/${person.slug ?? person.id}`}
         className="flex min-h-[54px] min-w-0 flex-1 items-center gap-2.5 rounded-xl py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"

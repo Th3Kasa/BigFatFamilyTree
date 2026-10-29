@@ -38,7 +38,7 @@ export type FamilyLayout = {
   model: FamilyModel;
 };
 
-type LayoutPerson = Pick<PersonInput, "id" | "father_id" | "mother_id" | "gender" | "birth_date" | "given_en" | "given_ar">;
+type LayoutPerson = Pick<PersonInput, "id" | "father_id" | "mother_id" | "gender" | "birth_date" | "birth_order" | "given_en" | "given_ar">;
 type LayoutRel = Pick<RelationshipInput, "id" | "person_a_id" | "person_b_id" | "type" | "status" | "order_index">;
 
 const STEP = NODE_WIDTH + PARTNER_GAP;

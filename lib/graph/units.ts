@@ -93,7 +93,7 @@ export type FamilyModel = {
   generation: Map<string, number>;
 };
 
-type P = Pick<PersonInput, "id" | "father_id" | "mother_id" | "gender" | "birth_date" | "given_en" | "given_ar">;
+type P = Pick<PersonInput, "id" | "father_id" | "mother_id" | "gender" | "birth_date" | "birth_order" | "given_en" | "given_ar">;
 type R = Pick<RelationshipInput, "id" | "person_a_id" | "person_b_id" | "type" | "status" | "order_index">;
 
 const pairKey = (a: string, b: string | null) => (b == null ? `u:${a}|` : a < b ? `u:${a}|${b}` : `u:${b}|${a}`);
@@ -106,8 +106,15 @@ export function compareUnions(x: Union, y: Union): number {
   return x.orderIndex - y.orderIndex || STATUS_RANK[x.status] - STATUS_RANK[y.status] || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0);
 }
 
-/** Oldest first; unknown birth dates last; then by name and id for stability. */
+/**
+ * Oldest first: the birth order set by hand (1 = oldest), then birth date
+ * (unknown last), then name and id for stability. Anyone without a set order
+ * comes after those who have one.
+ */
 export function compareByBirth(a: P, b: P): number {
+  const ao = a.birth_order ?? Number.MAX_SAFE_INTEGER;
+  const bo = b.birth_order ?? Number.MAX_SAFE_INTEGER;
+  if (ao !== bo) return ao - bo;
   const ab = a.birth_date ?? "9999";
   const bb = b.birth_date ?? "9999";
   if (ab !== bb) return ab < bb ? -1 : 1;

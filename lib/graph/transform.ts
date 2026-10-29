@@ -23,6 +23,8 @@ export type PersonInput = {
   /** Optional: shown as years on the card when the query selects them. */
   birth_date?: string | null;
   death_date?: string | null;
+  /** Position among siblings, 1 = oldest; null when not set (see compareByBirth). */
+  birth_order?: number | null;
 };
 
 export type RelationshipInput = {

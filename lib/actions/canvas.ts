@@ -31,6 +31,39 @@ export async function saveCardOffset(id: string, offset: number): Promise<{ succ
 }
 
 /**
+ * Save the birth order of a parent's children, oldest first. Writes
+ * people.birth_order 1..n and clears manual nudges on those children and their
+ * partners so the tree re-flows each branch into place (set_children_order).
+ * Editors and admins only (RLS on people, plus a role check in the function).
+ */
+export async function saveChildrenOrder(parentId: string, childIds: string[]): Promise<{ success: boolean; error?: string }> {
+  if (
+    !UUID_RE.test(parentId) ||
+    !Array.isArray(childIds) ||
+    childIds.length === 0 ||
+    childIds.length > 1000 ||
+    !childIds.every((id) => typeof id === "string" && UUID_RE.test(id)) ||
+    new Set(childIds).size !== childIds.length
+  ) {
+    return { success: false, error: "Invalid order." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_children_order", { p_parent: parentId, p_children: childIds });
+  if (error) {
+    const message =
+      error.code === "42501"
+        ? "You don't have permission to change the order."
+        : error.code === "PGRST202"
+          ? "Birth order isn't switched on yet. Please try again later."
+          : "Couldn't save the order.";
+    return { success: false, error: message };
+  }
+  revalidatePath("/");
+  revalidatePath("/person/[id]", "page");
+  return { success: true };
+}
+
+/**
  * "Tidy up": clear every manual nudge (and any position saved by the old
  * layout) so the whole tree returns to the automatic generation layout.
  * Admins only, because it resets positions others may have set.
