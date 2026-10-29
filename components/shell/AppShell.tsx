@@ -6,6 +6,7 @@ import { SideNav } from "@/components/shell/SideNav";
 import { MobileTabBar } from "@/components/shell/MobileTabBar";
 import { AddMenu } from "@/components/shell/AddMenu";
 import { PeopleSheet } from "@/components/shell/PeopleSheet";
+import { BirthdayNotice } from "@/components/shell/BirthdayNotice";
 import { RoleProvider } from "@/components/providers/role-provider";
 import { WelcomeTour } from "@/components/onboarding/WelcomeTour";
 import type { Lang } from "@/lib/lang/server";
@@ -59,6 +60,7 @@ export function AppShell({ user, lang, role, membersBadge, mustChangePin = false
       <MobileTabBar lang={lang} user={user} role={role} />
       <AddMenu lang={lang} role={role} />
       <PeopleSheet lang={lang} />
+      <BirthdayNotice lang={lang} />
       <Suspense fallback={null}>
         <WelcomeTour lang={lang} />
       </Suspense>
