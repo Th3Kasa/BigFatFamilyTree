@@ -229,6 +229,29 @@ export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinRes
   }
   const userId = created.user.id;
 
+  // GoTrue can insert the auth row before app_metadata is on it, so
+  // handle_new_user may have built a plain email profile. Stamp the PIN
+  // identity here (service role) so sign-in, which looks up PIN profiles, finds it.
+  const { error: profileErr } = await svc
+    .from("profiles")
+    .update({
+      login_method: "pin",
+      name_key: nameKey,
+      first_name: firstName,
+      last_name: lastName,
+      date_of_birth: dateOfBirth,
+      full_name: fullName,
+      display_name: fullName,
+      email: null,
+    })
+    .eq("id", userId);
+  if (profileErr) {
+    await svc.auth.admin.deleteUser(userId);
+    if (isDuplicateIdentityError(profileErr)) return fail("duplicate", lang);
+    console.error("[pin-join] could not mark the profile as PIN:", profileErr.message);
+    return fail("failed", lang);
+  }
+
   const { error: pwErr } = await svc.auth.admin.updateUserById(userId, {
     password: derivePinPassword(userId, pin, secret),
   });
