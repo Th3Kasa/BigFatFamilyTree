@@ -16,18 +16,26 @@ type Props = {
   onAdminEmail: () => void;
 };
 
-/** The family sign-in: first name, last name, date of birth and your own 4-digit PIN. */
+/** The family sign-in on a new device: first name and your own 4-digit PIN (birthday and last name only when asked). */
 export function PinSignInForm({ lang, onDone, onAdminEmail }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const [who, setWho] = useState<Identity>({ firstName: "", lastName: "", dob: "" });
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Sign-in starts with first name + PIN; the birthday / last name appear only when asked for.
+  const [showDob, setShowDob] = useState(false);
+  const [showLast, setShowLast] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
-    const input = { firstName: who.firstName, lastName: who.lastName, dateOfBirth: who.dob, pin };
+    const input = {
+      firstName: who.firstName,
+      lastName: showLast ? who.lastName : "",
+      dateOfBirth: showDob ? who.dob : "",
+      pin,
+    };
     const parsed = pinSignInSchema.safeParse(input);
     if (!parsed.success) {
       setErrorMsg(pinMessage(firstIssueCode(parsed.error), lang));
@@ -40,6 +48,11 @@ export function PinSignInForm({ lang, onDone, onAdminEmail }: Props) {
         onDone();
         return;
       }
+      if (res.code === "need_birthday") setShowDob(true);
+      if (res.code === "need_last_name") {
+        setShowDob(true);
+        setShowLast(true);
+      }
       setErrorMsg(res.error);
     } catch {
       setErrorMsg(pinMessage("failed", lang));
@@ -50,7 +63,7 @@ export function PinSignInForm({ lang, onDone, onAdminEmail }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      <IdentityFields lang={lang} value={who} onChange={setWho} disabled={loading} />
+      <IdentityFields lang={lang} value={who} onChange={setWho} disabled={loading} show={{ lastName: showLast, dob: showDob }} />
       <PinField
         lang={lang}
         name="password"
@@ -63,6 +76,19 @@ export function PinSignInForm({ lang, onDone, onAdminEmail }: Props) {
       />
 
       <ErrorNote message={errorMsg} />
+
+      {!showDob ? (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShowDob(true)}
+            disabled={loading}
+            className="inline-flex min-h-11 items-center justify-center rounded-full px-3 text-sm font-semibold text-[var(--primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+          >
+            {t("Not working? Add your birthday", "لا يعمل؟ أضف تاريخ ميلادك")}
+          </button>
+        </div>
+      ) : null}
 
       <button type="submit" disabled={loading} className={cn(pill.primary, "min-h-[52px] text-base")}>
         {loading ? <Spinner /> : null}
