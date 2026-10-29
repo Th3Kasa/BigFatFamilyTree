@@ -464,9 +464,10 @@ export async function linkChild(
 //   1. Already siblings → no-op, success
 //   2. personA has a father/mother → copy that FK to personB
 //   3. personB has a father/mother → copy that FK to personA
-//   4. Neither has a parent → create a placeholder person and assign both as
-//      father_id (since gender unknown, default to the father slot to keep
-//      mother_id free for a future real mother).
+//   4. Neither has a parent → create an "Unknown parent" placeholder and
+//      assign both as father_id (gender unknown, so the father slot keeps
+//      mother_id free for a real mother). "Fill in their details" on that
+//      card turns it into a real person later.
 export async function addSibling(
   personAId: string,
   personBId: string,
@@ -534,20 +535,37 @@ export async function addSibling(
       .eq("id", personAId);
     if (error) return { success: false, error: error.message };
   } else {
-    // Neither has a free parent slot. Refuse instead of fabricating a ghost.
-    return {
-      success: false,
-      error:
-        "Add a parent for at least one of them first — once they share a parent, they'll automatically be siblings.",
-    };
+    // Neither has a parent: link both through an "Unknown parent" card.
+    const slug = await uniqueSlug(supabase, "unknown-parent");
+    const { data: created, error: insErr } = await supabase
+      .from("people")
+      .insert({ is_placeholder: true, gender: "unknown", slug })
+      .select("id")
+      .single();
+    if (insErr || !created) return { success: false, error: insErr?.message ?? "Couldn't add the unknown parent." };
+    const { error } = await supabase
+      .from("people")
+      .update({ father_id: created.id })
+      .in("id", [personAId, personBId])
+      .is("deleted_at", null);
+    if (error) {
+      await supabase.from("people").update({ deleted_at: new Date().toISOString() }).eq("id", created.id);
+      return { success: false, error: error.message };
+    }
+    revalidateSiblings(a, b);
+    return { success: true, placeholderId: created.id };
   }
 
-  revalidatePath("/");
-  revalidatePath(`/person/${personAId}`);
-  if (a.slug) revalidatePath(`/person/${a.slug}`);
-  revalidatePath(`/person/${personBId}`);
-  if (b.slug) revalidatePath(`/person/${b.slug}`);
+  revalidateSiblings(a, b);
   return { success: true };
+}
+
+function revalidateSiblings(a: { id: string; slug: string | null }, b: { id: string; slug: string | null }) {
+  revalidatePath("/");
+  for (const p of [a, b]) {
+    revalidatePath(`/person/${p.id}`);
+    if (p.slug) revalidatePath(`/person/${p.slug}`);
+  }
 }
 
 // ── deletePerson (soft delete — redirects, for full-page flows) ──────────────

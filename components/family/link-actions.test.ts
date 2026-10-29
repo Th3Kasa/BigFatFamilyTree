@@ -4,8 +4,9 @@ import type { PersonInput } from "@/lib/graph/transform";
 const createPersonQuick = vi.fn<(prev: unknown, fd: FormData) => Promise<{ success: boolean; personId?: string }>>(async () => ({ success: true, personId: "new" }));
 const linkChild = vi.fn<(p: string, c: string, slot?: string) => Promise<{ success: boolean }>>(async () => ({ success: true }));
 const linkParentChild = vi.fn<(p: string, c: string) => Promise<{ success: boolean }>>(async () => ({ success: true }));
+const addSibling = vi.fn<(a: string, b: string) => Promise<{ success: boolean }>>(async () => ({ success: true }));
 vi.mock("@/lib/actions/people", () => ({
-  addSibling: vi.fn(),
+  addSibling: (a: string, b: string) => addSibling(a, b),
   createPersonQuick: (prev: unknown, fd: FormData) => createPersonQuick(prev, fd),
   linkChild: (p: string, c: string, s?: string) => linkChild(p, c, s),
   linkParentChild: (p: string, c: string) => linkParentChild(p, c),
@@ -28,6 +29,7 @@ const fields = { given_en: "Basem", given_ar: "باسم", family_name_en: "", fa
 
 beforeEach(() => {
   createPersonQuick.mockClear();
+  addSibling.mockClear();
   linkChild.mockClear();
   linkParentChild.mockClear();
 });
@@ -81,5 +83,24 @@ describe("linking the second parent later", () => {
     const basem = person("basem", { father_id: "ezzat" });
     await linkExistingRelative(basem, "mother", hanan);
     expect(linkParentChild).toHaveBeenCalledWith("hanan", "basem");
+  });
+});
+
+describe("adding a sibling", () => {
+  test("parents known: the new sibling shares them in the same insert", async () => {
+    const basem = person("basem", { father_id: "ezzat", mother_id: "hanan" });
+    await addNewRelative(basem, "sibling", { ...fields, given_en: "Amir" });
+    const fd = createPersonQuick.mock.calls[0][1];
+    expect([fd.get("father_id"), fd.get("mother_id")]).toEqual(["ezzat", "hanan"]);
+    expect(addSibling).not.toHaveBeenCalled();
+  });
+
+  test("parents unknown: the sibling is still added, linked through an unknown parent", async () => {
+    const adel = person("adel");
+    const r = await addNewRelative(adel, "sibling", { ...fields, given_en: "Kamal" });
+    expect(r.success).toBe(true);
+    const fd = createPersonQuick.mock.calls[0][1];
+    expect(fd.get("father_id")).toBeNull();
+    expect(addSibling).toHaveBeenCalledWith("adel", "new");
   });
 });

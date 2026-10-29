@@ -32,3 +32,9 @@ export const FIT_ALL = { padding: 0.15, minZoom: 0.05, maxZoom: 1 } as const;
 
 /** Below this zoom, cards switch to a compact, larger-text rendering. */
 export const COMPACT_ZOOM = 0.5;
+
+/** Below this zoom even compact names are too small; branch names label the tree instead. */
+export const FAR_ZOOM = 0.3;
+
+/** Zoom the tree opens at when it starts on the signed-in member. */
+export const OPEN_ZOOM = 0.9;
