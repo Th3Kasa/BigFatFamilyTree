@@ -90,7 +90,9 @@ export async function inviteAccount(input: {
 /** Audit rows normally come from triggers (actor = the signed-in user). Service-role changes need an explicit one. */
 export async function writeAudit(entry: {
   actorId: string;
-  rowId: string;
+  rowId: string | null;
+  /** Defaults to "profiles". PIN events never put a PIN in before/after. */
+  tableName?: string;
   operation: "insert" | "update" | "delete";
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
@@ -99,7 +101,7 @@ export async function writeAudit(entry: {
     const svc = createServiceClient();
     await svc.from("audit_log").insert({
       actor_id: entry.actorId,
-      table_name: "profiles",
+      table_name: entry.tableName ?? "profiles",
       row_id: entry.rowId,
       operation: entry.operation,
       before: entry.before as never,

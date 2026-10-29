@@ -18,9 +18,11 @@ export type AdminAction =
   | "change_role" // viewer <-> editor
   | "change_admin_role" // anything to or from Admin
   | "invite_member" // add a member by email (service role)
-  | "delete_account"; // delete the account entirely (service role)
+  | "delete_account" // delete the account entirely (service role)
+  | "reset_pin" // give a PIN-login member a new temporary PIN (service role)
+  | "family_pin"; // see / change the shared family PIN
 
-const SUPER_ONLY: ReadonlySet<AdminAction> = new Set(["change_admin_role", "invite_member", "delete_account"]);
+const SUPER_ONLY: ReadonlySet<AdminAction> = new Set(["change_admin_role", "invite_member", "delete_account", "family_pin"]);
 
 const ADMIN_ACTIONS: ReadonlySet<AdminAction> = new Set([
   "review_requests",
@@ -30,6 +32,7 @@ const ADMIN_ACTIONS: ReadonlySet<AdminAction> = new Set([
   "review_suggestions",
   "add_family_member",
   "change_role",
+  "reset_pin",
 ]);
 
 /** Derive the caller from what the profile says. */
@@ -49,9 +52,11 @@ export type Target = {
   id: string;
   role: MemberRole;
   isSuperAdmin: boolean;
+  /** Only needed for reset_pin: PINs can only be reset on PIN accounts. */
+  loginMethod?: "email" | "pin";
 };
 
-export type Verdict = { ok: true } | { ok: false; reason: "forbidden" | "self" | "super_admin" | "admin" | "same_role" };
+export type Verdict = { ok: true } | { ok: false; reason: "forbidden" | "self" | "super_admin" | "admin" | "same_role" | "not_pin" };
 
 /**
  * Can `caller` (whose own profile id is `callerId`) do `action` to `target`?
@@ -70,6 +75,13 @@ export function canActOn(
     case "remove_access":
       // Access is cleared for non-admins only; admins always have access.
       if (target.role === "admin" || target.isSuperAdmin) return { ok: false, reason: "admin" };
+      return { ok: true };
+
+    case "reset_pin":
+      // PIN accounts only; never your own (use "Change my PIN"); an admin's PIN is the owner's call.
+      if (target.loginMethod !== "pin") return { ok: false, reason: "not_pin" };
+      if (target.id === callerId) return { ok: false, reason: "self" };
+      if ((target.role === "admin" || target.isSuperAdmin) && caller !== "super_admin") return { ok: false, reason: "admin" };
       return { ok: true };
 
     case "delete_account":

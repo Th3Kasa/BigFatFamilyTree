@@ -369,6 +369,11 @@ export type Database = {
           id: string
           invited_by: string | null
           is_super_admin: boolean
+          login_method: string
+          name_key: string | null
+          pin_must_change: boolean
+          first_name: string | null
+          last_name: string | null
           onboarded_at: string | null
           person_id: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -386,6 +391,11 @@ export type Database = {
           id: string
           invited_by?: string | null
           is_super_admin?: boolean
+          login_method?: string
+          name_key?: string | null
+          pin_must_change?: boolean
+          first_name?: string | null
+          last_name?: string | null
           onboarded_at?: string | null
           person_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -403,6 +413,11 @@ export type Database = {
           id?: string
           invited_by?: string | null
           is_super_admin?: boolean
+          login_method?: string
+          name_key?: string | null
+          pin_must_change?: boolean
+          first_name?: string | null
+          last_name?: string | null
           onboarded_at?: string | null
           person_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
