@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/auth/safe-next";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isBootstrapAdmin } from "@/lib/auth/bootstrap";
 import type { EmailOtpType } from "@supabase/supabase-js";
@@ -36,7 +37,7 @@ const IMPLICIT_FLOW_HTML = `<!DOCTYPE html>
       fetch('/api/auth/set-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: at, refresh_token: rt, type: tp })
+        body: JSON.stringify({ access_token: at, refresh_token: rt, type: tp, next: new URLSearchParams(window.location.search).get('next') })
       })
       .then(function(r) { return r.json(); })
       .then(function(d) { window.location.replace(d.next || '/'); })
@@ -51,8 +52,7 @@ export async function GET(request: NextRequest) {
   const code       = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type       = searchParams.get("type") as EmailOtpType | null;
-  const next       = searchParams.get("next") ?? "/";
-  const safeNext   = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+  const safeNext   = safeNextPath(searchParams.get("next"));
 
   const supabase = await createClient();
 

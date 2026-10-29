@@ -6,6 +6,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { magicLinkSchema } from "@/lib/validation/auth";
+import { signUpProfileSchema } from "@/lib/validation/members";
+import { safeNextPath } from "@/lib/auth/safe-next";
+import { SignupForm, useDocumentLang } from "@/components/auth/SignupForm";
 import { ensureBootstrapUser, signInBootstrapAdmin } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -117,10 +120,50 @@ function friendlyAuthError(error: { message: string; status?: number }): string 
   }
   return error.message;
 }
+
+// Sign-up is the one flow used by the whole family (often on phones, often in
+// Arabic), so its errors are plain-language and bilingual. Anything unexpected
+// falls through to friendlyAuthError.
+function friendlySignupError(error: { message: string; status?: number }, lang: "ar" | "en"): string {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const msg = error.message;
+  if (error.status === 429 || /rate limit/i.test(msg)) {
+    return t(
+      "Too many emails were sent just now. Please wait a few minutes and try again.",
+      "تم إرسال عدد كبير من الرسائل الآن. انتظر بضع دقائق ثم حاول مرة أخرى.",
+    );
+  }
+  if (/already (registered|been registered)|already exists/i.test(msg)) {
+    return t(
+      "There's already an account with this email. Try signing in instead.",
+      "يوجد حساب بهذا البريد بالفعل. جرّب تسجيل الدخول.",
+    );
+  }
+  if (/password/i.test(msg) && /(weak|short|least|characters)/i.test(msg)) {
+    return t("Choose a longer, harder-to-guess password.", "اختر كلمة مرور أطول وأصعب في التخمين.");
+  }
+  if (/signups? (are )?(not allowed|disabled)/i.test(msg)) {
+    return t("Sign-ups are closed right now. Please ask a family admin.", "التسجيل مغلق حاليًا. اسأل مشرف العائلة.");
+  }
+  return friendlyAuthError(error);
+}
+
+// Where to land after signing in: the ?next= the middleware adds when it
+// bounces a signed-out visitor (e.g. /welcome). Only same-site paths survive
+// safeNextPath(); anything else becomes "/". Called from event handlers only,
+// so reading window is safe.
+function nextFromUrl(): string {
+  return safeNextPath(new URLSearchParams(window.location.search).get("next"));
+}
+
 export default function LoginPage() {
+  const lang = useDocumentLang();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [dob, setDob] = useState("");
+  // Where a magic link should land after sign-in ("/welcome" for new sign-ups).
+  const [afterAuth, setAfterAuth] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>("signin");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -131,6 +174,7 @@ export default function LoginPage() {
   function goTo(s: Screen) {
     setScreen(s);
     setErrorMsg(null);
+    if (s !== "sent-magic") setAfterAuth(null);
   }
 
   async function handleSignIn(e: React.FormEvent) {
@@ -162,7 +206,7 @@ export default function LoginPage() {
         setErrorMsg(`Verify failed: ${verifyErr.message}`);
         return;
       }
-      window.location.href = "/";
+      window.location.href = nextFromUrl();
       return;
     }
 
@@ -184,7 +228,7 @@ export default function LoginPage() {
       setErrorMsg(`${error.message} ${tag}${adminTag}`);
       return;
     }
-    window.location.href = "/";
+    window.location.href = nextFromUrl();
   }
 
   async function handleMagicLink(e: React.FormEvent) {
@@ -195,9 +239,16 @@ export default function LoginPage() {
     setLoading(true);
     await ensureBootstrapUser(parsed.data.email);
     const supabase = createClient();
+    // A resend after a magic-link sign-up keeps going to /welcome; a normal
+    // sign-in returns to wherever the visitor was headed.
+    const next = afterAuth ?? nextFromUrl();
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback${
+          next !== "/" ? `?next=${encodeURIComponent(next)}` : ""
+        }`,
+      },
     });
     setLoading(false);
     if (error) { setErrorMsg(friendlyAuthError(error)); return; }
@@ -209,23 +260,97 @@ export default function LoginPage() {
     await handleMagicLink({ preventDefault: () => {} } as React.FormEvent);
   }
 
+  // Validate the three things both sign-up routes need (name, date of birth,
+  // email). Returns the clean values, or null after showing the first problem.
+  function validateSignupBasics() {
+    const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+    const profile = signUpProfileSchema.safeParse({ fullName, dateOfBirth: dob });
+    if (!profile.success) {
+      const issue = profile.error.issues[0];
+      const field = issue?.path[0];
+      setErrorMsg(
+        field === "dateOfBirth"
+          ? dob && dob > new Date().toLocaleDateString("en-CA")
+            ? t("Date of birth can't be in the future.", "لا يمكن أن يكون تاريخ الميلاد في المستقبل.")
+            : t("Enter your date of birth.", "أدخل تاريخ ميلادك.")
+          : t("Enter your full name.", "أدخل اسمك الكامل."),
+      );
+      return null;
+    }
+    const emailOk = magicLinkSchema.safeParse({ email });
+    if (!emailOk.success) {
+      setErrorMsg(t("Enter a valid email address.", "أدخل بريدًا إلكترونيًا صحيحًا."));
+      return null;
+    }
+    return {
+      email: emailOk.data.email,
+      data: { full_name: profile.data.fullName, date_of_birth: profile.data.dateOfBirth },
+    };
+  }
+
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
-    const parsed = magicLinkSchema.safeParse({ email });
-    if (!parsed.success) { setErrorMsg("Enter a valid email address."); return; }
-    if (password.length < 6) { setErrorMsg("Password must be at least 6 characters."); return; }
-    if (password !== confirmPassword) { setErrorMsg("Passwords do not match."); return; }
+    const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+    const basics = validateSignupBasics();
+    if (!basics) return;
+    if (password.length < 8) {
+      setErrorMsg(t("Password must be at least 8 characters.", "يجب ألا تقل كلمة المرور عن ٨ أحرف."));
+      return;
+    }
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
-      email: parsed.data.email,
+    const { data, error } = await supabase.auth.signUp({
+      email: basics.email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome`,
+        data: basics.data,
+      },
+    });
+    if (error) {
+      setLoading(false);
+      setErrorMsg(friendlySignupError(error, lang));
+      return;
+    }
+    // Supabase hides "already registered" by returning a user with no identities.
+    if (data.user && data.user.identities?.length === 0) {
+      setLoading(false);
+      setErrorMsg(
+        t(
+          "There's already an account with this email. Try signing in instead.",
+          "يوجد حساب بهذا البريد بالفعل. جرّب تسجيل الدخول.",
+        ),
+      );
+      return;
+    }
+    // Email confirmation off: we already have a session, go straight to /welcome.
+    if (data.session) {
+      window.location.href = "/welcome";
+      return;
+    }
+    setLoading(false);
+    goTo("sent-signup");
+  }
+
+  async function handleSignUpMagicLink() {
+    setErrorMsg(null);
+    const basics = validateSignupBasics();
+    if (!basics) return;
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOtp({
+      email: basics.email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome`,
+        data: basics.data,
+      },
     });
     setLoading(false);
-    if (error) { setErrorMsg(friendlyAuthError(error)); return; }
-    goTo("sent-signup");
+    if (error) { setErrorMsg(friendlySignupError(error, lang)); return; }
+    setAfterAuth("/welcome");
+    goTo("sent-magic");
   }
 
   async function handleForgotPassword(e: React.FormEvent) {
@@ -408,15 +533,19 @@ export default function LoginPage() {
                     <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
                       <Mail className="h-7 w-7 text-[var(--primary)]" strokeWidth={1.5} />
                     </div>
-                    <CardTitle className="text-xl">Confirm your account</CardTitle>
+                    <CardTitle className="text-xl">
+                      {lang === "ar" ? "أكّد حسابك" : "Confirm your account"}
+                    </CardTitle>
                     <CardDescription className="mt-1">
-                      Check your email to confirm your account at{" "}
-                      <span className="font-medium text-[var(--foreground)]">{email}</span>
+                      {lang === "ar" ? "افتح بريدك لتأكيد حسابك على " : "Check your email to confirm your account at "}
+                      <span className="font-medium text-[var(--foreground)]" dir="ltr">{email}</span>
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3 text-center">
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      Didn&apos;t receive it? Check your spam folder.
+                      {lang === "ar"
+                        ? "بعد التأكيد سنساعدك على إيجاد مكانك في شجرة العائلة. لم تصلك الرسالة؟ تحقق من البريد المزعج."
+                        : "Once confirmed, we'll help you find your place in the family tree. Didn't receive it? Check your spam folder."}
                     </p>
                     <button
                       type="button"
@@ -606,62 +735,30 @@ export default function LoginPage() {
                   transition={{ duration: 0.2, ease: "easeOut" }}
                 >
                   <CardHeader>
-                    <CardTitle className="text-xl">Create account</CardTitle>
-                    <CardDescription>Enter your details to get started.</CardDescription>
+                    <CardTitle className="text-xl">{lang === "ar" ? "أنشئ حسابك" : "Create your account"}</CardTitle>
+                    <CardDescription>
+                      {lang === "ar"
+                        ? "أربع خانات صغيرة، ثم نساعدك على إيجاد مكانك في شجرة العائلة."
+                        : "Four quick details, then we'll help you find your place in the family tree."}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <form onSubmit={handleSignUp} className="space-y-4" noValidate>
-                      <FloatingInput
-                        id="email-signup"
-                        label="Email address"
-                        value={email}
-                        onChange={setEmail}
-                        disabled={loading}
-                      />
-                      <FloatingInput
-                        id="password-signup"
-                        label="Password"
-                        type="password"
-                        autoComplete="new-password"
-                        value={password}
-                        onChange={setPassword}
-                        disabled={loading}
-                        showToggle
-                      />
-                      <FloatingInput
-                        id="confirm-password"
-                        label="Confirm password"
-                        type="password"
-                        autoComplete="new-password"
-                        value={confirmPassword}
-                        onChange={setConfirmPassword}
-                        disabled={loading}
-                        showToggle
-                      />
-
-                      {errorMsg && (
-                        <Alert variant="destructive" className="py-2">
-                          <AlertDescription>{errorMsg}</AlertDescription>
-                        </Alert>
-                      )}
-
-                      <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? (
-                          <><Loader2 className="animate-spin" /> Creating account…</>
-                        ) : "Create account"}
-                      </Button>
-
-                      <p className="text-center text-xs text-[var(--muted-foreground)]">
-                        Already have an account?{" "}
-                        <button
-                          type="button"
-                          onClick={() => goTo("signin")}
-                          className="font-medium text-[var(--foreground)] underline-offset-4 hover:underline"
-                        >
-                          Sign in
-                        </button>
-                      </p>
-                    </form>
+                    <SignupForm
+                      lang={lang}
+                      fullName={fullName}
+                      onFullName={setFullName}
+                      dob={dob}
+                      onDob={setDob}
+                      email={email}
+                      onEmail={setEmail}
+                      password={password}
+                      onPassword={setPassword}
+                      loading={loading}
+                      errorMsg={errorMsg}
+                      onSubmit={handleSignUp}
+                      onMagicLink={handleSignUpMagicLink}
+                      onSignIn={() => goTo("signin")}
+                    />
                   </CardContent>
                 </motion.div>
               )}
