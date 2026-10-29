@@ -112,8 +112,8 @@ describe("PIN code stays in step with the database and the brief", () => {
     expect(rl).toMatch(/unavailable: true/);
   });
 
-  it("sessions last a year", () => {
-    expect(read("lib/supabase/cookie-options.ts")).toContain("60 * 60 * 24 * 365");
+  it("sessions last about 90 days (rolling)", () => {
+    expect(read("lib/supabase/cookie-options.ts")).toContain("60 * 60 * 24 * 90");
     for (const f of ["lib/supabase/server.ts", "lib/supabase/middleware.ts", "lib/supabase/client.ts"]) {
       expect(read(f), f).toContain("authCookieOptions");
     }
