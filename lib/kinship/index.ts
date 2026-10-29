@@ -9,6 +9,17 @@
 //   3. Any other route (guardians, godparents, chains of marriages): the
 //      shortest path through the whole graph.
 //
+// English naming follows the standard genealogical rules. With A and B
+// climbing dA and dB generations to their nearest shared ancestor:
+//   - one side 0: direct line (parent, grandparent, great-grandparent…)
+//   - both 1: siblings
+//   - one side 1: aunt/uncle (great-…) or niece/nephew (grand-, great-grand-…)
+//   - both 2 or more: cousins. Degree = min(dA, dB) - 1 (first cousins share
+//     grandparents, second cousins great-grandparents…), and "removed" =
+//     |dA - dB|, the number of generations between them.
+// "Half" is added when the two people just below the shared ancestor are half
+// siblings (exactly one parent in common, two parents recorded for each).
+//
 // Arabic terms are templates where "{A}" is replaced by the first person's
 // name (construct state, e.g. "ابن عمّة {A}"), so they compose: a relative of
 // your wife is "<term> زوجة {A}".
@@ -52,6 +63,8 @@ type Found = {
   sharedAncestors: string[];
   /** Number of links between the two people. */
   distance: number;
+  /** Blood part goes through half siblings (one parent in common). */
+  half?: boolean;
 };
 
 export type KinResult =
@@ -146,6 +159,8 @@ function removedPhrase(n: number) {
 }
 
 const greats = (n: number) => "great-".repeat(Math.max(0, n));
+/** "half-uncle", "half first cousin", "half great-aunt". */
+const halfOf = (en: string) => (/^great-|^first|^second|^third|^fourth|^fifth|^sixth|^seventh|^eighth|^\d/.test(en) ? `half ${en}` : `half-${en}`);
 
 /**
  * Fill a template's {A} slot with another phrase. The inner phrase becomes the
@@ -244,10 +259,11 @@ function bloodTerm(graph: KinGraph, upA: string[], upB: string[], half: boolean)
     // B descends from A's sibling S.
     const S = gen(upB[dB - 1]);
     const sib = g(S, "أخي {A}", "أخت {A}", "أخي {A}");
+    const h = (en: string) => (half ? halfOf(en) : en);
     if (dB === 2) {
-      return { en: g(B, "nephew", "niece", "niece/nephew"), ar: g(B, "ابن ", "ابنة ", "ابن ") + sib };
+      return { en: h(g(B, "nephew", "niece", "niece/nephew")), ar: g(B, "ابن ", "ابنة ", "ابن ") + sib };
     }
-    const en = greats(dB - 3) + g(B, "grandnephew", "grandniece", "grandniece/grandnephew");
+    const en = h(greats(dB - 3) + g(B, "grandnephew", "grandniece", "grandniece/grandnephew"));
     if (dB === 3) return { en, ar: g(B, "حفيد ", "حفيدة ", "حفيد ") + sib };
     return { en, ar: nest(g(B, "ابن {A}", "ابنة {A}", "ابن {A}"), bloodTerm(graph, upA, upB.slice(1), half).ar) };
   }
@@ -259,15 +275,17 @@ function bloodTerm(graph: KinGraph, upA: string[], upB: string[], half: boolean)
       viaParent === "f"
         ? g(B, "خال {A}", "خالة {A}", "خال {A}")
         : g(B, "عمّ {A}", "عمّة {A}", "عمّ {A}");
-    if (dA === 2) return { en: g(B, "uncle", "aunt", "aunt/uncle"), ar: word };
-    const en = greats(dA - 3) + g(B, "great-uncle", "great-aunt", "great-aunt/uncle");
+    const h = (en: string) => (half ? halfOf(en) : en);
+    if (dA === 2) return { en: h(g(B, "uncle", "aunt", "aunt/uncle")), ar: word };
+    const en = h(greats(dA - 3) + g(B, "great-uncle", "great-aunt", "great-aunt/uncle"));
     // Uncle of A's parent: "عمّ والد {A}"
     return { en, ar: nest(bloodTerm(graph, upA.slice(1), upB, half).ar, arParentOf(gen(upA[1]))) };
   }
 
   // Cousins.
   const degree = Math.min(dA, dB) - 1;
-  const en = `${ordinal(degree)} cousin${removedPhrase(Math.abs(dA - dB))}`;
+  const cousin = `${ordinal(degree)} cousin${removedPhrase(Math.abs(dA - dB))}`;
+  const en = half ? halfOf(cousin) : cousin;
   if (dA === 2 && dB === 2) {
     const parent = gen(upA[1]); // A's parent
     const auntUncle = gen(upB[1]); // B's parent, sibling of A's parent
@@ -290,12 +308,16 @@ function bloodResult(graph: KinGraph, a: string, b: string): Extract<KinResult, 
   if (!m) return null;
   const { upA, upB, shared, climbA, climbB } = m;
 
-  // Half siblings: exactly one shared (non-adoptive) parent.
+  // Half relations: the two people just below the shared ancestor are half
+  // siblings (exactly one shared non-adoptive parent, two recorded for each).
   let half = false;
-  if (upA.length === 2 && upB.length === 2) {
-    const pa = new Set((graph.parents.get(a) ?? []).filter((e) => !e.link.adoptive).map((e) => e.id));
-    const common = (graph.parents.get(b) ?? []).filter((e) => !e.link.adoptive && pa.has(e.id));
-    half = common.length === 1 && pa.size > 1;
+  if (upA.length >= 2 && upB.length >= 2) {
+    const x = upA[upA.length - 2];
+    const y = upB[upB.length - 2];
+    const bio = (id: string) => (graph.parents.get(id) ?? []).filter((e) => !e.link.adoptive).map((e) => e.id);
+    const px = bio(x);
+    const py = bio(y);
+    half = px.length >= 2 && py.length >= 2 && px.filter((id) => py.includes(id)).length === 1;
   }
 
   const path = [...upA, ...upB.slice(0, -1).reverse()];
@@ -318,7 +340,7 @@ function bloodResult(graph: KinGraph, a: string, b: string): Extract<KinResult, 
     term.en = `${term.en} (through adoption)`;
     term.ar = `${term.ar} (بالتبنّي)`;
   }
-  return { kind: "blood", path, links, term, sharedAncestors: shared, distance: links.length };
+  return { kind: "blood", path, links, term, sharedAncestors: shared, distance: links.length, half };
 }
 
 // ── Marriage ─────────────────────────────────────────────────────────────
@@ -331,6 +353,37 @@ function spouseWord(gender: Gender, status: KinRelationship["status"] | undefine
 function arSpouse(gender: Gender, status: KinRelationship["status"] | undefined) {
   const base = arSpouseOf(gender);
   return status === "divorced" ? base.replace("{A}", "{A} السابق").replace("زوجة {A} السابق", "زوجة {A} السابقة") : base;
+}
+
+/**
+ * B is a blood relative of A's spouse, dS generations up from the spouse and dB
+ * down to B. `notOwnChild`: B is not also A's own child (for step-relations).
+ * Null when there is no standard single word; the caller says "wife's …".
+ */
+function spouseRelativeTerm(dS: number, dB: number, B: Gender, half: boolean | undefined, notOwnChild: boolean): string | null {
+  if (dB === 0 && dS === 1) return g(B, "father-in-law", "mother-in-law", "parent-in-law");
+  if (dB === 0 && dS >= 2) return greats(dS - 2) + g(B, "grandfather-in-law", "grandmother-in-law", "grandparent-in-law");
+  if (dS === 0 && dB === 1) return notOwnChild ? g(B, "stepson", "stepdaughter", "stepchild") : null;
+  if (dS === 0 && dB >= 2) return notOwnChild ? greats(dB - 2) + g(B, "step-grandson", "step-granddaughter", "step-grandchild") : null;
+  if (dS === 1 && dB === 1) return half ? null : g(B, "brother-in-law", "sister-in-law", "sibling-in-law");
+  if (dS === 1 && dB === 2) return g(B, "nephew by marriage", "niece by marriage", "niece/nephew by marriage");
+  if (dS === 2 && dB === 1) return g(B, "uncle-in-law", "aunt-in-law", "aunt/uncle-in-law");
+  if (dS === 2 && dB === 2) return "cousin-in-law";
+  return null;
+}
+
+/** B is the spouse of A's blood relative R (dA up from A, dR down to R). */
+function relativeSpouseTerm(dA: number, dR: number, B: Gender, notOwnParent: boolean): string | null {
+  if (dA === 0 && dR === 1) return g(B, "son-in-law", "daughter-in-law", "child-in-law");
+  if (dA === 0 && dR >= 2) return greats(dR - 2) + g(B, "grandson-in-law", "granddaughter-in-law", "grandchild-in-law");
+  if (dR === 0 && dA === 1) return notOwnParent ? g(B, "stepfather", "stepmother", "step-parent") : null;
+  if (dR === 0 && dA >= 2) return notOwnParent ? greats(dA - 2) + g(B, "step-grandfather", "step-grandmother", "step-grandparent") : null;
+  if (dA === 1 && dR === 1) return g(B, "brother-in-law", "sister-in-law", "sibling-in-law");
+  if (dA === 1 && dR === 2) return g(B, "nephew-in-law", "niece-in-law", "niece/nephew-in-law");
+  if (dR === 1 && dA === 2) return g(B, "uncle by marriage", "aunt by marriage", "aunt/uncle by marriage");
+  if (dR === 1 && dA >= 3) return greats(dA - 3) + g(B, "great-uncle by marriage", "great-aunt by marriage", "great-aunt/uncle by marriage");
+  if (dA === 2 && dR === 2) return "cousin-in-law";
+  return null;
 }
 
 function marriageResult(graph: KinGraph, a: string, b: string): Extract<KinResult, { kind: "marriage" }> | null {
@@ -360,12 +413,9 @@ function marriageResult(graph: KinGraph, a: string, b: string): Extract<KinResul
     const S = gen(s.id);
     const dS = rel.links.filter((l) => l.kind === "parent").length; // generations up from S
     const dB = rel.links.length - dS;
-    let en: string;
-    if (dS === 1 && dB === 0) en = g(B, "father-in-law", "mother-in-law", "parent-in-law");
-    else if (dS === 1 && dB === 1) en = g(B, "brother-in-law", "sister-in-law", "sibling-in-law");
-    else if (dS === 0 && dB === 1 && !(graph.parents.get(b) ?? []).some((p) => p.id === a))
-      en = g(B, "stepson", "stepdaughter", "stepchild");
-    else en = `${spouseWord(S, s.link.status)}'s ${rel.term.en}`;
+    const en =
+      spouseRelativeTerm(dS, dB, B, rel.half, !(graph.parents.get(b) ?? []).some((p) => p.id === a)) ??
+      `${spouseWord(S, s.link.status)}'s ${rel.term.en}`;
     candidates.push({
       kind: "marriage",
       path: [a, ...rel.path],
@@ -383,13 +433,9 @@ function marriageResult(graph: KinGraph, a: string, b: string): Extract<KinResul
     if (!rel) continue;
     const dA = rel.links.filter((l) => l.kind === "parent").length;
     const dR = rel.links.length - dA;
-    let en: string;
-    if (dA === 0 && dR === 1) en = g(B, "son-in-law", "daughter-in-law", "child-in-law");
-    else if (dA === 1 && dR === 1) en = g(B, "brother-in-law", "sister-in-law", "sibling-in-law");
-    else if (dA === 1 && dR === 0 && !(graph.parents.get(a) ?? []).some((p) => p.id === b))
-      en = g(B, "stepfather", "stepmother", "step-parent");
-    else if (dA === 2 && dR === 1) en = g(B, "uncle by marriage", "aunt by marriage", "aunt/uncle by marriage");
-    else en = `${rel.term.en}'s ${spouseWord(B, s.link.status)}`;
+    const en =
+      relativeSpouseTerm(dA, dR, B, !(graph.parents.get(a) ?? []).some((p) => p.id === b)) ??
+      `${rel.term.en}'s ${spouseWord(B, s.link.status)}`;
     candidates.push({
       kind: "marriage",
       path: [...rel.path, b],
@@ -451,6 +497,19 @@ export function findRelationship(graph: KinGraph, a: string, b: string): KinResu
   if (!graph.people.has(a) || !graph.people.has(b)) return { kind: "none" };
   if (a === b) return { kind: "self", path: [a], links: [], term: { en: "the same person", ar: "الشخص نفسه" } };
   return bloodResult(graph, a, b) ?? marriageResult(graph, a, b) ?? shortestPath(graph, a, b) ?? { kind: "none" };
+}
+
+const GEN_STEP: Record<PathLink["kind"], number> = { parent: 1, guardian: 1, godparent: 1, child: -1, ward: -1, godchild: -1, spouse: 0 };
+
+/**
+ * Generation of each person on the path relative to the first: 0 = same
+ * generation, +1 = one generation older (a parent's), -1 = one younger (a
+ * child's). Spouses share a generation.
+ */
+export function pathGenerations(links: PathLink[]): number[] {
+  const out = [0];
+  for (const l of links) out.push(out[out.length - 1] + GEN_STEP[l.kind]);
+  return out;
 }
 
 /** Fill a term's Arabic template with A's name. */
