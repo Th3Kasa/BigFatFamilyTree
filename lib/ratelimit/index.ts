@@ -10,6 +10,7 @@ let _limiters: {
   generic: Ratelimit;
   pinIp: Ratelimit;
   pinFail: Ratelimit;
+  pinFailDay: Ratelimit;
   familyPin: Ratelimit;
 } | null = null;
 
@@ -37,10 +38,13 @@ function getLimiters() {
       limiter: Ratelimit.slidingWindow(60, "1 m"),
       prefix: "rl:gen",
     }),
-    // PIN sign-in (lib/auth/pin-session.ts). pinFail counts FAILED tries per
-    // account; 5 in 15 minutes locks it until the window ends.
+    // PIN sign-in (lib/auth/pin-session.ts). pinFail / pinFailDay count tries
+    // per account (consumed BEFORE the attempt, reset on success): 5 in 15
+    // minutes locks it for the rest of the window; 10 in 24 hours locks it for
+    // the rest of the day (an admin's Reset PIN clears both).
     pinIp: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, "15 m"), prefix: "rl:pin-ip" }),
     pinFail: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(5, "15 m"), prefix: "rl:pin-fail" }),
+    pinFailDay: new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "24 h"), prefix: "rl:pin-fail-day" }),
     familyPin: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(10, "1 h"), prefix: "rl:family-pin" }),
   };
   return _limiters;

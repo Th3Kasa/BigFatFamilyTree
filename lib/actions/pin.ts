@@ -1,19 +1,24 @@
 "use server";
 
-import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getLang } from "@/lib/lang/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { env } from "@/lib/env";
-import { checkLimit, resetLimit } from "@/lib/ratelimit";
+import { checkLimit } from "@/lib/ratelimit";
 import { getAdminContext, getSuperAdminContext } from "@/lib/members/auth";
 import { writeAudit } from "@/lib/members/account-admin";
 import { callerOf, canActOn } from "@/lib/members/permissions";
 import { rotateFamilyPin } from "@/lib/auth/family-pin";
 import { derivePinPassword, generateTempPin } from "@/lib/auth/pin-crypto";
-import { accountLockKey } from "@/lib/auth/pin-lockout";
-import { changeOwnPin, joinWithPin, signInWithPin, type PinResult } from "@/lib/auth/pin-session";
+import {
+  changeOwnPin,
+  clearPinLockout,
+  joinWithPin,
+  pinAccountLockId,
+  signInWithPin,
+  type PinResult,
+} from "@/lib/auth/pin-session";
 import type { ChangePinInput, PinJoinInput, PinSignInInput } from "@/lib/auth/pin-validation";
 import type { MemberActionResult } from "@/lib/members/types";
 
@@ -80,9 +85,9 @@ export async function resetMemberPin(input: { profileId: string }): Promise<Memb
     return { ok: false, error: t("Couldn't reset the PIN. Please try again.", "تعذّرت إعادة تعيين الرمز. حاول مرة أخرى.") };
   }
   await svc.from("profiles").update({ pin_must_change: true }).eq("id", target.id);
-  // A reset also clears any lockout on that account.
+  // A reset also clears any lockout on that account (15-minute and 24-hour).
   if (target.name_key && target.date_of_birth) {
-    await resetLimit("pinFail", createHash("sha256").update(accountLockKey(target.name_key, target.date_of_birth)).digest("hex"));
+    await clearPinLockout(pinAccountLockId(target.name_key, target.date_of_birth));
   }
   await writeAudit({
     actorId: ctx.userId,

@@ -38,6 +38,10 @@ export const PIN_MESSAGES = {
     "Too many tries — wait 15 minutes or ask an admin to reset your PIN",
     "محاولات كثيرة — انتظر ١٥ دقيقة أو اطلب من المشرف إعادة تعيين رمزك السري",
   ],
+  locked_day: [
+    "Too many tries today — ask a family admin to reset your PIN, or try again tomorrow",
+    "محاولات كثيرة اليوم — اطلب من مشرف العائلة إعادة تعيين رمزك السري، أو حاول غدًا",
+  ],
   busy: ["Please try again shortly.", "يرجى المحاولة مرة أخرى بعد قليل."],
   too_many_ip: [
     "Too many attempts from this connection. Please try again later.",

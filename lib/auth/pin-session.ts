@@ -5,11 +5,11 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { env } from "@/lib/env";
-import { checkLimitStrict, remainingStrict, resetLimit } from "@/lib/ratelimit";
+import { checkLimitStrict, resetLimit } from "@/lib/ratelimit";
 import { writeAudit } from "@/lib/members/account-admin";
 import { getOrCreateFamilyPin } from "@/lib/auth/family-pin";
 import { constantTimeEqual, derivePinPassword, memberEmail } from "@/lib/auth/pin-crypto";
-import { accountLockKey, lockState, remainingDelayMs } from "@/lib/auth/pin-lockout";
+import { accountLockKey, remainingDelayMs } from "@/lib/auth/pin-lockout";
 import {
   changePinSchema,
   firstIssueCode,
@@ -57,6 +57,39 @@ async function padTo(startedAt: number) {
 
 type PinProfile = { id: string };
 
+/** The Redis identifier of one PIN account's lockout counters (never the raw name or birthday). */
+export function pinAccountLockId(nameKey: string, dateOfBirth: string): string {
+  return sha(accountLockKey(nameKey, dateOfBirth));
+}
+
+type AttemptGate =
+  | { ok: true; lastShort: boolean; lastDay: boolean }
+  | { ok: false; code: "busy" | "locked" | "locked_day" };
+
+/**
+ * Take one try from an account's 15-minute and 24-hour budgets BEFORE the
+ * attempt is made. Upstash's limit() is atomic, so parallel requests (from
+ * one IP or many) cannot all read "5 left" and slip past the lock; a correct
+ * PIN resets both budgets afterwards.
+ */
+async function takeAttempt(lockId: string): Promise<AttemptGate> {
+  const short = await checkLimitStrict("pinFail", lockId);
+  if (short.unavailable) return { ok: false, code: "busy" };
+  if (!short.success) return { ok: false, code: "locked" };
+  const day = await checkLimitStrict("pinFailDay", lockId);
+  if (day.unavailable) return { ok: false, code: "busy" };
+  if (!day.success) return { ok: false, code: "locked_day" };
+  return { ok: true, lastShort: short.remaining <= 0, lastDay: day.remaining <= 0 };
+}
+
+/** Forget an account's failed tries (correct PIN, or an admin reset it). Best effort. */
+export async function clearPinLockout(lockId: string): Promise<void> {
+  await Promise.all([resetLimit("pinFail", lockId), resetLimit("pinFailDay", lockId)]);
+}
+
+/** Supabase refused for a reason that is not "wrong password" (its own rate limit, an outage). */
+const notACredentialError = (status: number | undefined) => (status ?? 0) === 429 || (status ?? 0) >= 500;
+
 async function findPinProfile(nameKey: string, dateOfBirth: string): Promise<PinProfile | null> {
   const svc = createServiceClient();
   const { data } = await svc
@@ -84,15 +117,15 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
   if (ipCheck.unavailable) return fail("busy", lang);
   if (!ipCheck.success) return fail("too_many_ip", lang);
 
-  // 2. Per account: 5 failed tries lock it for 15 minutes.
+  // 2. Per account, keyed on the normalised name + birthday (the same key the
+  // account is looked up by): 5 tries / 15 minutes and 10 tries / 24 hours.
+  // Counted for names that do not exist too, so a lock reveals nothing.
   const nameKey = makeNameKey(firstName, lastName);
-  const lockId = sha(accountLockKey(nameKey, dateOfBirth));
-  const before = await remainingStrict("pinFail", lockId);
-  if (before.unavailable) return fail("busy", lang);
-  const state = lockState(before.remaining, before.reset, Date.now());
-  if (state.locked) {
+  const lockId = pinAccountLockId(nameKey, dateOfBirth);
+  const gate = await takeAttempt(lockId);
+  if (!gate.ok) {
     await padTo(startedAt);
-    return fail("locked", lang);
+    return fail(gate.code, lang);
   }
 
   // 3. Look the account up and try the derived password. When there is no such
@@ -112,17 +145,26 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
   });
 
   if (!error && profile) {
-    await resetLimit("pinFail", lockId);
+    await clearPinLockout(lockId);
     await padTo(startedAt);
     return { ok: true, redirectTo: "/" };
   }
 
-  // 4. Failure: count it (also for names that do not exist), then say the same thing.
-  const counted = await checkLimitStrict("pinFail", lockId);
+  // 4. Failure (already counted above). The day's last try on a real account
+  // is recorded for the admins: someone may be guessing that member's PIN.
+  if (profile && gate.lastDay && !notACredentialError(error?.status)) {
+    await writeAudit({
+      actorId: profile.id,
+      rowId: profile.id,
+      operation: "update",
+      before: null,
+      after: { event: "pin_locked_24h" },
+    });
+  }
   await padTo(startedAt);
-  if (counted.unavailable) return fail("busy", lang);
-  if (error && (error.status ?? 0) >= 500) return fail("failed", lang);
-  if (!counted.success || counted.remaining <= 0) return fail("locked", lang);
+  if (error && notACredentialError(error.status)) return fail("busy", lang);
+  if (gate.lastDay) return fail("locked_day", lang);
+  if (gate.lastShort) return fail("locked", lang);
   return fail("generic_signin", lang);
 }
 
@@ -142,10 +184,11 @@ export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinRes
   if (ipCheck.unavailable) return fail("busy", lang);
   if (!ipCheck.success) return fail("too_many_ip", lang);
 
-  // Family PIN: 10 wrong tries / hour / IP; compared in constant time.
-  const before = await remainingStrict("familyPin", ipId);
-  if (before.unavailable) return fail("busy", lang);
-  if (before.remaining <= 0) return fail("too_many_ip", lang);
+  // Family PIN: 10 tries / hour / IP, taken BEFORE comparing (atomic, so
+  // parallel requests cannot all pass a "tries left" read); constant time.
+  const famCheck = await checkLimitStrict("familyPin", ipId);
+  if (famCheck.unavailable) return fail("busy", lang);
+  if (!famCheck.success) return fail("too_many_ip", lang);
 
   let expected: string;
   try {
@@ -154,10 +197,7 @@ export async function joinWithPin(raw: PinJoinInput, lang: Lang): Promise<PinRes
     console.error("[pin-join] family PIN unavailable:", e instanceof Error ? e.message : e);
     return fail("failed", lang);
   }
-  if (!constantTimeEqual(familyPin, expected)) {
-    await checkLimitStrict("familyPin", ipId);
-    return fail("family_pin_wrong", lang);
-  }
+  if (!constantTimeEqual(familyPin, expected)) return fail("family_pin_wrong", lang);
 
   const nameKey = makeNameKey(firstName, lastName);
   if (await findPinProfile(nameKey, dateOfBirth)) return fail("duplicate", lang);
@@ -238,9 +278,8 @@ export async function changeOwnPin(raw: ChangePinInput, lang: Lang): Promise<Pin
   if ((profile as { login_method?: string } | null)?.login_method !== "pin") return fail("failed", lang);
 
   const lockId = sha(`user:${user.id}`);
-  const before = await remainingStrict("pinFail", lockId);
-  if (before.unavailable) return fail("busy", lang);
-  if (lockState(before.remaining, before.reset, Date.now()).locked) return fail("locked", lang);
+  const gate = await takeAttempt(lockId);
+  if (!gate.ok) return fail(gate.code, lang);
 
   // Check the current PIN on a throwaway client so this session's cookies are untouched.
   const e = env();
@@ -252,10 +291,8 @@ export async function changeOwnPin(raw: ChangePinInput, lang: Lang): Promise<Pin
     password: derivePinPassword(user.id, oldPin, secret),
   });
   if (oldErr) {
-    if ((oldErr.status ?? 0) >= 500) return fail("failed", lang);
-    const counted = await checkLimitStrict("pinFail", lockId);
-    if (counted.unavailable) return fail("busy", lang);
-    return fail(counted.remaining <= 0 ? "locked" : "old_pin_wrong", lang);
+    if (notACredentialError(oldErr.status)) return fail("busy", lang);
+    return fail(gate.lastDay ? "locked_day" : gate.lastShort ? "locked" : "old_pin_wrong", lang);
   }
 
   const { error: updErr } = await svc.auth.admin.updateUserById(user.id, {
@@ -267,7 +304,7 @@ export async function changeOwnPin(raw: ChangePinInput, lang: Lang): Promise<Pin
   }
   // Service role is a backend role, so the profiles guard allows this.
   await svc.from("profiles").update({ pin_must_change: false }).eq("id", user.id);
-  await resetLimit("pinFail", lockId);
+  await clearPinLockout(lockId);
   await writeAudit({
     actorId: user.id,
     rowId: user.id,

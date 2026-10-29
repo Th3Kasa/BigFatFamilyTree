@@ -5,6 +5,9 @@
 export const PIN_MAX_FAILURES = 5;
 /** How long a locked account stays locked. */
 export const PIN_LOCK_MINUTES = 15;
+/** Tries allowed per account per day; past this the account stays locked until the day window ends. */
+export const PIN_DAILY_MAX_FAILURES = 10;
+export const PIN_DAILY_LOCK_HOURS = 24;
 /** Sign-in attempts allowed per IP address per window. */
 export const PIN_IP_ATTEMPTS = 20;
 export const PIN_IP_WINDOW_MINUTES = 15;
