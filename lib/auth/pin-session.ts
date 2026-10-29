@@ -57,6 +57,11 @@ async function padTo(startedAt: number) {
 
 type PinProfile = { id: string };
 
+/** The Redis identifier of one signed-in user's "current PIN" tries (Change my PIN). */
+export function pinUserLockId(userId: string): string {
+  return sha(`user:${userId}`);
+}
+
 /** The Redis identifier of one PIN account's lockout counters (never the raw name or birthday). */
 export function pinAccountLockId(nameKey: string, dateOfBirth: string): string {
   return sha(accountLockKey(nameKey, dateOfBirth));
@@ -300,7 +305,7 @@ export async function changeOwnPin(raw: ChangePinInput, lang: Lang): Promise<Pin
   const { data: profile } = await svc.from("profiles").select("id, login_method").eq("id", user.id).maybeSingle();
   if ((profile as { login_method?: string } | null)?.login_method !== "pin") return fail("failed", lang);
 
-  const lockId = sha(`user:${user.id}`);
+  const lockId = pinUserLockId(user.id);
   const gate = await takeAttempt(lockId);
   if (!gate.ok) return fail(gate.code, lang);
 

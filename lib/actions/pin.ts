@@ -19,6 +19,8 @@ import {
   signInWithPin,
   type PinResult,
 } from "@/lib/auth/pin-session";
+import { setUpOwnPin } from "@/lib/auth/pin-setup-session";
+import type { PinSetupInput } from "@/lib/auth/pin-setup";
 import type { ChangePinInput, PinJoinInput, PinSignInInput } from "@/lib/auth/pin-validation";
 import type { MemberActionResult } from "@/lib/members/types";
 
@@ -36,6 +38,11 @@ export async function pinJoinAction(input: PinJoinInput): Promise<PinResult> {
 
 export async function changeMyPinAction(input: ChangePinInput): Promise<PinResult> {
   return changeOwnPin(input, await getLang());
+}
+
+/** Switch the signed-in email account to PIN sign-in (or set a new PIN after an email-link sign-in). Always acts on the caller's own account. */
+export async function setUpMyPinAction(input: PinSetupInput): Promise<PinResult> {
+  return setUpOwnPin(input, await getLang());
 }
 
 const profileIdSchema = z.object({ profileId: z.string().uuid() });

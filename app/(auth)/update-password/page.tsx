@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { updatePasswordRedirect } from "@/lib/auth/pin-setup";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -14,6 +15,18 @@ export default function UpdatePasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  // A PIN account signs in with its PIN. Setting an email password here would
+  // replace the PIN-derived one and break PIN sign-in, so send it to "Change my PIN".
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        const to = updatePasswordRedirect(data.user?.app_metadata);
+        if (to) router.replace(to);
+      })
+      .catch(() => {});
+  }, [router]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,6 +43,12 @@ export default function UpdatePasswordPage() {
 
     startTransition(async () => {
       const supabase = createClient();
+      const { data: current } = await supabase.auth.getUser();
+      const to = updatePasswordRedirect(current.user?.app_metadata);
+      if (to) {
+        router.replace(to);
+        return;
+      }
       const { error: updateErr } = await supabase.auth.updateUser({ password });
       if (updateErr) {
         setError(updateErr.message);

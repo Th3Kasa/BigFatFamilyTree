@@ -1,6 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { buildPersonSummary, PERSON_SUMMARY_COLUMNS, type PersonRow } from "./summary";
+import { isPlaceholderEmail } from "@/lib/auth/pin-setup";
 import { countWaiting, isApproved, needsAccessDecision } from "./approval";
 import type {
   MemberAccount,
@@ -33,8 +34,10 @@ type AuthStatus = { email: string | null; email_confirmed_at: string | null };
 
 function toAccount(p: ProfileRow, auth: AuthStatus | undefined): MemberAccount {
   // auth.users is the live address; profiles.email is a sign-up-time copy.
-  // PIN accounts have only a placeholder address; never show it.
-  const email = p.login_method === "pin" ? null : (auth?.email ?? p.email);
+  // PIN accounts made at /join have only a placeholder address; never show it.
+  // An email account that switched to a PIN keeps its real address: show that.
+  const liveEmail = auth?.email ?? p.email;
+  const email = p.login_method === "pin" && isPlaceholderEmail(liveEmail) ? null : liveEmail;
   return {
     id: p.id,
     fullName: p.full_name ?? p.display_name ?? email?.split("@")[0] ?? "—",
