@@ -1,12 +1,10 @@
 "use client";
 
-import { useStore, ViewportPortal } from "@xyflow/react";
+import { useStore } from "@xyflow/react";
 import { ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROW_HEIGHT } from "@/lib/graph/layout";
-import { NODE_HEIGHT } from "@/lib/graph/node-size";
-import { FAR_ZOOM } from "@/lib/graph/viewport";
-import type { BranchLabel, GenerationRow } from "@/lib/graph/generations";
+import type { GenerationRow } from "@/lib/graph/generations";
 
 const arabicDigits = (n: number) => String(n).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
 
@@ -73,35 +71,5 @@ export function GenerationRail({ rows, lang, onToggle }: { rows: GenerationRow[]
         return chip(r, { position: "absolute", top, insetInlineStart: 0 });
       })}
     </nav>
-  );
-}
-
-/** Zoomed far out, family names label each branch instead of unreadable cards. */
-export function BranchLabels({ labels }: { labels: BranchLabel[] }) {
-  const zoom = useStore((s) => s.transform[2]);
-  if (zoom >= FAR_ZOOM) return null;
-  const fontSize = 16 / zoom;
-  return (
-    <ViewportPortal>
-      {labels.map((l) => {
-        // Only where the branch is wide enough on screen to hold its name.
-        if (l.width * zoom < l.name.length * 9 + 20) return null;
-        return (
-          <div
-            key={l.key}
-            aria-hidden
-            className="pointer-events-none absolute select-none whitespace-nowrap rounded-full border border-[var(--border-strong)] bg-[var(--card)] font-bold text-[var(--foreground)]"
-            style={{
-              fontSize,
-              padding: `${4 / zoom}px ${12 / zoom}px`,
-              borderWidth: 1 / zoom,
-              transform: `translate(${l.x}px, ${l.y + NODE_HEIGHT / 2}px) translate(-50%, -50%)`,
-            }}
-          >
-            {l.name}
-          </div>
-        );
-      })}
-    </ViewportPortal>
   );
 }
