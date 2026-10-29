@@ -501,7 +501,7 @@ export function WelcomeFlow({
               label={t("Who invited you?", "من دعاك؟")}
               value={invitedBy}
               onChange={setInvitedBy}
-              placeholder={t("e.g. Aunt Dina", "مثال: عمتي دينا")}
+              placeholder={t("e.g. Uncle Sami", "مثال: خالي سامي")}
             />
             <div className="flex flex-wrap gap-2">
               <button type="submit" disabled={busyId !== null} className={pill.primary}>

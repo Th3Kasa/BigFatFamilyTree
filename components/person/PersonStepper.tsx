@@ -186,7 +186,7 @@ export function PersonStepper({
                       </label>
                       <input
                         className={INPUT_CLS}
-                        placeholder="e.g. Esmak"
+                        placeholder="e.g. Basem"
                         value={fields.given_en}
                         onChange={(e) => setFields((f) => ({ ...f, given_en: e.target.value }))}
                       />
@@ -198,7 +198,7 @@ export function PersonStepper({
                       </label>
                       <input
                         className={INPUT_CLS}
-                        placeholder="e.g. Ahlak"
+                        placeholder="e.g. Morkos"
                         value={fields.family_name_en}
                         onChange={(e) => setFields((f) => ({ ...f, family_name_en: e.target.value }))}
                       />

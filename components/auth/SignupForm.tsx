@@ -83,7 +83,7 @@ export function SignupForm({
           value={fullName}
           onChange={(e) => onFullName(e.target.value)}
           disabled={loading}
-          placeholder={t("e.g. Omar Haddad", "مثال: عمر حداد")}
+          placeholder={t("e.g. Basem Morkos", "مثال: باسم مرقس")}
           className={fieldClass}
         />
       </div>

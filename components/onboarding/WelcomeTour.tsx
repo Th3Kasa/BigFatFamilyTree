@@ -173,8 +173,8 @@ function Step({ step, lang }: { step: number; lang: "ar" | "en" }) {
           <h1 className={h1}>{t("This is your family tree", "هذه شجرة عائلتك")}</h1>
           <div aria-hidden className="tour-pop relative h-[270px] rounded-[22px] border-2 border-[#ECE2DE] bg-[#FBF7F4]" dir="ltr">
             <div className="absolute left-1/2 top-[22px] flex -translate-x-1/2 gap-3.5">
-              <span className={`${dot} h-[60px] w-[60px] bg-[#DDE7F1] text-[#1F4467]`}>EH</span>
-              <span className={`${dot} h-[60px] w-[60px] bg-[#EFE3D3] text-[#6A4A1F]`}>RH</span>
+              <span className={`${dot} h-[60px] w-[60px] bg-[#DDE7F1] text-[#1F4467]`}>EM</span>
+              <span className={`${dot} h-[60px] w-[60px] bg-[#EFE3D3] text-[#6A4A1F]`}>HM</span>
             </div>
             <div className="absolute left-1/2 top-[82px] h-10 w-[3px] -translate-x-1/2 bg-[#B5A6A8]" />
             <div className="absolute left-1/4 right-1/4 top-[122px] h-[3px] bg-[#B5A6A8]" />
@@ -183,7 +183,7 @@ function Step({ step, lang }: { step: number; lang: "ar" | "en" }) {
             <span className={`${dot} absolute left-[calc(25%-34px)] top-[150px] h-[70px] w-[70px] bg-[#E9D4C4] text-[#5C3A21] shadow-[0_0_0_4px_#fff,0_0_0_7px_#7A1631]`}>
               {t("You", "أنت")}
             </span>
-            <span className={`${dot} absolute right-[calc(25%-30px)] top-[150px] h-[62px] w-[62px] bg-[#F7E7EB] text-[#7A1631]`}>LH</span>
+            <span className={`${dot} absolute right-[calc(25%-30px)] top-[150px] h-[62px] w-[62px] bg-[#DDE7F1] text-[#1F4467]`}>AM</span>
             <span className="tour-bob absolute left-[calc(25%+16px)] top-[206px] h-[34px] w-[34px] rounded-full border-[3px] border-[#7A1631] bg-[rgba(122,22,49,.18)]" />
           </div>
           <p className={body}>
@@ -202,11 +202,11 @@ function Step({ step, lang }: { step: number; lang: "ar" | "en" }) {
           <div aria-hidden className="tour-pop flex flex-col gap-3 rounded-[22px] border-2 border-[#ECE2DE] bg-[#FBF7F4] px-4 py-[22px]">
             <div className="flex h-[52px] items-center gap-2.5 rounded-full border-2 border-[#7A1631] bg-white px-4 text-[17px] font-extrabold">
               <Search className="h-5 w-5 text-[#6B5B5E]" strokeWidth={2.5} />
-              {t("Nad", "ناد")}
+              {t("Ram", "رام")}
             </div>
             {[
-              { i: t("NS", "ن ص"), n: t("Nadia Saleh", "نادية صالح"), bg: "#F7E7EB", fg: "#7A1631", c: "tour-rise2" },
-              { i: t("NH", "ن ح"), n: t("Nader Haddad", "نادر حداد"), bg: "#E3EEDF", fg: "#2F5A27", c: "tour-rise3" },
+              { i: t("RM", "ر م"), n: t("Ramy Morkos", "رامي مرقس"), bg: "#DDE7F1", fg: "#1F4467", c: "tour-rise2" },
+              { i: t("RN", "ر ن"), n: t("Ramsis Nassif", "رمسيس نصيف"), bg: "#E3EEDF", fg: "#2F5A27", c: "tour-rise3" },
             ].map((r) => (
               <div key={r.n} className={`${r.c} flex items-center gap-3 rounded-2xl border-2 border-[#ECE2DE] bg-white px-3 py-2.5`}>
                 <span className={`${dot} h-11 w-11`} style={{ background: r.bg, color: r.fg }}>{r.i}</span>
@@ -226,12 +226,12 @@ function Step({ step, lang }: { step: number; lang: "ar" | "en" }) {
             <svg width="100%" height="100%" viewBox="0 0 342 250" className="absolute inset-0">
               <path className="tour-draw" d="M60 190 V125 H171 V60 M171 60 H282 V190" stroke="#C2410C" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <span className={`${dot} absolute left-[136px] top-[26px] h-[70px] w-[70px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>YM</span>
+            <span className={`${dot} absolute left-[136px] top-[26px] h-[70px] w-[70px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>SM</span>
             <span className={`${dot} absolute left-[26px] top-[160px] h-[66px] w-[66px] bg-[#E9D4C4] text-[#5C3A21] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>{t("You", "أنت")}</span>
-            <span className={`${dot} absolute right-[26px] top-[160px] h-[66px] w-[66px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>TS</span>
+            <span className={`${dot} absolute right-[26px] top-[160px] h-[66px] w-[66px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>KM</span>
           </div>
           <p className="tour-rise2 rounded-2xl bg-[#FFF4EC] px-3.5 py-3 text-center text-lg font-black text-[#9A3412]">
-            {t("Tarek is your first cousin · ابن عمّتك", "طارق ابن عمّتك")}
+            {t("Karem is your first cousin · ابن خالك", "كريم ابن خالك")}
           </p>
           <p className="tour-rise3 m-0 text-lg font-bold leading-[1.45] text-[#3D2B2E]">
             {t("Pick any two people and we'll light up the connection and explain it.", "اختر أي شخصين وسنضيء الصلة بينهما ونشرحها.")}
@@ -244,8 +244,8 @@ function Step({ step, lang }: { step: number; lang: "ar" | "en" }) {
           <h1 className={h1}>{t("Keep the memories alive", "حافظ على الذكريات حيّة")}</h1>
           <div aria-hidden className="tour-pop flex flex-col gap-2.5 rounded-[22px] border-2 border-[#ECE2DE] bg-white p-4">
             <div className="flex items-center gap-2.5">
-              <span className={`${dot} h-10 w-10 bg-[#F7E7EB] text-[#7A1631]`}>LH</span>
-              <span className="text-base font-extrabold">{t("Layla shared a memory", "شاركت ليلى ذكرى")}</span>
+              <span className={`${dot} h-10 w-10 bg-[#F7E7EB] text-[#7A1631]`}>HM</span>
+              <span className="text-base font-extrabold">{t("Hanan shared a memory", "شاركت حنان ذكرى")}</span>
             </div>
             <div className="h-[120px] rounded-2xl bg-[#EFE3D3]" />
             <p className="text-base font-bold text-[#3D2B2E]">{t("“Grandpa carried the sewing machine the whole bus ride…”", "«حمل جدّي ماكينة الخياطة طوال الرحلة بالحافلة…»")}</p>

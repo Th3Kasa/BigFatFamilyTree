@@ -92,7 +92,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
             id="given_en"
             name="given_en"
             defaultValue={initialData?.given_en ?? ""}
-            placeholder="e.g. Esmak"
+            placeholder="e.g. Basem"
             className={INPUT_CLS}
           />
           {fieldError("given_en") && (
@@ -103,7 +103,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
 
       <div>
         <label htmlFor="family_name_en" className="block text-xs text-gray-500 mb-1">Family name (EN)</label>
-        <input id="family_name_en" name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} placeholder="e.g. Ahlak" className={INPUT_CLS} />
+        <input id="family_name_en" name="family_name_en" defaultValue={initialData?.family_name_en ?? ""} placeholder="e.g. Morkos" className={INPUT_CLS} />
       </div>
 
       <div>
