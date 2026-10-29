@@ -229,15 +229,15 @@ function Step({ step, lang }: { step: number; lang: "ar" | "en" }) {
             <svg width="100%" height="100%" viewBox="0 0 342 250" className="absolute inset-0">
               <path className="tour-draw" d="M60 190 V125 H171 V60 M171 60 H282 V190" stroke="#C2410C" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <span className={`${dot} absolute left-[136px] top-[26px] h-[70px] w-[70px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>{t("SL", "س ل")}</span>
-            <span className={`${dot} absolute left-[26px] top-[160px] h-[66px] w-[66px] bg-[#E9D4C4] text-[#5C3A21] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>{t("PG", "ب ج")}</span>
-            <span className={`${dot} absolute right-[26px] top-[160px] h-[66px] w-[66px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>{t("SE", "س ع")}</span>
+            <span className={`${dot} absolute left-[136px] top-[26px] h-[70px] w-[70px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>{t("GE", "ج ا")}</span>
+            <span className={`${dot} absolute left-[26px] top-[160px] h-[66px] w-[66px] bg-[#E9D4C4] text-[#5C3A21] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>{t("BM", "ب م")}</span>
+            <span className={`${dot} absolute right-[26px] top-[160px] h-[66px] w-[66px] bg-[#DDE7F1] text-[#1F4467] shadow-[0_0_0_4px_#fff,0_0_0_7px_#C2410C]`}>{t("TG", "ت ج")}</span>
           </div>
           <p className="tour-rise2 rounded-2xl bg-[#FFF4EC] px-3.5 py-3 text-center text-lg font-black text-[#9A3412]">
-            {t("Samy is Paul's first cousin · ابن خالة", "سامي ابن خالة بول")}
+            {t("Basem is Timothy's second cousin", "باسم وتيموثي قريبان من الدرجة الثانية")}
           </p>
           <p className="tour-rise3 m-0 text-lg font-bold leading-[1.45] text-[#3D2B2E]">
-            {t("Their mums, Samar and Merrit, are sisters, so they share grandad Sameer Labib. Pick any two people and we'll light up the connection like this.", "والدتاهما سمر وميريت أختان، فجدّهما المشترك سمير لبيب. اختر أي شخصين وسنضيء الصلة بينهما هكذا.")}
+            {t("Their mums, Hanan and Nancy, are first cousins, so they share great-grandparents Gaballah and Molok. Pick any two people and we'll light up the connection like this.", "والدتاهما حنان ونانسي بنتا خالة، فجاب الله وملك هما جدّا الأمّين. اختر أي شخصين وسنضيء الصلة بينهما هكذا.")}
           </p>
         </div>
       );
