@@ -4,6 +4,7 @@ import { getLang } from "@/lib/lang/server";
 import { getAdminContext } from "@/lib/members/auth";
 import { loadMembersAdminData } from "@/lib/members/admin-data";
 import { MembersAdmin } from "@/components/members/MembersAdmin";
+import { getOrCreateFamilyPin } from "@/lib/auth/family-pin";
 import { cardClass, displayFont } from "@/components/members/primitives";
 
 export const metadata: Metadata = { title: "Members" };
@@ -14,6 +15,13 @@ export default async function AdminMembersPage() {
   if (!ctx) redirect("/");
 
   const data = await loadMembersAdminData(ctx.supabase);
+  // The family PIN is shown to the owner only. The first read creates it.
+  const familyPin = ctx.isSuperAdmin
+    ? await getOrCreateFamilyPin().catch((e: unknown) => {
+        console.error("[admin/members] family PIN unavailable:", e instanceof Error ? e.message : e);
+        return null;
+      })
+    : null;
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   // Raw database errors are for developers only; production shows a plain message.
   const showRawError = process.env.NODE_ENV === "development";
@@ -59,6 +67,7 @@ export default async function AdminMembersPage() {
           data={data}
           currentUserId={ctx.userId}
           isSuperAdmin={ctx.isSuperAdmin}
+          familyPin={familyPin}
           initialTab={data.pending.length + data.waitingAccess.length > 0 ? "waiting" : data.suggestions.length > 0 ? "suggestions" : "all"}
         />
       )}

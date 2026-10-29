@@ -18,6 +18,7 @@ import {
   resolveSuggestion,
   unlinkMember,
 } from "@/lib/actions/members";
+import { resetMemberPin } from "@/lib/actions/pin";
 import { canActOn, callerOf, confirmationName } from "@/lib/members/permissions";
 import { formatPersonSubline } from "@/lib/members/match";
 import { ROLE_ORDER, roleLabel, wouldRemoveLastAdmin } from "@/lib/members/rules";
@@ -34,6 +35,7 @@ import { cn, getDisplayName } from "@/lib/utils";
 import { AddFamilyMemberForm, type SuggestionPrefill } from "./AddFamilyMemberForm";
 import { DeleteMemberDialog, InviteMemberForm, type DeleteTarget } from "./SuperAdminPanels";
 import { PickPersonDialog } from "./PickPersonDialog";
+import { FamilyPinCard } from "./FamilyPinCard";
 import { cardClass, fieldClass, Initials, pill, Spinner } from "./primitives";
 
 type Lang = "ar" | "en";
@@ -50,7 +52,11 @@ type Props = {
   /** The owner: sees "Invite a member", "Delete account" and the Admin role. */
   isSuperAdmin: boolean;
   initialTab: TabKey;
+  /** The current family PIN. Passed for the super admin only; null for everyone else. */
+  familyPin?: string | null;
 };
+
+type StatusFilter = "waiting" | "approved" | "all";
 
 function relativeJoined(iso: string, lang: Lang): string {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -82,7 +88,7 @@ function UnconfirmedBadge({ confirmed, lang }: { confirmed: boolean | null; lang
   );
 }
 
-export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialTab }: Props) {
+export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialTab, familyPin = null }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const router = useRouter();
   const uid = useId();
@@ -91,6 +97,9 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
   const [busy, setBusy] = useState<string | null>(null);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [filter, setFilter] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  // A freshly reset PIN, shown once to the admin and then gone.
+  const [reveal, setReveal] = useState<{ name: string; pin: string } | null>(null);
   const [roleDraft, setRoleDraft] = useState<Record<string, MemberRole>>({});
   const [prefill, setPrefill] = useState<SuggestionPrefill | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -154,16 +163,55 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
     [data.members],
   );
 
+  const counts = useMemo(
+    () => ({
+      waiting: data.members.filter((m) => !m.approved).length,
+      approved: data.members.filter((m) => m.approved).length,
+      all: data.members.length,
+    }),
+    [data.members],
+  );
+
   const filteredMembers = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return data.members;
-    return data.members.filter((m) =>
-      [m.fullName, m.email ?? "", m.person ? getDisplayName(m.person, lang) : ""]
+    return data.members.filter((m) => {
+      if (status === "waiting" && m.approved) return false;
+      if (status === "approved" && !m.approved) return false;
+      if (!q) return true;
+      return [m.fullName, m.email ?? "", m.person ? getDisplayName(m.person, lang) : ""]
         .join(" ")
         .toLowerCase()
-        .includes(q),
-    );
-  }, [data.members, filter, lang]);
+        .includes(q);
+    });
+  }, [data.members, filter, status, lang]);
+
+  async function resetPin(m: MemberAccount) {
+    const first = m.fullName.split(" ")[0] || m.fullName;
+    if (
+      !window.confirm(
+        t(
+          `Reset ${m.fullName}'s PIN? Their old PIN stops working straight away.`,
+          `إعادة تعيين الرمز السري لـ ${m.fullName}؟ سيتوقف رمزه القديم فورًا.`,
+        ),
+      )
+    ) {
+      return;
+    }
+    setBusy(`pin:${m.id}`);
+    try {
+      const res = await resetMemberPin({ profileId: m.id });
+      if (res.ok && res.data) {
+        setReveal({ name: first, pin: res.data.pin });
+        router.refresh();
+      } else if (!res.ok) {
+        toast.error(res.error);
+      }
+    } catch {
+      toast.error(t("Something went wrong. Please try again.", "حدث خطأ ما. حاول مرة أخرى."));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   function changeRole(m: MemberAccount, role: MemberRole) {
     setRoleDraft((d) => ({ ...d, [m.id]: role }));
@@ -174,6 +222,28 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
 
   return (
     <div className="flex flex-col gap-5">
+      {reveal ? (
+        <div role="status" className={cn(cardClass, "flex flex-wrap items-center gap-3 border-[#CFE0CA] bg-[#F1F7EE] p-4")}>
+          <p className="min-w-0 flex-1 text-base font-semibold text-[#241517]">
+            {t(`Tell ${reveal.name} the new PIN: `, `أخبر ${reveal.name} بالرمز السري الجديد: `)}
+            <span dir="ltr" className="ms-1 rounded-xl bg-white px-3 py-1 text-2xl font-bold tracking-[0.25em]">
+              {reveal.pin}
+            </span>
+            <span className="mt-1 block text-sm font-normal text-[var(--muted-foreground)]">
+              {t(
+                "Shown only once. They'll be asked to choose their own PIN after signing in.",
+                "يظهر مرة واحدة فقط. سيُطلب منه اختيار رمزه الخاص بعد تسجيل الدخول.",
+              )}
+            </span>
+          </p>
+          <button type="button" className={pill.outline} onClick={() => setReveal(null)}>
+            {t("Done", "تم")}
+          </button>
+        </div>
+      ) : null}
+
+      {isSuperAdmin && familyPin ? <FamilyPinCard lang={lang} pin={familyPin} /> : null}
+
       <div
         role="tablist"
         aria-label={t("Member lists", "قوائم الأعضاء")}
@@ -315,18 +385,42 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
         hidden={tab !== "all"}
         className="flex flex-col gap-3"
       >
-        <div className="max-w-md">
-          <label htmlFor={`${uid}-filter`} className="sr-only">
-            {t("Filter members", "تصفية الأعضاء")}
-          </label>
-          <input
-            id={`${uid}-filter`}
-            type="search"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder={t("Filter by name or email", "صفِّ بالاسم أو البريد")}
-            className={cn(fieldClass, "min-h-11 rounded-full")}
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="group" aria-label={t("Show members", "عرض الأعضاء")} className="flex gap-1 rounded-full bg-[#F4EDEA] p-1">
+            {(
+              [
+                { key: "waiting", label: t(`Waiting (${counts.waiting})`, `بانتظار (${counts.waiting})`) },
+                { key: "approved", label: t(`Approved (${counts.approved})`, `مقبول (${counts.approved})`) },
+                { key: "all", label: t(`All (${counts.all})`, `الكل (${counts.all})`) },
+              ] as const
+            ).map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                aria-pressed={status === chip.key}
+                onClick={() => setStatus(chip.key)}
+                className={cn(
+                  "min-h-11 whitespace-nowrap rounded-full px-4 text-sm font-semibold text-[#241517] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
+                  status === chip.key ? "bg-white shadow-[0_1px_3px_rgba(36,21,23,0.12)]" : "hover:bg-white/60",
+                )}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+          <div className="min-w-[200px] max-w-md flex-1">
+            <label htmlFor={`${uid}-filter`} className="sr-only">
+              {t("Search members by name", "ابحث عن عضو بالاسم")}
+            </label>
+            <input
+              id={`${uid}-filter`}
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder={t("Search by name", "ابحث بالاسم")}
+              className={cn(fieldClass, "min-h-11 rounded-full")}
+            />
+          </div>
         </div>
 
         <section aria-labelledby={`${uid}-all-h`} className={cn(cardClass, "overflow-hidden")}>
@@ -361,6 +455,7 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
                     const roleLocked = m.isSuperAdmin || (m.role === "admin" && !isSuperAdmin);
                     const canRemoveAccessHere = !m.isSuperAdmin && canActOn(caller, currentUserId, "remove_access", target).ok && m.approved;
                     const canDeleteHere = canActOn(caller, currentUserId, "delete_account", target).ok;
+                    const canResetPin = canActOn(caller, currentUserId, "reset_pin", { ...target, loginMethod: m.loginMethod }).ok;
                     const roleId = `${uid}-role-${m.id}`;
                     return (
                       <tr key={m.id} className="border-t border-[#ECE2DE] align-middle">
@@ -387,7 +482,12 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
                                 ) : null}
                               </div>
                               <div className="flex min-w-0 items-center text-xs text-[var(--muted-foreground)]">
-                                <span className="truncate">{m.email ?? "—"}</span>
+                                <span className="truncate">{m.email ?? (m.loginMethod === "pin" ? t("Signs in with a PIN", "يدخل برمز سري") : "—")}</span>
+                                {m.pinMustChange ? (
+                                  <span className="ms-1.5 inline-flex items-center whitespace-nowrap rounded-full border border-[#F6D3BC] bg-[#FFF4EC] px-2 py-0.5 text-[11px] font-semibold text-[#9A3412]">
+                                    {t("New PIN not chosen yet", "لم يختر رمزًا جديدًا بعد")}
+                                  </span>
+                                ) : null}
                                 <UnconfirmedBadge confirmed={m.emailConfirmed} lang={lang} />
                               </div>
                             </div>
@@ -514,6 +614,17 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
                               >
                                 {busy === `access:${m.id}` ? <Spinner /> : null}
                                 {t("Remove access", "أزل الوصول")}
+                              </button>
+                            ) : null}
+                            {canResetPin ? (
+                              <button
+                                type="button"
+                                className={pill.outline}
+                                disabled={busy === `pin:${m.id}`}
+                                onClick={() => void resetPin(m)}
+                              >
+                                {busy === `pin:${m.id}` ? <Spinner /> : null}
+                                {t("Reset PIN", "أعد تعيين الرمز")}
                               </button>
                             ) : null}
                             {isSuperAdmin && canDeleteHere ? (

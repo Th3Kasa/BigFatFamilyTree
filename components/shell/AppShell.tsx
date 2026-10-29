@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { TopBar } from "@/components/shell/TopBar";
 import { SideNav } from "@/components/shell/SideNav";
@@ -15,11 +16,13 @@ type Props = {
   role?: string;
   /** Badge on "Members" (admins only): people waiting for review. */
   membersBadge?: number;
+  /** An admin reset this member's PIN: gently ask for a new one. */
+  mustChangePin?: boolean;
   children: React.ReactNode;
 };
 
 /** Signed-in frame: top bar, labelled side nav (≥768px), bottom tab bar (<768px). */
-export function AppShell({ user, lang, role, membersBadge, children }: Props) {
+export function AppShell({ user, lang, role, membersBadge, mustChangePin = false, children }: Props) {
   const isAdmin = role === "admin";
   return (
     <div className="flex min-h-svh flex-col">
@@ -30,6 +33,21 @@ export function AppShell({ user, lang, role, membersBadge, children }: Props) {
         {lang === "ar" ? "تخطَّ إلى المحتوى" : "Skip to content"}
       </a>
       <TopBar user={user} lang={lang} role={role} />
+      {mustChangePin ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[#F6D3BC] bg-[#FFF4EC] px-4 py-2.5 text-sm text-[#9A3412]"
+        >
+          <span>
+            {lang === "ar"
+              ? "أعاد المشرف تعيين رمزك السري. اختر رمزًا جديدًا لا يعرفه غيرك."
+              : "An admin gave you a temporary PIN. Choose a new one only you know."}
+          </span>
+          <Link href="/account/pin" className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
+            {lang === "ar" ? "اختر رمزًا جديدًا" : "Choose a new PIN"}
+          </Link>
+        </div>
+      ) : null}
       <div className="flex min-h-0 flex-1">
         <Suspense fallback={<div aria-hidden className="hidden w-[236px] shrink-0 border-e border-[var(--border)] bg-[var(--card)] md:block" />}>
           <SideNav lang={lang} isAdmin={isAdmin} membersBadge={membersBadge} />

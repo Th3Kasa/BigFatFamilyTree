@@ -55,6 +55,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Admins: how many people/suggestions are waiting, shown as a badge on "Members".
   const membersBadge = user && role === "admin" ? await countPendingMembers(supabase) : 0;
 
+  // Members whose PIN an admin reset are asked (gently) to choose their own.
+  // Only PIN accounts are checked; a failed read just hides the reminder.
+  let mustChangePin = false;
+  if (user && approved && user.app_metadata?.login === "pin") {
+    const { data: pinRow } = await supabase.from("profiles").select("pin_must_change").eq("id", user.id).maybeSingle();
+    mustChangePin = !!pinRow?.pin_must_change;
+  }
+
   return (
     <html
       lang={lang}
@@ -65,7 +73,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <CurrentPersonProvider person={currentPerson}>
         <CommandProvider lang={lang}>
           {user && approved ? (
-            <AppShell user={user} lang={lang} role={role} membersBadge={membersBadge}>
+            <AppShell user={user} lang={lang} role={role} membersBadge={membersBadge} mustChangePin={mustChangePin}>
               {children}
             </AppShell>
           ) : (

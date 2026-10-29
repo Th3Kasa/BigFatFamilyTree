@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { LogOut, Shield, Sparkles, UserCheck } from "lucide-react";
+import { KeyRound, LogOut, Shield, Sparkles, UserCheck } from "lucide-react";
 import { shell } from "@/lib/client/shell-store";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import {
@@ -65,6 +65,8 @@ function UserAvatar({ user, size }: { user: SupabaseUser; size: "sm" | "md" }) {
 export function UserMenu({ user, role, lang, variant = "avatar", active = false }: UserMenuProps) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const signOutRef = useRef<HTMLFormElement>(null);
+  // Accounts made with the family PIN have a PIN to change (app_metadata is server-set).
+  const isPinAccount = user.app_metadata?.login === "pin";
   const roleLabel = role ? (lang === "ar" ? ROLE_LABELS[role]?.ar : ROLE_LABELS[role]?.en) ?? role : null;
 
   return (
@@ -97,7 +99,9 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
           <div className="flex items-center gap-3 py-1">
             <UserAvatar user={user} size="md" />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-[var(--foreground)]">{user.email}</p>
+              <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                {isPinAccount ? ((user.user_metadata?.full_name as string | undefined) ?? t("Family member", "فرد من العائلة")) : user.email}
+              </p>
               {roleLabel && <p className="text-xs text-[var(--muted-foreground)]">{roleLabel}</p>}
             </div>
           </div>
@@ -119,6 +123,14 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
+        )}
+        {isPinAccount && (
+          <DropdownMenuItem asChild>
+            <Link href="/account/pin">
+              <KeyRound />
+              {t("Change my PIN", "غيّر رمزي السري")}
+            </Link>
+          </DropdownMenuItem>
         )}
         <DropdownMenuItem onSelect={() => shell.setTourOpen(true)}>
           <Sparkles className="h-4 w-4" />
