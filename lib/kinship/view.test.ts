@@ -159,6 +159,34 @@ describe("people search", () => {
     expect(searchPeople(list, "ahm").map((x) => x.id)).toEqual(["1", "3"]);
     expect(searchPeople(list, "", 2)).toHaveLength(2);
   });
+
+  // Many people share the family name Mansour; two are called Mansour too.
+  const mansours = [
+    p("abdala", "Abdala", { family_name_en: "Mansour" }),
+    p("galila", "Galila", { family_name_en: "Mansour" }),
+    p("mm", "Mansour", { family_name_en: "Mansour" }),
+    p("mn", "Mansour", { family_name_en: "Nassif" }),
+    p("james", "Nageeb (James)", { family_name_en: "Mansour" }),
+    ...Array.from({ length: 60 }, (_, i) => p(`x${i}`, `Zed${i}`, { family_name_en: "Mansour" })),
+  ];
+
+  it("needs a different name word for each typed word, so a full name narrows the list", () => {
+    expect(searchPeople(mansours, "Mansour Mansour").map((x) => x.id)).toEqual(["mm"]);
+    expect(searchPeople(mansours, "mansour mans").map((x) => x.id)).toEqual(["mm"]);
+    expect(matchesQuery(mansours[3], "Mansour Mansour")).toBe(false);
+  });
+
+  it("puts given-name matches before family-name matches, and returns everyone by default", () => {
+    const ids = searchPeople(mansours, "Mansour").map((x) => x.id);
+    expect(ids.slice(0, 2)).toEqual(["mm", "mn"]);
+    expect(ids).toHaveLength(mansours.length);
+    expect(ids.at(-1)).toBe("x59");
+  });
+
+  it("splits names on brackets and hyphens", () => {
+    expect(searchPeople(mansours, "james").map((x) => x.id)).toEqual(["james"]);
+    expect(searchPeople(mansours, "nageeb james mansour").map((x) => x.id)).toEqual(["james"]);
+  });
 });
 
 describe("generations and what the name means", () => {
