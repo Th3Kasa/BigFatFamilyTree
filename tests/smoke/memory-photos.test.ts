@@ -9,10 +9,10 @@ import { eventSchema, MAX_MEMORY_PHOTOS, MEMORY_PHOTO_RE } from "@/lib/validatio
 // own uploads only, path tricks, the 6-photo cap, storage folders); these guard
 // the properties that are easy to break in a later edit.
 
-const sql = readFileSync(path.resolve(__dirname, "../../supabase/migrations/20260601000031_memory_photos.sql"), "utf8");
+const sql = readFileSync(path.resolve(__dirname, "../../supabase/migrations/20260604000034_memory_photos.sql"), "utf8");
 const USER = "10000000-0000-4000-8000-000000000002";
 
-describe("20260601000031_memory_photos.sql", () => {
+describe("20260604000034_memory_photos.sql", () => {
   it("adds photo_paths with a check that matches the app's rule", () => {
     expect(sql).toMatch(/add column if not exists photo_paths text\[\] not null default '\{\}'/);
     expect(sql).toMatch(/coalesce\(cardinality\(p\), 0\) <= 6/);

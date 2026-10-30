@@ -13,7 +13,7 @@ import {
   verifyApproval,
 } from "@/lib/auth/gate";
 
-const PUBLIC_PREFIXES = ["/login", "/update-password", "/auth/callback", "/api/auth", "/_next", "/favicon.ico"];
+const PUBLIC_PREFIXES = ["/login", "/update-password", "/auth/callback", "/api/auth", "/_next", "/favicon.ico", "/privacy"];
 
 // File extensions that should bypass auth (static assets under /public).
 // Includes images, fonts, icons, and OG/manifest files.
@@ -45,7 +45,7 @@ function applySecurityHeaders(res: NextResponse) {
   );
   res.headers.set(
     "Content-Security-Policy",
-    `default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; font-src 'self' data:; worker-src blob:; frame-ancestors 'none'`,
+    `default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; font-src 'self' data:; worker-src blob:; frame-src https://www.youtube-nocookie.com https://www.facebook.com https://www.instagram.com; frame-ancestors 'none'`,
   );
   return res;
 }

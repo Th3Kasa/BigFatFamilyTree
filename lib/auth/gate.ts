@@ -6,7 +6,7 @@
 // (public.is_approved()), so a stale cookie can never expose anything.
 
 /** Routes an unapproved, signed-in user may still open. */
-const UNAPPROVED_ALLOWED_PREFIXES = ["/welcome", "/login", "/update-password", "/auth", "/api/auth", "/_next"];
+const UNAPPROVED_ALLOWED_PREFIXES = ["/welcome", "/login", "/update-password", "/auth", "/api/auth", "/_next", "/privacy"];
 
 const STATIC_FILE_EXT =
   /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|css|js|map|webmanifest|txt|xml)$/i;

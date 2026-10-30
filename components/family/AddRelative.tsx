@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { PartialDateField } from "@/components/ui/partial-date-field";
 import { ArrowLeft, ArrowRight, Search, UserPlus } from "lucide-react";
 import { cn, getDisplayName, getNameParts } from "@/lib/utils";
 import { PersonCombobox } from "@/components/relationships/PersonCombobox";
@@ -259,10 +260,14 @@ export function AddRelative(props: AddRelativeProps) {
             </fieldset>
           )}
           <div className="sm:col-span-2">
-            <label htmlFor={`${uid}-bd`} className={labelCls}>
-              {t("Birth date (optional)", "تاريخ الميلاد (اختياري)")}
-            </label>
-            <input id={`${uid}-bd`} type="date" value={form.birth_date} onChange={set("birth_date")} className={field} />
+            <PartialDateField
+              label={t("Birth date (optional)", "تاريخ الميلاد (اختياري)")}
+              lang={lang}
+              defaultValue={form.birth_date}
+              onChange={(v) => setForm((f) => ({ ...f, birth_date: v }))}
+              inputClassName={field}
+              labelClassName={labelCls}
+            />
           </div>
         </div>
       )}

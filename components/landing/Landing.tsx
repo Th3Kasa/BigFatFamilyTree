@@ -84,6 +84,12 @@ export function Landing({ lang }: { lang: Lang }) {
             </li>
           ))}
         </ul>
+
+        <p className="mt-10 text-sm text-[var(--muted-foreground)]">
+          <Link href="/privacy" className="font-semibold text-[var(--primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+            {t("Privacy", "الخصوصية")}
+          </Link>
+        </p>
       </main>
     </div>
   );

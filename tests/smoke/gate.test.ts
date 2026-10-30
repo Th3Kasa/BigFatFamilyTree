@@ -65,6 +65,10 @@ describe("middleware matcher semantics", () => {
   it("keeps the home page public so signed-out visitors reach the landing page", () => {
     expect(isPublicPath("/")).toBe(true);
   });
+  it("keeps the privacy notice public (Google's sign-in screen links to it)", () => {
+    expect(isPublicPath("/privacy")).toBe(true);
+    expect(isPublicPath("/privacy-anything")).toBe(false);
+  });
   it("still protects app routes for signed-out visitors", () => {
     expect(isPublicPath("/people")).toBe(false);
     expect(isPublicPath("/welcome")).toBe(false);
