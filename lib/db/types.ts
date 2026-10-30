@@ -481,6 +481,7 @@ export type Database = {
           post_id: string
           position: number
           drive_original_id: string
+          drive_trashed_at: string | null
           drive_display_id: string
           mime: string
           bytes_original: number
@@ -492,6 +493,7 @@ export type Database = {
           post_id: string
           position: number
           drive_original_id: string
+          drive_trashed_at?: string | null
           drive_display_id: string
           mime: string
           bytes_original: number
@@ -503,6 +505,7 @@ export type Database = {
           post_id?: string
           position?: number
           drive_original_id?: string
+          drive_trashed_at?: string | null
           drive_display_id?: string
           mime?: string
           bytes_original?: number

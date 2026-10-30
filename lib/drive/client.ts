@@ -309,9 +309,13 @@ export async function downloadFile(fileId: string): Promise<Response> {
   return driveFetch(c.token, `${DRIVE}/files/${fileId}?alt=media`, { timeoutMs: 30_000 });
 }
 
-/** Remove a file the site created (e.g. an abandoned upload). Best effort. */
-export async function trashFile(fileId: string): Promise<void> {
-  if (!/^[A-Za-z0-9_-]{10,200}$/.test(fileId)) return;
+/**
+ * Move a file the site created to the Drive bin (Google deletes it for good
+ * after 30 days). True when it's binned or already gone; false when Drive
+ * couldn't be reached, so the caller can try again later.
+ */
+export async function trashFile(fileId: string): Promise<boolean> {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(fileId)) return true;
   try {
     const c = await connection();
     await driveFetch(c.token, `${DRIVE}/files/${fileId}`, {
@@ -319,7 +323,8 @@ export async function trashFile(fileId: string): Promise<void> {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ trashed: true }),
     });
-  } catch {
-    // Leaving an unused file in the folder is harmless.
+    return true;
+  } catch (e) {
+    return e instanceof DriveError && e.status === 404;
   }
 }
