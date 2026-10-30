@@ -19,6 +19,7 @@ import { ProfileMoreMenu } from "@/components/person/ProfileMoreMenu";
 import { ConfirmDeleteButton } from "@/components/person/ConfirmDeleteButton";
 import { cn, getDisplayName, getNameParts } from "@/lib/utils";
 import { avatarTone, formatEventDate, initialsOf, lifeYears } from "@/lib/people/display";
+import { formatPartialDate } from "@/lib/people/partial-date";
 import { familyOf, kinLabel, type FamilyMember, type FamilyPerson, type FamilyRelationship } from "@/lib/people/family";
 
 type Props = {
@@ -150,10 +151,13 @@ export default async function PersonPage({ params, searchParams }: Props) {
   });
   const birthEvent = sorted.find((e) => e.type === "birth");
   const deathEvent = sorted.find((e) => e.type === "death");
-  const birthText =
-    formatEventDate(person.birth_date ?? birthEvent?.date_value, person.birth_date ? "exact" : birthEvent?.date_precision, lang);
-  const deathText =
-    formatEventDate(person.death_date ?? deathEvent?.date_value, person.death_date ? "exact" : deathEvent?.date_precision, lang);
+  // Person dates may be year only ("1917") or month and year ("1917-05").
+  const birthText = person.birth_date
+    ? formatPartialDate(person.birth_date, lang)
+    : formatEventDate(birthEvent?.date_value, birthEvent?.date_precision, lang);
+  const deathText = person.death_date
+    ? formatPartialDate(person.death_date, lang)
+    : formatEventDate(deathEvent?.date_value, deathEvent?.date_precision, lang);
   const years = lifeYears(person.birth_date ?? birthEvent?.date_value, person.death_date ?? deathEvent?.date_value, lang);
 
   // Places in order: where they were born, moved, and passed away.
