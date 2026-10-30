@@ -53,6 +53,33 @@ export type Database = {
           },
         ]
       }
+      drive_connection: {
+        Row: {
+          id: number
+          refresh_token_enc: string
+          google_email: string | null
+          root_folder_id: string
+          connected_by: string | null
+          connected_at: string
+        }
+        Insert: {
+          id?: number
+          refresh_token_enc: string
+          google_email?: string | null
+          root_folder_id: string
+          connected_by?: string | null
+          connected_at?: string
+        }
+        Update: {
+          id?: number
+          refresh_token_enc?: string
+          google_email?: string | null
+          root_folder_id?: string
+          connected_by?: string | null
+          connected_at?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           audio_url: string | null
@@ -239,6 +266,42 @@ export type Database = {
           },
         ]
       }
+      media_uploads: {
+        Row: {
+          id: string
+          user_id: string
+          variant: string
+          mime: string
+          expected_bytes: number
+          session_url: string
+          received_bytes: number
+          drive_file_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          variant: string
+          mime: string
+          expected_bytes: number
+          session_url: string
+          received_bytes?: number
+          drive_file_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          variant?: string
+          mime?: string
+          expected_bytes?: number
+          session_url?: string
+          received_bytes?: number
+          drive_file_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       people: {
         Row: {
           created_at: string
@@ -357,6 +420,165 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      post_comments: {
+        Row: {
+          id: string
+          post_id: string
+          author_id: string
+          author_name: string
+          body: string
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          author_id?: string
+          author_name: string
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          author_id?: string
+          author_name?: string
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+        }
+        Relationships: []
+      }
+      post_hearts: {
+        Row: {
+          post_id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          post_id: string
+          user_id?: string
+          created_at?: string
+        }
+        Update: {
+          post_id?: string
+          user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      post_media: {
+        Row: {
+          id: string
+          post_id: string
+          position: number
+          drive_original_id: string
+          drive_display_id: string
+          mime: string
+          bytes_original: number
+          width: number | null
+          height: number | null
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          position: number
+          drive_original_id: string
+          drive_display_id: string
+          mime: string
+          bytes_original: number
+          width?: number | null
+          height?: number | null
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          position?: number
+          drive_original_id?: string
+          drive_display_id?: string
+          mime?: string
+          bytes_original?: number
+          width?: number | null
+          height?: number | null
+        }
+        Relationships: []
+      }
+      post_tags: {
+        Row: {
+          post_id: string
+          person_id: string
+        }
+        Insert: {
+          post_id: string
+          person_id: string
+        }
+        Update: {
+          post_id?: string
+          person_id?: string
+        }
+        Relationships: []
+      }
+      posts: {
+        Row: {
+          id: string
+          person_id: string
+          author_id: string
+          author_name: string
+          title: string | null
+          body: string | null
+          date_value: string | null
+          date_precision: Database["public"]["Enums"]["date_precision_type"]
+          location: string | null
+          video_provider: string | null
+          video_ref: string | null
+          video_url: string | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+        }
+        Insert: {
+          id?: string
+          person_id: string
+          author_id?: string
+          author_name: string
+          title?: string | null
+          body?: string | null
+          date_value?: string | null
+          date_precision?: Database["public"]["Enums"]["date_precision_type"]
+          location?: string | null
+          video_provider?: string | null
+          video_ref?: string | null
+          video_url?: string | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+        }
+        Update: {
+          id?: string
+          person_id?: string
+          author_id?: string
+          author_name?: string
+          title?: string | null
+          body?: string | null
+          date_value?: string | null
+          date_precision?: Database["public"]["Enums"]["date_precision_type"]
+          location?: string | null
+          video_provider?: string | null
+          video_ref?: string | null
+          video_url?: string | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -675,10 +897,13 @@ export type Database = {
         }[]
       }
       claimed_person_ids: { Args: never; Returns: string[] }
+      delete_comment: { Args: { p_comment: string }; Returns: undefined }
+      delete_post: { Args: { p_post: string }; Returns: undefined }
       dismiss_checklist: { Args: never; Returns: undefined }
       first_admin_name: { Args: never; Returns: string | null }
       is_approved: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      owns_person: { Args: { p_person: string }; Returns: boolean }
       mark_onboarded: { Args: never; Returns: undefined }
       my_pending_claim_person: {
         Args: never
