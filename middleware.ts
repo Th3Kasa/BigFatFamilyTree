@@ -13,7 +13,7 @@ import {
   verifyApproval,
 } from "@/lib/auth/gate";
 
-const PUBLIC_PREFIXES = ["/login", "/update-password", "/auth/callback", "/api/auth", "/_next", "/favicon.ico"];
+const PUBLIC_PREFIXES = ["/login", "/update-password", "/auth/callback", "/api/auth", "/_next", "/favicon.ico", "/privacy"];
 
 // File extensions that should bypass auth (static assets under /public).
 // Includes images, fonts, icons, and OG/manifest files.
