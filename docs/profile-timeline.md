@@ -39,7 +39,7 @@ not only by the buttons. Deleted posts are hidden (soft delete); their photos st
 
 ### 1. Apply the database change
 
-Supabase → SQL editor → paste and run `supabase/migrations/20260602000032_profile_timeline.sql`.
+Supabase → SQL editor → paste and run `supabase/migrations/20260602000032_profile_timeline.sql`, then `20260603000033_timeline_author_lockdown.sql`.
 (The site works before this: the timeline shows life events only, with no composer.)
 
 ### 2. Create the Google sign-in for the site (about 10 minutes)
@@ -56,7 +56,7 @@ Supabase → SQL editor → paste and run `supabase/migrations/20260602000032_pr
    ends the connection after 7 days. The app only uses the `drive.file` permission plus your
    email, which Google treats as non-sensitive, so no review is needed.
 6. **Clients → Create client** → type **Web application**:
-   - Authorised redirect URI: `https://bigfatfamilytree.vercel.app/api/drive/callback`
+   - Authorised redirect URI: `https://www.bigfatfamilytree.com.au/api/drive/callback` (the live site; also add `https://bigfatfamilytree.vercel.app/api/drive/callback`, and connect from the www address)
      (add any other domain the site uses, with the same `/api/drive/callback` ending).
    - Create, then copy the **Client ID** and **Client secret**.
 
@@ -75,7 +75,7 @@ admin just presses **Reconnect**.
 
 ### 4. Connect the Drive
 
-1. On the site, open **Admin**. The **Photo storage: Google Drive** card is at the top.
+1. On the site (https://www.bigfatfamilytree.com.au), open **Admin**. The **Photo storage: Google Drive** card is at the top.
 2. Press **Connect Google Drive**, sign in with the Google account whose Drive should hold the
    photos (e.g. the 5 TB one), and allow access.
 3. The card shows **Connected as …**. Photo posting is now on for everyone.
