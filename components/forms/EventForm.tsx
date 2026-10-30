@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MemoryPhotoPicker } from "@/components/forms/MemoryPhotoPicker";
 import type { ActionState } from "@/lib/actions/people";
 import { EVENT_TYPES, DATE_PRECISIONS } from "@/lib/validation/events";
 
@@ -35,6 +36,8 @@ type Props = {
   lang: "ar" | "en";
   /** "memory" fixes the type to a story (notable_story) and uses gentler wording. */
   kind?: "memory" | "event";
+  /** Memory form opened from "Upload photos": open the photo picker straight away. */
+  startWithPhotos?: boolean;
 };
 
 const fieldClass =
@@ -45,11 +48,12 @@ const ARABIC_RE = /[؀-ۿ]/;
 const labelClass = "text-sm font-semibold text-[var(--foreground)]";
 const hintClass = "text-xs text-[var(--muted-foreground)]";
 
-export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
+export function EventForm({ action, returnHref, lang, kind = "event", startWithPhotos = false }: Props) {
   const router = useRouter();
   const memory = kind === "memory";
   const [type, setType] = useState<string>(memory ? "notable_story" : "birth");
   const [memoryText, setMemoryText] = useState("");
+  const [photoPaths, setPhotoPaths] = useState<string[]>([]);
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
 
   const [state, formAction, pending] = useActionState(
@@ -118,6 +122,7 @@ export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
       )}
 
       {memory ? (
+        <div className="space-y-4">
         <div className="space-y-1.5">
           <label htmlFor="memory_text" className={labelClass}>
             {t("Your memory", "ذكراك")}
@@ -128,13 +133,17 @@ export function EventForm({ action, returnHref, lang, kind = "event" }: Props) {
             name={ARABIC_RE.test(memoryText) ? "story_ar" : "story_en"}
             dir="auto"
             rows={7}
-            required
+            // A memory needs words or at least one photo.
+            required={photoPaths.length === 0}
             maxLength={4000}
             value={memoryText}
             onChange={(e) => setMemoryText(e.target.value)}
             placeholder={t("What do you remember? A moment, a habit, something they used to say…", "ماذا تتذكر؟ لحظة، عادة، شيء كانوا يقولونه…")}
             className={fieldClass}
           />
+        </div>
+        <MemoryPhotoPicker lang={lang} onChange={setPhotoPaths} disabled={pending} openOnMount={startWithPhotos} />
+        <input type="hidden" name="photo_paths" value={JSON.stringify(photoPaths)} />
         </div>
       ) : (
         <EventDetails storyFields={storyFields} labelFn={label} t={t} />

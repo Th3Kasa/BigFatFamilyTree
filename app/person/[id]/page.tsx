@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 import { PagePersonContext } from "@/components/shell/PagePersonContext";
 import { canEditPerson } from "@/lib/people/edit-scope";
+import { signPhotoValues } from "@/lib/storage/sign";
 import { ProfileMoreMenu } from "@/components/person/ProfileMoreMenu";
 import { ConfirmDeleteButton } from "@/components/person/ConfirmDeleteButton";
 import { cn, getDisplayName, getNameParts } from "@/lib/utils";
@@ -113,7 +114,8 @@ export default async function PersonPage({ params, searchParams }: Props) {
   // Details, photo, family links and life events: only the editor's close family
   // (can_edit_person). Memories: any editor, on any page.
   const canEdit = await canEditPerson(supabase, role, personId);
-  const canWriteMemory = role === "admin" || role === "editor";
+  // Every approved member may write a memory (with photos) on anyone's page.
+  const canWriteMemory = !!user;
   // Deleting: admins, or an editor removing an unclaimed person they added (delete_person enforces it).
   let canDelete = isAdmin;
   if (!canDelete && canEdit && user && person.created_by === user.id) {
@@ -153,6 +155,11 @@ export default async function PersonPage({ params, searchParams }: Props) {
   const firstName = given || displayName;
 
   // ── Life story ─────────────────────────────────────────────────────────
+  // Memory photos live in the private bucket: sign them all in one request.
+  const memoryPhotoUrls = await signPhotoValues(
+    supabase,
+    (events ?? []).flatMap((e) => ((e as { photo_paths?: string[] | null }).photo_paths ?? [])),
+  );
   const sorted = [...(events ?? [])].sort((a, b) => {
     if (!a.date_value && !b.date_value) return 0;
     if (!a.date_value) return 1;
@@ -423,7 +430,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
                           <p className="min-w-0 flex-1 truncate text-sm text-[var(--muted-foreground)]">
                             {meta || t("Date not known", "التاريخ غير معروف")}
                           </p>
-                          {(canEdit || (canWriteMemory && e.type === "notable_story")) && (
+                          {(canEdit || (e.type === "notable_story" && !!user && e.contributed_by === user.id)) && (
                             <ConfirmDeleteButton
                               action={removeEvent}
                               label={t("Delete this entry", "حذف هذا الإدخال")}
@@ -438,6 +445,12 @@ export default async function PersonPage({ params, searchParams }: Props) {
                             {story}
                           </p>
                         )}
+                        <MemoryPhotos
+                          urls={((e as { photo_paths?: string[] | null }).photo_paths ?? [])
+                            .map((p) => memoryPhotoUrls.get(p))
+                            .filter((u): u is string => !!u)}
+                          lang={lang}
+                        />
                       </li>
                     );
                   })}
@@ -637,5 +650,34 @@ function FamilyGroup({
       {members.length === 0 && empty && <p className="text-sm text-[var(--muted-foreground)]">{empty}</p>}
       {action && <div className="mt-3">{action}</div>}
     </section>
+  );
+}
+
+/** A memory's photos: a small grid; each opens full size in a new tab. */
+function MemoryPhotos({ urls, lang }: { urls: string[]; lang: Lang }) {
+  if (urls.length === 0) return null;
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  return (
+    <ul className={cn("grid gap-2", urls.length === 1 ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3")}>
+      {urls.map((url, i) => (
+        <li key={url}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block overflow-hidden rounded-2xl bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- signed URLs from the private photos bucket */}
+            <img
+              src={url}
+              alt={t(`Photo ${i + 1} of ${urls.length}`, `الصورة ${i + 1} من ${urls.length}`)}
+              loading="lazy"
+              decoding="async"
+              className={cn("w-full object-cover", urls.length === 1 ? "max-h-[420px]" : "aspect-square")}
+            />
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }

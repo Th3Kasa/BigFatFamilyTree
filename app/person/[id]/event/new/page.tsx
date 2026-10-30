@@ -22,17 +22,19 @@ export default async function NewEventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ kind?: string | string[] }>;
+  searchParams: Promise<{ kind?: string | string[]; photos?: string | string[] }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const [supabase, lang] = await Promise.all([createClient(), getLang()]);
   const memory = sp.kind === "memory";
+  const startWithPhotos = memory && sp.photos === "1";
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Viewers cannot author events (RLS enforces this too — this is UX).
+  // Every approved member may write a memory on anyone's page; life events
+  // only for people in an editor's close family (RLS enforces both — this is UX).
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
@@ -49,8 +51,6 @@ export default async function NewEventPage({
   const person = (await withSignedPhotos(supabase, [rawPerson]))[0];
 
   const returnHref = `/person/${encodeURIComponent(person.slug ?? person.id)}`;
-  if (role !== "admin" && role !== "editor") redirect(returnHref);
-  // Life events (not memories) only for people in the editor's close family.
   if (!memory && !(await canEditPerson(supabase, role, person.id as string))) redirect(returnHref);
 
   const boundCreate = createEvent.bind(null, person.id as string);
@@ -79,7 +79,7 @@ export default async function NewEventPage({
             </p>
           </div>
         </div>
-        <EventForm action={boundCreate} returnHref={returnHref} lang={lang} kind={memory ? "memory" : "event"} />
+        <EventForm action={boundCreate} returnHref={returnHref} lang={lang} kind={memory ? "memory" : "event"} startWithPhotos={startWithPhotos} />
       </div>
     </div>
   );

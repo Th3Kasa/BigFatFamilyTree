@@ -19,6 +19,7 @@ export async function createEvent(
     location: formData.get("location")?.toString(),
     story_en: formData.get("story_en")?.toString(),
     story_ar: formData.get("story_ar")?.toString(),
+    photo_paths: parsePhotoPaths(formData.get("photo_paths")),
   };
 
   const parsed = eventSchema.safeParse(raw);
@@ -34,6 +35,16 @@ export async function createEvent(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Not signed in." };
+  if (parsed.data.type === "notable_story" && !parsed.data.story_en && !parsed.data.story_ar && parsed.data.photo_paths.length === 0) {
+    return { success: false, error: "Write a few words or add a photo." };
+  }
+  // Photos only on memories, and only the author's own uploads (the database checks both too).
+  if (parsed.data.photo_paths.length > 0) {
+    if (parsed.data.type !== "notable_story") return { success: false, error: "Photos can only be added to a memory." };
+    if (!parsed.data.photo_paths.every((p) => p.startsWith(`memories/${user.id}/`))) {
+      return { success: false, error: "You can only add photos you uploaded yourself." };
+    }
+  }
 
   const { data, error } = await supabase
     .from("events")
@@ -52,14 +63,30 @@ export async function createEvent(
   return { success: true, id: data.id };
 }
 
+/** The hidden photo_paths field: a JSON array of storage paths (anything else counts as none). */
+function parsePhotoPaths(value: FormDataEntryValue | null): unknown {
+  if (typeof value !== "string" || !value) return [];
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null; // fails validation
+  }
+}
+
 export async function deleteEvent(
   eventId: string,
   personId: string,
 ): Promise<ActionState> {
   const supabase = await createClient();
-  const { data: removed, error } = await supabase.from("events").delete().eq("id", eventId).select("id");
+  const { data: removed, error } = await supabase.from("events").delete().eq("id", eventId).select("id, photo_paths");
   if (error) return { success: false, error: writeErrorMessage(error) };
   if (!removed || removed.length === 0) return { success: false, error: OUT_OF_SCOPE };
+  // Best effort: remove the memory's photo files (storage lets members delete only their own uploads).
+  const paths = (removed[0] as { photo_paths?: string[] | null }).photo_paths ?? [];
+  if (paths.length > 0) {
+    const { error: rmErr } = await supabase.storage.from("photos").remove(paths);
+    if (rmErr) console.error("[events] could not remove memory photos:", rmErr.message);
+  }
 
   revalidatePath(`/person/${personId}`);
   return { success: true };

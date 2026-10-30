@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowLeft, ArrowRight, CalendarPlus, ImagePlus, PenLine, Search, ShieldQuestion, UserPlus, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarPlus, ImagePlus, PenLine, Search, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { shell, useShell, type ContextPerson } from "@/lib/client/shell-store";
 import { directoryName, matchPeople, useFamilyDirectory } from "@/lib/client/family-directory";
@@ -19,7 +19,8 @@ function hrefFor(action: Action, p: { id: string; slug: string | null }) {
   const ref = encodeURIComponent(p.slug ?? p.id);
   if (action === "event") return `/person/${ref}/event/new`;
   if (action === "memory") return `/person/${ref}/event/new?kind=memory`;
-  return `/person/${ref}?tab=photos`;
+  // Photos go with a memory (any member, any page); profile photos are changed on the profile.
+  return `/person/${ref}/event/new?kind=memory&photos=1`;
 }
 
 /**
@@ -133,9 +134,7 @@ export function AddMenu({ lang, role }: { lang: Lang; role?: string }) {
             </DialogPrimitive.Close>
           </div>
 
-          {!canEdit ? (
-            <ViewerNote lang={lang} onFinder={() => go("/relationships")} />
-          ) : step.kind === "menu" ? (
+          {step.kind === "menu" ? (
             <>
               <p className="text-sm text-[var(--muted-foreground)]">
                 {context ? (
@@ -157,6 +156,8 @@ export function AddMenu({ lang, role }: { lang: Lang; role?: string }) {
               </p>
 
               <div className="grid grid-cols-2 gap-2.5">
+                {/* Adding people and life events is for editors; memories and photos are for everyone. */}
+                {canEdit && (
                 <Tile
                   icon={<UserPlus className="h-5 w-5" aria-hidden />}
                   tone={{ bg: "#DDE7F1", fg: "#1F4467" }}
@@ -164,6 +165,8 @@ export function AddMenu({ lang, role }: { lang: Lang; role?: string }) {
                   hint={t("Someone new in the family", "فرد جديد في العائلة")}
                   onClick={() => go("/person/new")}
                 />
+                )}
+                {canEdit && (
                 <Tile
                   icon={<CalendarPlus className="h-5 w-5" aria-hidden />}
                   tone={{ bg: "#E3EEDF", fg: "#2F5A27" }}
@@ -171,11 +174,12 @@ export function AddMenu({ lang, role }: { lang: Lang; role?: string }) {
                   hint={t("Birth, wedding, move, graduation", "ميلاد، زواج، انتقال، تخرّج")}
                   onClick={() => runAction("event")}
                 />
+                )}
                 <Tile
                   icon={<ImagePlus className="h-5 w-5" aria-hidden />}
                   tone={{ bg: "#EFE3D3", fg: "#6A4A1F" }}
                   title={t("Upload photos", "رفع صور")}
-                  hint={t("A profile photo for someone", "صورة شخصية لأحد الأفراد")}
+                  hint={t("Old photos, with a few words", "صور قديمة مع بضع كلمات")}
                   onClick={() => runAction("photos")}
                 />
                 <Tile
@@ -275,31 +279,3 @@ function Tile({
   );
 }
 
-function ViewerNote({ lang, onFinder }: { lang: Lang; onFinder: () => void }) {
-  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-start gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--background)] p-4">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)]">
-          <ShieldQuestion className="h-5 w-5" aria-hidden />
-        </span>
-        <div>
-          <p className="text-[15px] font-semibold text-[var(--foreground)]">{t("Ask an admin to add things", "اطلب من المشرف إضافة ما تريد")}</p>
-          <p className="mt-1 text-sm leading-relaxed text-[var(--muted-foreground)]">
-            {t(
-              "Your account can explore the whole family. To add people, photos or memories, ask one of the family admins to make you an editor.",
-              "يمكنك من حسابك استكشاف العائلة كلها. لإضافة أشخاص أو صور أو ذكريات، اطلب من أحد مشرفي العائلة أن يجعلك محرّرًا.",
-            )}
-          </p>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={onFinder}
-        className="inline-flex h-11 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--card)] px-5 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-      >
-        {t("Explore how you're related", "اكتشف صلة القرابة")}
-      </button>
-    </div>
-  );
-}

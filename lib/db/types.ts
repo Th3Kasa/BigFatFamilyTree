@@ -64,6 +64,7 @@ export type Database = {
           id: string
           location: string | null
           person_id: string
+          photo_paths: string[]
           source_transcript_id: string | null
           source_type: Database["public"]["Enums"]["event_source_type"]
           story_ar: string | null
@@ -81,6 +82,7 @@ export type Database = {
           id?: string
           location?: string | null
           person_id: string
+          photo_paths?: string[]
           source_transcript_id?: string | null
           source_type?: Database["public"]["Enums"]["event_source_type"]
           story_ar?: string | null
@@ -98,6 +100,7 @@ export type Database = {
           id?: string
           location?: string | null
           person_id?: string
+          photo_paths?: string[]
           source_transcript_id?: string | null
           source_type?: Database["public"]["Enums"]["event_source_type"]
           story_ar?: string | null
