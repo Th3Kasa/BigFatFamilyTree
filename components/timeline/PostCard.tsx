@@ -289,15 +289,20 @@ function PhotoGrid({ post, lang }: { post: TimelinePost; lang: "ar" | "en" }) {
   return (
     <ul className={cn("grid gap-0.5 bg-[var(--border)]", grid)}>
       {post.media.map((m, i) => {
+        // One photo is shown whole (never cropped) and no taller than about
+        // half a laptop screen; it centres on a soft background. Several
+        // photos form a grid of square crops.
         const single = n === 1;
-        const ratio = single && m.width && m.height ? `${m.width} / ${m.height}` : "1 / 1";
         return (
           <li key={m.id} className={cn("relative bg-[var(--muted)]", n === 3 && i === 0 && "col-span-2 sm:col-span-1")}>
             <a
               href={`/api/media/${m.id}/original`}
               target="_blank"
               rel="noopener"
-              className="block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[var(--ring)]"
+              className={cn(
+                "block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[var(--ring)]",
+                single && "flex justify-center",
+              )}
               aria-label={t(`Open photo ${i + 1} of ${n} at full size`, `فتح الصورة ${i + 1} من ${n} بالحجم الكامل`)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- private photo served by /api/media */}
@@ -306,8 +311,10 @@ function PhotoGrid({ post, lang }: { post: TimelinePost; lang: "ar" | "en" }) {
                 alt=""
                 loading="lazy"
                 decoding="async"
-                style={{ aspectRatio: ratio }}
-                className={cn("w-full object-cover", single && "max-h-[640px]")}
+                width={m.width ?? undefined}
+                height={m.height ?? undefined}
+                style={single ? undefined : { aspectRatio: "1 / 1" }}
+                className={single ? "h-auto max-h-[min(65vh,560px)] w-auto max-w-full object-contain" : "w-full object-cover"}
               />
             </a>
           </li>
