@@ -230,7 +230,7 @@ export function PersonStepper({
                   >
                     <div className="flex flex-col items-center gap-2">
                       <p className="text-xs text-[var(--muted-foreground)]">Photo</p>
-                      <PhotoUpload currentUrl={photoUrl} onUpload={setPhotoUrl} />
+                      <PhotoUpload currentUrl={photoUrl} onUpload={setPhotoUrl} lang={lang} />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">

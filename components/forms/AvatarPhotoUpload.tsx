@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/lib/supabase/client";
@@ -89,6 +89,22 @@ export function AvatarPhotoUpload({
     startTransition(() => router.refresh());
   }
 
+  // Back to the blank (initials) avatar. The uploaded file stays in storage.
+  async function handleRemove() {
+    const ask = lang === "ar" ? "إزالة الصورة وإبقاء البطاقة بدون صورة؟" : "Remove the photo and leave the card blank?";
+    if (!window.confirm(ask)) return;
+    setError(null);
+    setBusy(true);
+    const result = await updatePersonPhoto(personId, null);
+    setBusy(false);
+    if (!result.success) {
+      setError(result.error ?? (lang === "ar" ? "تعذّرت إزالة الصورة" : "Couldn't remove the photo"));
+      return;
+    }
+    setOptimisticUrl(null);
+    startTransition(() => router.refresh());
+  }
+
   const tip =
     lang === "ar"
       ? optimisticUrl
@@ -107,7 +123,7 @@ export function AvatarPhotoUpload({
         aria-label={tip}
         title={tip}
         className={cn(
-          "group relative rounded-full transition-shadow",
+          "group relative flex rounded-full transition-shadow",
           wrapperClassName,
           busy ? "cursor-wait" : "cursor-pointer hover:ring-[var(--primary)]/70",
         )}
@@ -143,6 +159,17 @@ export function AvatarPhotoUpload({
         className="sr-only"
         onChange={handleFile}
       />
+
+      {optimisticUrl && !busy ? (
+        <button
+          type="button"
+          onClick={handleRemove}
+          className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-xs font-semibold text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--destructive)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+        >
+          <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+          {lang === "ar" ? "إزالة الصورة" : "Remove photo"}
+        </button>
+      ) : null}
 
       {error && (
         <p className="text-[10px] leading-tight text-destructive max-w-[10rem]">{error}</p>
