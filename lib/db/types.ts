@@ -257,6 +257,7 @@ export type Database = {
           great_grandfather_name_en: string | null
           birth_date: string | null
           birth_order: number | null
+          created_by: string | null
           death_date: string | null
           id: string
           is_placeholder: boolean
@@ -272,6 +273,7 @@ export type Database = {
         Insert: {
           birth_date?: string | null
           birth_order?: number | null
+          created_by?: string | null
           created_at?: string
           death_date?: string | null
           deleted_at?: string | null
@@ -301,6 +303,7 @@ export type Database = {
         Update: {
           birth_date?: string | null
           birth_order?: number | null
+          created_by?: string | null
           created_at?: string
           death_date?: string | null
           deleted_at?: string | null
@@ -674,12 +677,15 @@ export type Database = {
           last_sign_in_at: string | null
         }[]
       }
+      can_edit_person: { Args: { p_target: string }; Returns: boolean }
       claimed_person_ids: { Args: never; Returns: string[] }
+      delete_person: { Args: { p_id: string }; Returns: undefined }
       dismiss_checklist: { Args: never; Returns: undefined }
       first_admin_name: { Args: never; Returns: string | null }
       is_approved: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       mark_onboarded: { Args: never; Returns: undefined }
+      my_editable_person_ids: { Args: never; Returns: string[] | null }
       my_pending_claim_person: {
         Args: never
         Returns: {

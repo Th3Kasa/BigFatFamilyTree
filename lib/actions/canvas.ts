@@ -10,7 +10,7 @@ const MAX_OFFSET = 100_000;
  * Save a manual sideways nudge for a couple on the tree. The automatic
  * generation layout is the source of truth; this only stores the horizontal
  * offset from it (pos_x = offset, pos_y = null), so cards always stay in their
- * generation row. Editors and admins only (enforced by RLS on people).
+ * generation row. Only cards in the member's close family (enforced by RLS on people).
  */
 export async function saveCardOffset(id: string, offset: number): Promise<{ success: boolean; error?: string }> {
   if (!UUID_RE.test(id) || !Number.isFinite(offset) || Math.abs(offset) > MAX_OFFSET) {
@@ -25,7 +25,7 @@ export async function saveCardOffset(id: string, offset: number): Promise<{ succ
     .select("id");
   if (error) return { success: false, error: error.message };
   // RLS silently filters rows a viewer may not change: treat "nothing updated" as a failure.
-  if (!data || data.length === 0) return { success: false, error: "You don't have permission to move cards." };
+  if (!data || data.length === 0) return { success: false, error: "You can only move cards in your own close family." };
   revalidatePath("/");
   return { success: true };
 }
@@ -34,7 +34,7 @@ export async function saveCardOffset(id: string, offset: number): Promise<{ succ
  * Save the birth order of a parent's children, oldest first. Writes
  * people.birth_order 1..n and clears manual nudges on those children and their
  * partners so the tree re-flows each branch into place (set_children_order).
- * Editors and admins only (RLS on people, plus a role check in the function).
+ * Only within the member's close family (RLS on people, plus can_edit_person in the function).
  */
 export async function saveChildrenOrder(parentId: string, childIds: string[]): Promise<{ success: boolean; error?: string }> {
   if (
@@ -52,7 +52,7 @@ export async function saveChildrenOrder(parentId: string, childIds: string[]): P
   if (error) {
     const message =
       error.code === "42501"
-        ? "You don't have permission to change the order."
+        ? "You can only change the order in your own close family."
         : error.code === "PGRST202"
           ? "Birth order isn't switched on yet. Please try again later."
           : "Couldn't save the order.";

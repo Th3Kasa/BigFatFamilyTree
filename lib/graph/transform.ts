@@ -8,6 +8,8 @@ import { buildFamilyModel, marriageOrdinal } from "./units";
 
 export type PersonInput = {
   id: string;
+  /** Who added this person (editors may remove placeholders they added themselves). */
+  created_by?: string | null;
   slug: string | null;
   given_en: string | null;
   given_ar: string | null;

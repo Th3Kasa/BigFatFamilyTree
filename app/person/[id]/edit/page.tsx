@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { getDisplayName } from "@/lib/utils";
@@ -7,6 +7,7 @@ import { PersonForm } from "@/components/forms/PersonForm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { BackButton } from "@/components/person/BackButton";
 import { withSignedPhotos } from "@/lib/storage/photos";
+import { canEditPerson } from "@/lib/people/edit-scope";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -29,6 +30,16 @@ export default async function EditPersonPage({ params }: Props) {
   ]);
 
   if (!person) notFound();
+
+  // Only people in the member's close family can be edited (RLS enforces it too).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { data: viewer } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (!(await canEditPerson(supabase, (viewer as { role?: string } | null)?.role, person.id))) {
+    redirect(`/person/${encodeURIComponent(person.slug ?? person.id)}`);
+  }
   const personWithPhoto = (await withSignedPhotos(supabase, [person]))[0];
 
   const updateThisPerson = updatePerson.bind(null, person.id);

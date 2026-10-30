@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLang } from "@/lib/lang/server";
 import { getDisplayName } from "@/lib/utils";
 import { createEvent } from "@/lib/actions/events";
+import { canEditPerson } from "@/lib/people/edit-scope";
 import { EventForm } from "@/components/forms/EventForm";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 
@@ -49,6 +50,8 @@ export default async function NewEventPage({
 
   const returnHref = `/person/${encodeURIComponent(person.slug ?? person.id)}`;
   if (role !== "admin" && role !== "editor") redirect(returnHref);
+  // Life events (not memories) only for people in the editor's close family.
+  if (!memory && !(await canEditPerson(supabase, role, person.id as string))) redirect(returnHref);
 
   const boundCreate = createEvent.bind(null, person.id as string);
   const name = getDisplayName(person, lang);

@@ -32,6 +32,14 @@ const saveChildrenOrder = vi.fn(async () => ({ success: true }));
 vi.mock("@/lib/actions/canvas", () => ({ saveChildrenOrder }));
 
 const { FamilyHub } = await import("./FamilyHub");
+const { RoleProvider } = await import("@/components/providers/role-provider");
+// The panel's own controls follow canEdit; per-relative actions also ask the role
+// provider (family scope). Render as an admin, who may edit everyone.
+const asAdmin = (el: React.ReactElement) => (
+  <RoleProvider role="admin" editable="all">
+    {el}
+  </RoleProvider>
+);
 const { FamilyView } = await import("./FamilyView");
 
 function person(id: string, o: Partial<PersonInput> = {}): PersonInput {
@@ -80,7 +88,7 @@ const hubProps = {
 
 describe("FamilyHub", () => {
   test("editors see the family with slots to add missing relatives", () => {
-    act(() => root.render(<FamilyHub {...hubProps} canEdit />));
+    act(() => root.render(asAdmin(<FamilyHub {...hubProps} canEdit />)));
     const text = host.textContent ?? "";
     expect(text).toContain("Omar's family");
     expect(text).toContain("Add mother");
@@ -90,7 +98,7 @@ describe("FamilyHub", () => {
   });
 
   test("viewers get a read-only panel", () => {
-    act(() => root.render(<FamilyHub {...hubProps} canEdit={false} />));
+    act(() => root.render(asAdmin(<FamilyHub {...hubProps} canEdit={false} />)));
     const text = host.textContent ?? "";
     expect(text).toContain("Mother not recorded");
     expect(text).not.toContain("Add mother");
@@ -98,7 +106,7 @@ describe("FamilyHub", () => {
   });
 
   test("opening at a slot shows the add flow with a confirm that spells out the result", () => {
-    act(() => root.render(<FamilyHub {...hubProps} slot="partner" canEdit />));
+    act(() => root.render(asAdmin(<FamilyHub {...hubProps} slot="partner" canEdit />)));
     expect(host.textContent).toContain("Add Omar's partner");
     const input = host.querySelector<HTMLInputElement>('input[lang="en"]')!;
     act(() => {
@@ -110,7 +118,7 @@ describe("FamilyHub", () => {
   });
 
   test("Arabic renders right to left", () => {
-    act(() => root.render(<FamilyHub {...hubProps} lang="ar" canEdit />));
+    act(() => root.render(asAdmin(<FamilyHub {...hubProps} lang="ar" canEdit />)));
     expect(host.querySelector("aside")?.getAttribute("dir")).toBe("rtl");
     expect(host.textContent).toContain("عائلة Omar");
   });
@@ -124,15 +132,27 @@ describe("FamilyHub children birth order", () => {
     [...host.querySelectorAll('section[aria-labelledby="hub-children"] a span.block.truncate:first-child')].map((n) => n.textContent);
 
   test("children are listed oldest first across marriages, with a reorder handle for editors", () => {
-    act(() => root.render(<FamilyHub {...eliasHub} canEdit />));
+    act(() => root.render(asAdmin(<FamilyHub {...eliasHub} canEdit />)));
     expect(childNames()).toEqual(["Lina Haddad", "Omar Haddad"]);
     expect(host.textContent).toContain("Oldest at the top");
     expect(host.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(2);
   });
 
+  test("an editor whose scope doesn't include every child gets no reorder handle", () => {
+    const onlyElias = (el: React.ReactElement) => (
+      <RoleProvider role="editor" editable={[ordered[0].id]}>
+        {el}
+      </RoleProvider>
+    );
+    act(() => root.render(onlyElias(<FamilyHub {...eliasHub} canEdit />)));
+    expect(childNames()).toEqual(["Lina Haddad", "Omar Haddad"]);
+    expect(host.textContent).not.toContain("Oldest at the top");
+    expect(host.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(0);
+  });
+
   test("arrow keys on the handle save the new order and announce it", async () => {
     saveChildrenOrder.mockClear();
-    act(() => root.render(<FamilyHub {...eliasHub} canEdit />));
+    act(() => root.render(asAdmin(<FamilyHub {...eliasHub} canEdit />)));
     const handle = host.querySelector<HTMLButtonElement>('button[aria-label^="Reorder Omar"]')!;
     await act(async () => {
       handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
@@ -143,7 +163,7 @@ describe("FamilyHub children birth order", () => {
   });
 
   test("viewers see the order but cannot change it", () => {
-    act(() => root.render(<FamilyHub {...eliasHub} canEdit={false} />));
+    act(() => root.render(asAdmin(<FamilyHub {...eliasHub} canEdit={false} />)));
     expect(childNames()).toEqual(["Lina Haddad", "Omar Haddad"]);
     expect(host.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(0);
   });

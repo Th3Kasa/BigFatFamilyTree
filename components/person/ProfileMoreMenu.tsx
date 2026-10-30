@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Lang } from "@/lib/lang/server";
 
-/** "⋯" on a profile (editors only): add a life event, show on the tree, delete. */
+/** "⋯" on a profile (people the member may edit): add a life event, show on the tree, delete (admins). */
 export function ProfileMoreMenu({
   lang,
   name,
@@ -24,7 +24,8 @@ export function ProfileMoreMenu({
   name: string;
   eventHref: string;
   treeHref: string;
-  deleteAction: () => Promise<void>;
+  /** Admins only: deleting a person is not part of an editor's family scope. */
+  deleteAction?: () => Promise<void>;
 }) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const deleteRef = useRef<HTMLFormElement>(null);
@@ -54,7 +55,8 @@ export function ProfileMoreMenu({
               {t("Show on the tree", "اعرض على الشجرة")}
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          {deleteAction ? <DropdownMenuSeparator /> : null}
+          {deleteAction ? (
           <DropdownMenuItem
             className="text-[var(--destructive)] focus:text-[var(--destructive)]"
             onSelect={() => {
@@ -66,9 +68,10 @@ export function ProfileMoreMenu({
             <Trash2 />
             {t("Delete this person", "حذف هذا الشخص")}
           </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
-      <form ref={deleteRef} action={deleteAction} hidden />
+      {deleteAction ? <form ref={deleteRef} action={deleteAction} hidden /> : null}
     </>
   );
 }

@@ -194,7 +194,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const [, startTransition] = useTransition();
   const [tidying, startTidy] = useTransition();
-  const { canEdit: roleCanEdit, isAdmin } = useRole();
+  const { canEdit: roleCanEdit, isAdmin, canEditPerson } = useRole();
   const canEdit = roleCanEdit && !readOnly;
   const me = useCurrentPerson();
   const meId = meIdProp ?? me?.id ?? null;
@@ -486,10 +486,13 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
       (nodes as unknown as GraphNode[]).map((n) => {
         const personId = n.data.refOf ?? n.id;
         const isRef = n.type === "personRef";
-        const showSlots = canEdit && !highlightIndex && !isRef && n.id === selectedId;
+        const editable = canEdit && canEditPerson(personId);
+        const showSlots = editable && !highlightIndex && !isRef && n.id === selectedId;
         return {
           ...n,
           selectable: !isRef,
+          // Only cards in this member's close family can be moved.
+          draggable: editable && !isRef,
           data: {
             ...n.data,
             readOnly,
@@ -500,7 +503,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
           },
         };
       }),
-    [nodes, readOnly, highlightIndex, canEdit, selectedId, slotsFor, openSlot, focusOn],
+    [nodes, readOnly, highlightIndex, canEdit, canEditPerson, selectedId, slotsFor, openSlot, focusOn],
   );
 
   const shown = useMemo(
@@ -537,7 +540,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
   );
 
   const onNodeDragStop: OnNodeDrag = (_, node) => {
-    if (!canEdit || node.type === "personRef") return;
+    if (!canEdit || node.type === "personRef" || !canEditPerson(node.id)) return;
     const nudge = nudgeFor(node.id, node.position.x, merged, relationships, model);
     if (!nudge) return;
     const before = nudges.get(nudge.personId);
@@ -668,7 +671,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
             people={people}
             relationships={relationships}
             lang={lang}
-            canEdit={canEdit}
+            canEdit={canEdit && canEditPerson(familyId)}
             meId={meId}
             onFocus={visitFamily}
             onOpenHub={(slot) => {
@@ -696,7 +699,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
           people={people}
           relationships={relationships}
           lang={lang}
-          canEdit={canEdit}
+          canEdit={canEdit && canEditPerson(hubPerson?.id)}
           meId={meId}
           onClose={closeHub}
           onShowPerson={(id) => {

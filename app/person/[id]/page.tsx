@@ -15,6 +15,7 @@ import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 import { PagePersonContext } from "@/components/shell/PagePersonContext";
+import { canEditPerson } from "@/lib/people/edit-scope";
 import { ProfileMoreMenu } from "@/components/person/ProfileMoreMenu";
 import { ConfirmDeleteButton } from "@/components/person/ConfirmDeleteButton";
 import { cn, getDisplayName, getNameParts } from "@/lib/utils";
@@ -108,7 +109,17 @@ export default async function PersonPage({ params, searchParams }: Props) {
     fetchBirthOrders(supabase),
   ]);
   const role = (viewerProfile as { role?: string } | null)?.role ?? "";
-  const canEdit = role === "admin" || role === "editor";
+  const isAdmin = role === "admin";
+  // Details, photo, family links and life events: only the editor's close family
+  // (can_edit_person). Memories: any editor, on any page.
+  const canEdit = await canEditPerson(supabase, role, personId);
+  const canWriteMemory = role === "admin" || role === "editor";
+  // Deleting: admins, or an editor removing an unclaimed person they added (delete_person enforces it).
+  let canDelete = isAdmin;
+  if (!canDelete && canEdit && user && person.created_by === user.id) {
+    const { data: claimed } = await supabase.rpc("claimed_person_ids");
+    canDelete = !((claimed ?? []) as string[]).includes(personId);
+  }
 
   const allPeople = withBirthOrder(await withSignedPhotos(supabase, (peopleRows ?? []) as FamilyPerson[]), birthOrders);
   const family = familyOf(personId, allPeople, (relRows ?? []) as FamilyRelationship[]);
@@ -243,7 +254,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
             </div>
 
             <div className="flex flex-wrap gap-2 pb-1.5">
-              {canEdit && (
+              {canWriteMemory && (
                 <Link
                   href={`/person/${ref}/event/new?kind=memory`}
                   className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
@@ -274,7 +285,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
                   name={displayName}
                   eventHref={`/person/${ref}/event/new`}
                   treeHref={`/?focus=${encodeURIComponent(personId)}`}
-                  deleteAction={handleDelete}
+                  deleteAction={canDelete ? handleDelete : undefined}
                 />
               )}
             </div>
@@ -371,7 +382,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
             </aside>
 
             <section aria-label={t("Life story", "قصة الحياة")} className="flex min-w-0 flex-1 flex-col gap-4">
-              {canEdit && (
+              {canWriteMemory && (
                 <div className="flex items-center gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--card)] px-4 py-3.5">
                   <PersonAvatar person={person} lang={lang} className="h-10 w-10" textClassName="text-[13px]" />
                   <Link
@@ -412,7 +423,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
                           <p className="min-w-0 flex-1 truncate text-sm text-[var(--muted-foreground)]">
                             {meta || t("Date not known", "التاريخ غير معروف")}
                           </p>
-                          {canEdit && (
+                          {(canEdit || (canWriteMemory && e.type === "notable_story")) && (
                             <ConfirmDeleteButton
                               action={removeEvent}
                               label={t("Delete this entry", "حذف هذا الإدخال")}
@@ -437,11 +448,11 @@ export default async function PersonPage({ params, searchParams }: Props) {
                     {t(`${firstName}'s story hasn't been written yet`, `لم تُكتب قصة ${firstName} بعد`)}
                   </p>
                   <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                    {canEdit
+                    {canWriteMemory
                       ? t("Start with a memory, a move, a wedding: anything worth remembering.", "ابدأ بذكرى أو انتقال أو زفاف: أي شيء يستحق أن يُذكر.")
                       : t("When the family adds memories and life events, they'll appear here.", "عندما تضيف العائلة ذكريات وأحداثًا، ستظهر هنا.")}
                   </p>
-                  {canEdit && (
+                  {canWriteMemory && (
                     <Link
                       href={`/person/${ref}/event/new?kind=memory`}
                       className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]"

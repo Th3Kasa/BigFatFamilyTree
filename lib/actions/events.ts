@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { eventSchema } from "@/lib/validation/events";
 import type { ActionState } from "@/lib/actions/people";
+import { OUT_OF_SCOPE, writeErrorMessage } from "@/lib/people/write-errors";
 
 export async function createEvent(
   personId: string,
@@ -45,7 +46,7 @@ export async function createEvent(
     .select("id")
     .single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
 
   revalidatePath(`/person/${personId}`);
   return { success: true, id: data.id };
@@ -56,8 +57,9 @@ export async function deleteEvent(
   personId: string,
 ): Promise<ActionState> {
   const supabase = await createClient();
-  const { error } = await supabase.from("events").delete().eq("id", eventId);
-  if (error) return { success: false, error: error.message };
+  const { data: removed, error } = await supabase.from("events").delete().eq("id", eventId).select("id");
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  if (!removed || removed.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath(`/person/${personId}`);
   return { success: true };
