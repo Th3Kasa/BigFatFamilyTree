@@ -26,7 +26,9 @@
  *     chain further out on the same side. Physical sides do not flip in Arabic,
  *     so the tree reads the same for everyone.
  *  5. **Generations.** Ancestors with no parents in the tree are generation 0;
- *     everyone else is one more than their deeper parent. A married-in partner
+ *     everyone else is one more than their deeper parent, except that children
+ *     of a couple drawn with a reference card sit one below the host's row
+ *     (where the couple is shown). A married-in partner
  *     takes the generation of the person they sit beside, and a reference card
  *     sits in its host's row, so couples always share a row.
  *
@@ -341,7 +343,11 @@ export function buildFamilyModel(people: P[], relationships: R[]): FamilyModel {
     const birth = birthUnionOf.get(pid);
     if (birth) {
       const u = unions.get(birth)!;
-      g = 1 + Math.max(...[u.fatherId, u.motherId].filter((x): x is string => !!x).map(genOf));
+      // A couple drawn with a reference card sits in the host's row, so its
+      // children hang one row below that, not below the guest's own (possibly
+      // deeper) row far away; otherwise they would trail a long empty line.
+      const r = remote.get(birth);
+      g = r ? 1 + genOf(r.host) : 1 + Math.max(...[u.fatherId, u.motherId].filter((x): x is string => !!x).map(genOf));
     } else if (attachTo.has(pid)) {
       g = genOf(attachTo.get(pid)!.partnerId);
     }
