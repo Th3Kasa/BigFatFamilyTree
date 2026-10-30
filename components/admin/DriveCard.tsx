@@ -10,6 +10,22 @@ const NOTICES: Record<string, { ok: boolean; text: string }> = {
   "not-configured": { ok: false, text: "Drive isn't set up on the server yet (see the setup steps below)." },
   "missing-permission": { ok: false, text: "Google didn't give the Drive permission. Press Connect again and tick the Drive box." },
   failed: { ok: false, text: "Couldn't connect to Google Drive. Please try again." },
+  "bad-client": {
+    ok: false,
+    text: "Google rejected the Client ID or Client secret. In Vercel, re-copy GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from the same Google client (Google Auth Platform → Clients), redeploy, then connect again.",
+  },
+  "redirect-mismatch": {
+    ok: false,
+    text: "Google doesn't recognise this site's return address. In Google Auth Platform → Clients → your web client, add https://www.bigfatfamilytree.com.au/api/drive/callback under Authorised redirect URIs.",
+  },
+  "api-disabled": {
+    ok: false,
+    text: "The Google Drive API isn't switched on. In Google Cloud → APIs and services → Library, open Google Drive API and press Enable, wait a minute, then connect again.",
+  },
+  "bad-key": {
+    ok: false,
+    text: "DRIVE_TOKEN_KEY in Vercel isn't a valid key. Make a new one (32 random bytes, base64), save it in Vercel, redeploy, then connect again.",
+  },
 };
 
 /**

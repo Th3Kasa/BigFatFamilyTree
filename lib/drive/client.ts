@@ -30,11 +30,15 @@ export function driveConfig(): Config | null {
   return clientId && clientSecret && key ? { clientId, clientSecret, key } : null;
 }
 
+/** Why a Drive call failed, for the admin card (never contains secrets). */
+export type DriveErrorCode = "bad-client" | "redirect-mismatch" | "expired" | "api-disabled" | "bad-key" | "unknown";
+
 export class DriveError extends Error {
   constructor(
     message: string,
     readonly status = 502,
     readonly reconnect = false,
+    readonly code: DriveErrorCode = "unknown",
   ) {
     super(message);
   }
@@ -70,10 +74,25 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
     signal: timeout(15_000),
     cache: "no-store",
   });
-  const json = (await res.json().catch(() => ({}))) as TokenResponse & { error?: string };
+  const json = (await res.json().catch(() => ({}))) as TokenResponse & { error?: string; error_description?: string };
   if (!res.ok || !json.access_token) {
-    const revoked = json.error === "invalid_grant";
-    throw new DriveError(revoked ? "Google Drive access was removed. An admin needs to reconnect it." : "Couldn't reach Google Drive.", revoked ? 503 : 502, revoked);
+    // Google's reason code is safe to log; it never contains the secret or token.
+    console.error(`[drive] token request refused: ${res.status} ${json.error ?? ""} ${json.error_description ?? ""}`.trim());
+    if (json.error === "invalid_client" || json.error === "unauthorized_client") {
+      throw new DriveError("Google rejected the Client ID or Client secret.", 503, true, "bad-client");
+    }
+    if (json.error === "redirect_uri_mismatch") {
+      throw new DriveError("The return address isn't on the Google client's list.", 503, true, "redirect-mismatch");
+    }
+    if (json.error === "invalid_grant") {
+      throw new DriveError(
+        body.grant_type === "authorization_code" ? "That Google sign-in expired. Please try again." : "Google Drive access was removed. An admin needs to reconnect it.",
+        503,
+        true,
+        "expired",
+      );
+    }
+    throw new DriveError("Couldn't reach Google Drive.");
   }
   return json;
 }
@@ -193,7 +212,14 @@ async function driveFetch(token: string, url: string, init: RequestInit & { time
     cached = null;
     throw new DriveError("Google Drive access expired. Please try again.", 503);
   }
-  if (!res.ok && res.status !== 308) throw new DriveError(`Google Drive returned ${res.status}.`, res.status === 404 ? 404 : 502);
+  if (!res.ok && res.status !== 308) {
+    const text = await res.text().catch(() => "");
+    if (res.status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used/i.test(text)) {
+      console.error("[drive] the Google Drive API is not enabled in the Google Cloud project");
+      throw new DriveError("The Google Drive API isn't switched on in Google Cloud.", 503, true, "api-disabled");
+    }
+    throw new DriveError(`Google Drive returned ${res.status}.`, res.status === 404 ? 404 : 502);
+  }
   return res;
 }
 
