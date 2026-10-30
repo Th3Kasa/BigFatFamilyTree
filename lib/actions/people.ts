@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { personSchema } from "@/lib/validation/people";
 import { generateSlug } from "@/lib/utils/slug";
+import { OUT_OF_SCOPE, writeErrorMessage } from "@/lib/people/write-errors";
 
 export type ActionState = {
   success: boolean;
@@ -72,7 +73,7 @@ export async function createPerson(
     .select("id, slug")
     .single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
 
   const spouseId = raw.spouse_id;
   if (spouseId && UUID_RE.test(spouseId)) {
@@ -135,13 +136,16 @@ export async function updatePerson(
     payload[k] = v;
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("people")
     .update(payload)
     .eq("id", id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .select("id");
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  // RLS skips rows outside the editor's close family without an error.
+  if (!updated || updated.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath("/");
   revalidatePath(`/person/${existingSlug ?? id}`);
@@ -202,7 +206,7 @@ export async function createPersonQuick(
     .select("id")
     .single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
 
   const newId = data.id;
 
@@ -214,13 +218,19 @@ export async function createPersonQuick(
       type: "spouse",
       status: "current",
     });
-    if (relErr) return { success: false, error: `Person created but spouse link failed: ${relErr.message}` };
+    if (relErr) return { success: false, error: `Person added, but not linked as a partner: ${writeErrorMessage(relErr)}` };
   }
 
   if (childId && UUID_RE.test(childId)) {
     const field = parsed.data.gender === "f" ? "mother_id" : "father_id";
-    const { error: childErr } = await supabase.from("people").update({ [field]: newId }).eq("id", childId).is("deleted_at", null);
-    if (childErr) return { success: false, error: `Person created but parent link failed: ${childErr.message}` };
+    const { data: linked, error: childErr } = await supabase
+      .from("people")
+      .update({ [field]: newId })
+      .eq("id", childId)
+      .is("deleted_at", null)
+      .select("id");
+    if (childErr) return { success: false, error: `Person added, but not linked as a parent: ${writeErrorMessage(childErr)}` };
+    if (!linked || linked.length === 0) return { success: false, error: `Person added, but not linked as a parent: ${OUT_OF_SCOPE}` };
   }
 
   revalidatePath("/");
@@ -257,13 +267,15 @@ export async function linkParentChild(parentId: string, childId: string): Promis
     return { success: false, error: `This person already has a ${role}. Unlink the existing one first.` };
   }
 
-  const { error } = await supabase
+  const { data: linked, error } = await supabase
     .from("people")
     .update({ [field]: parentId })
     .eq("id", childId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .select("id");
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  if (!linked || linked.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath("/");
   revalidatePath(`/person/${childId}`);
@@ -292,13 +304,15 @@ export async function updatePersonPhoto(
     .eq("id", id)
     .maybeSingle();
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("people")
     .update({ photo_url: stored })
     .eq("id", id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .select("id");
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  if (!updated || updated.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath("/");
   const slug = (existing as { slug?: string | null } | null)?.slug;
@@ -334,12 +348,14 @@ export async function unlinkParent(
 
   if (!field) return { success: false, error: "Parent link not found." };
 
-  const { error } = await supabase
+  const { data: unlinked, error } = await supabase
     .from("people")
     .update({ [field]: null })
-    .eq("id", childId);
+    .eq("id", childId)
+    .select("id");
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  if (!unlinked || unlinked.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath("/");
   if (ch.slug) revalidatePath(`/person/${ch.slug}`);
@@ -373,11 +389,13 @@ export async function linkSpouse(
   if (existing) {
     const cur = existing as { id: string; status: string };
     if (cur.status !== status) {
-      const { error: upErr } = await supabase
+      const { data: changed, error: upErr } = await supabase
         .from("relationships")
         .update({ status })
-        .eq("id", cur.id);
-      if (upErr) return { success: false, error: upErr.message };
+        .eq("id", cur.id)
+        .select("id");
+      if (upErr) return { success: false, error: writeErrorMessage(upErr) };
+      if (!changed || changed.length === 0) return { success: false, error: OUT_OF_SCOPE };
     }
     revalidatePath("/");
     revalidatePath(`/person/${personAId}`);
@@ -396,7 +414,7 @@ export async function linkSpouse(
     .select("id")
     .single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
 
   revalidatePath("/");
   revalidatePath(`/person/${personAId}`);
@@ -441,13 +459,15 @@ export async function linkChild(
     return { success: false, error: `This child already has a ${role}. Unlink the existing one first.` };
   }
 
-  const { error } = await supabase
+  const { data: linked, error } = await supabase
     .from("people")
     .update({ [field]: parentId })
     .eq("id", childId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .select("id");
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  if (!linked || linked.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath("/");
   revalidatePath(`/person/${childId}`);
@@ -511,29 +531,37 @@ export async function addSibling(
 
   // Case 2: a has a parent → copy to b
   if (a.father_id && !b.father_id) {
-    const { error } = await supabase
+    const { data: linked, error } = await supabase
       .from("people")
       .update({ father_id: a.father_id })
-      .eq("id", personBId);
-    if (error) return { success: false, error: error.message };
+      .eq("id", personBId)
+      .select("id");
+    if (error) return { success: false, error: writeErrorMessage(error) };
+    if (!linked || linked.length === 0) return { success: false, error: OUT_OF_SCOPE };
   } else if (a.mother_id && !b.mother_id) {
-    const { error } = await supabase
+    const { data: linked, error } = await supabase
       .from("people")
       .update({ mother_id: a.mother_id })
-      .eq("id", personBId);
-    if (error) return { success: false, error: error.message };
+      .eq("id", personBId)
+      .select("id");
+    if (error) return { success: false, error: writeErrorMessage(error) };
+    if (!linked || linked.length === 0) return { success: false, error: OUT_OF_SCOPE };
   } else if (b.father_id && !a.father_id) {
-    const { error } = await supabase
+    const { data: linked, error } = await supabase
       .from("people")
       .update({ father_id: b.father_id })
-      .eq("id", personAId);
-    if (error) return { success: false, error: error.message };
+      .eq("id", personAId)
+      .select("id");
+    if (error) return { success: false, error: writeErrorMessage(error) };
+    if (!linked || linked.length === 0) return { success: false, error: OUT_OF_SCOPE };
   } else if (b.mother_id && !a.mother_id) {
-    const { error } = await supabase
+    const { data: linked, error } = await supabase
       .from("people")
       .update({ mother_id: b.mother_id })
-      .eq("id", personAId);
-    if (error) return { success: false, error: error.message };
+      .eq("id", personAId)
+      .select("id");
+    if (error) return { success: false, error: writeErrorMessage(error) };
+    if (!linked || linked.length === 0) return { success: false, error: OUT_OF_SCOPE };
   } else {
     // Neither has a parent: link both through an "Unknown parent" card.
     const slug = await uniqueSlug(supabase, "unknown-parent");
@@ -542,15 +570,20 @@ export async function addSibling(
       .insert({ is_placeholder: true, gender: "unknown", slug })
       .select("id")
       .single();
-    if (insErr || !created) return { success: false, error: insErr?.message ?? "Couldn't add the unknown parent." };
-    const { error } = await supabase
+    if (insErr || !created) return { success: false, error: insErr ? writeErrorMessage(insErr) : "Couldn't add the unknown parent." };
+    const { data: linked, error } = await supabase
       .from("people")
       .update({ father_id: created.id })
       .in("id", [personAId, personBId])
-      .is("deleted_at", null);
-    if (error) {
+      .is("deleted_at", null)
+      .select("id");
+    if (error || !linked || linked.length < 2) {
+      // Undo: the placeholder was added by this member, so they may remove it again.
+      if (linked && linked.length > 0) {
+        await supabase.from("people").update({ father_id: null }).in("id", linked.map((r) => r.id)).eq("father_id", created.id);
+      }
       await supabase.from("people").update({ deleted_at: new Date().toISOString() }).eq("id", created.id);
-      return { success: false, error: error.message };
+      return { success: false, error: error ? writeErrorMessage(error) : OUT_OF_SCOPE };
     }
     revalidateSiblings(a, b);
     return { success: true, placeholderId: created.id };
@@ -569,43 +602,27 @@ function revalidateSiblings(a: { id: string; slug: string | null }, b: { id: str
 }
 
 // ── deletePerson (soft delete — redirects, for full-page flows) ──────────────
-export async function deletePerson(id: string) {
+// public.delete_person checks permission first (admins: anyone; editors: an
+// unclaimed person they added), then clears the parent links pointing at the
+// person and soft-deletes them in one transaction.
+async function softDeletePerson(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_person", { p_id: id });
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  return { success: true };
+}
 
-  const [{ error: e1 }, { error: e2 }] = await Promise.all([
-    supabase.from("people").update({ father_id: null }).eq("father_id", id).is("deleted_at", null),
-    supabase.from("people").update({ mother_id: null }).eq("mother_id", id).is("deleted_at", null),
-  ]);
-  if (e1 || e2) return { success: false, error: "Failed to clear parent links before deleting." };
-
-  const { error } = await supabase
-    .from("people")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (error) return { success: false, error: error.message };
-
+export async function deletePerson(id: string) {
+  const result = await softDeletePerson(id);
+  if (!result.success) return result;
   revalidatePath("/");
   redirect("/");
 }
 
 // ── deletePersonCanvas (soft delete — no redirect, for in-canvas use) ────────
 export async function deletePersonCanvas(id: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-
-  const [{ error: e1 }, { error: e2 }] = await Promise.all([
-    supabase.from("people").update({ father_id: null }).eq("father_id", id).is("deleted_at", null),
-    supabase.from("people").update({ mother_id: null }).eq("mother_id", id).is("deleted_at", null),
-  ]);
-  if (e1 || e2) return { success: false, error: "Failed to clear parent links before deleting." };
-
-  const { error } = await supabase
-    .from("people")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (error) return { success: false, error: error.message };
-
+  const result = await softDeletePerson(id);
+  if (!result.success) return result;
   revalidatePath("/");
   return { success: true };
 }

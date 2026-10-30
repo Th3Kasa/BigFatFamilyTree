@@ -15,6 +15,7 @@ import { AvatarPhotoUpload } from "@/components/forms/AvatarPhotoUpload";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 import { PagePersonContext } from "@/components/shell/PagePersonContext";
+import { canEditPerson } from "@/lib/people/edit-scope";
 import { ProfileMoreMenu } from "@/components/person/ProfileMoreMenu";
 import { ConfirmDeleteButton } from "@/components/person/ConfirmDeleteButton";
 import { cn, getDisplayName, getNameParts } from "@/lib/utils";
@@ -120,7 +121,17 @@ export default async function PersonPage({ params, searchParams }: Props) {
     ? { userId: viewer.userId, name: viewer.name, isAdmin: viewer.isAdmin, ownsProfile: viewer.personId === personId, personId: viewer.personId }
     : null;
   const role = (viewerProfile as { role?: string } | null)?.role ?? "";
-  const canEdit = role === "admin" || role === "editor";
+  const isAdmin = role === "admin";
+  // Details, photo, family links and life events: only the editor's close family
+  // (can_edit_person). Memories: any editor, on any page.
+  const canEdit = await canEditPerson(supabase, role, personId);
+  const canWriteMemory = role === "admin" || role === "editor";
+  // Deleting: admins, or an editor removing an unclaimed person they added (delete_person enforces it).
+  let canDelete = isAdmin;
+  if (!canDelete && canEdit && user && person.created_by === user.id) {
+    const { data: claimed } = await supabase.rpc("claimed_person_ids");
+    canDelete = !((claimed ?? []) as string[]).includes(personId);
+  }
 
   const allPeople = withBirthOrder(await withSignedPhotos(supabase, (peopleRows ?? []) as FamilyPerson[]), birthOrders);
   const timelinePeople: TimelinePerson[] = allPeople
@@ -269,7 +280,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
             </div>
 
             <div className="flex flex-wrap gap-2 pb-1.5">
-              {canEdit && (
+              {canWriteMemory && (
                 <Link
                   href={`/person/${ref}/event/new?kind=memory`}
                   className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
@@ -300,7 +311,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
                   name={displayName}
                   eventHref={`/person/${ref}/event/new`}
                   treeHref={`/?focus=${encodeURIComponent(personId)}`}
-                  deleteAction={handleDelete}
+                  deleteAction={canDelete ? handleDelete : undefined}
                 />
               )}
             </div>
@@ -429,7 +440,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
                           <p className="min-w-0 flex-1 truncate text-sm text-[var(--muted-foreground)]">
                             {meta || t("Date not known", "التاريخ غير معروف")}
                           </p>
-                          {canEdit && (
+                          {(canEdit || (canWriteMemory && e.type === "notable_story")) && (
                             <ConfirmDeleteButton
                               action={removeEvent}
                               label={t("Delete this entry", "حذف هذا الإدخال")}

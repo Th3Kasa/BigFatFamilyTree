@@ -7,7 +7,7 @@ import { MobileTabBar } from "@/components/shell/MobileTabBar";
 import { AddMenu } from "@/components/shell/AddMenu";
 import { PeopleSheet } from "@/components/shell/PeopleSheet";
 import { BirthdayNotice } from "@/components/shell/BirthdayNotice";
-import { RoleProvider } from "@/components/providers/role-provider";
+import { RoleProvider, type EditableScope } from "@/components/providers/role-provider";
 import { WelcomeTour } from "@/components/onboarding/WelcomeTour";
 import type { Lang } from "@/lib/lang/server";
 
@@ -15,6 +15,8 @@ type Props = {
   user: User;
   lang: Lang;
   role?: string;
+  /** Who this member may edit: "all" for admins, else person ids (editors' close family). */
+  editable?: EditableScope;
   /** Badge on "Members" (admins only): people waiting for review. */
   membersBadge?: number;
   /** An admin reset this member's PIN: gently ask for a new one. */
@@ -23,7 +25,7 @@ type Props = {
 };
 
 /** Signed-in frame: top bar, labelled side nav (≥768px), bottom tab bar (<768px). */
-export function AppShell({ user, lang, role, membersBadge, mustChangePin = false, children }: Props) {
+export function AppShell({ user, lang, role, editable, membersBadge, mustChangePin = false, children }: Props) {
   const isAdmin = role === "admin";
   return (
     <div className="flex min-h-svh flex-col">
@@ -54,7 +56,7 @@ export function AppShell({ user, lang, role, membersBadge, mustChangePin = false
           <SideNav lang={lang} isAdmin={isAdmin} membersBadge={membersBadge} />
         </Suspense>
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 pb-[var(--tabbar-h)] focus:outline-none md:pb-0">
-          <RoleProvider role={role}>{children}</RoleProvider>
+          <RoleProvider role={role} editable={editable} userId={user.id}>{children}</RoleProvider>
         </main>
       </div>
       <MobileTabBar lang={lang} user={user} role={role} />

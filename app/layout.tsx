@@ -4,6 +4,7 @@ import "./globals.css";
 import { getLang } from "@/lib/lang/server";
 import { createClient } from "@/lib/supabase/server";
 import { CommandProvider } from "@/components/providers/command-provider";
+import { fetchEditableScope } from "@/lib/people/edit-scope";
 import { AppShell } from "@/components/shell/AppShell";
 import { CurrentPersonProvider } from "@/components/providers/current-person-provider";
 import { fetchCurrentPerson } from "@/lib/members/current-person";
@@ -54,6 +55,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const currentPerson = user && approved ? await fetchCurrentPerson(supabase, user.id) : null;
   // Admins: how many people/suggestions are waiting, shown as a badge on "Members".
   const membersBadge = user && role === "admin" ? await countPendingMembers(supabase) : 0;
+  // Who this member may edit (their close family), so editing controls show only where they work.
+  const editable = user && approved ? await fetchEditableScope(supabase, role) : [];
 
   // Members whose PIN an admin reset are asked (gently) to choose their own.
   // Only PIN accounts are checked; a failed read just hides the reminder.
@@ -73,7 +76,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <CurrentPersonProvider person={currentPerson}>
         <CommandProvider lang={lang}>
           {user && approved ? (
-            <AppShell user={user} lang={lang} role={role} membersBadge={membersBadge} mustChangePin={mustChangePin}>
+            <AppShell user={user} lang={lang} role={role} editable={editable} membersBadge={membersBadge} mustChangePin={mustChangePin}>
               {children}
             </AppShell>
           ) : (

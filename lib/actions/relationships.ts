@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionState } from "@/lib/actions/people";
+import { OUT_OF_SCOPE, writeErrorMessage } from "@/lib/people/write-errors";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -60,7 +61,7 @@ export async function createRelationship(
     status: status as RelStatus,
   }).select("id").single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
 
   revalidatePath("/");
   revalidatePath(`/person/${personId}`);
@@ -81,12 +82,14 @@ export async function deleteRelationship(
     .eq("id", relationshipId)
     .maybeSingle();
 
-  const { error } = await supabase
+  const { data: removed, error } = await supabase
     .from("relationships")
     .delete()
-    .eq("id", relationshipId);
+    .eq("id", relationshipId)
+    .select("id");
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  if (!removed || removed.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath("/");
   if (rel) {
@@ -114,12 +117,14 @@ export async function updateRelationshipStatus(
     .eq("id", relationshipId)
     .maybeSingle();
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("relationships")
     .update({ status })
-    .eq("id", relationshipId);
+    .eq("id", relationshipId)
+    .select("id");
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: writeErrorMessage(error) };
+  if (!changed || changed.length === 0) return { success: false, error: OUT_OF_SCOPE };
 
   revalidatePath("/");
   if (rel) {

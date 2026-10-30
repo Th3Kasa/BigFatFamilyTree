@@ -30,6 +30,7 @@ import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
 import { AddRelative } from "./AddRelative";
 import { linkExistingRelative, removeRelative, setPartnerStatus, sharedParents } from "./link-actions";
 import { moveItem, useDragReorder } from "./use-drag-reorder";
+import { useRole } from "@/components/providers/role-provider";
 
 export type FamilyHubProps = {
   person: PersonInput | null;
@@ -159,6 +160,9 @@ function HubBody({
     ];
     return rows.sort((x, y) => compareByBirth(x.person, y.person));
   }, [fv]);
+  const { canEditPerson, canDeletePerson } = useRole();
+  // Birth order is saved for every child at once, so all of them must be editable.
+  const canSort = canEdit && childRows.length > 1 && childRows.every((r) => canEditPerson(r.person.id));
   // Optimistic order while saving; dropped as soon as fresh data arrives (new childRows).
   const [saved, setSaved] = useState<{ base: typeof childRows; ids: string[] } | null>(null);
   const orderIds = saved && saved.base === childRows ? saved.ids : childRows.map((r) => r.person.id);
@@ -249,7 +253,8 @@ function HubBody({
   }
 
   const menuFor = (slotKind: RelativeSlot, other: PersonInput, unit?: FamilyUnitView, order?: OrderSlot) => {
-    if (!canEdit) return null;
+    // Changing a link edits the relative too, so they must be in the member's close family as well.
+    if (!canEdit || !canEditPerson(other.id)) return null;
     const otherName = getDisplayName(other, lang);
     const noun = relativeNoun(slotKind, other.gender, lang, unit?.status ?? "current");
     const removeLabel =
@@ -397,9 +402,9 @@ function HubBody({
                     <Pencil className="h-4 w-4" aria-hidden />
                     {t("Fill in their details", "أكمل بياناته")}
                   </Link>
-                  <button type="button" className={cn(linkPill, "text-[var(--destructive)]")} onClick={() => setConfirm({ slot: "child", other: person, label: t("Remove this placeholder card? Their children keep their other links.", "إزالة هذه البطاقة؟ يحتفظ الأبناء بروابطهم الأخرى.") })}>
+                  {canDeletePerson(person) && <button type="button" className={cn(linkPill, "text-[var(--destructive)]")} onClick={() => setConfirm({ slot: "child", other: person, label: t("Remove this placeholder card? Their children keep their other links.", "إزالة هذه البطاقة؟ يحتفظ الأبناء بروابطهم الأخرى.") })}>
                     {t("Remove placeholder", "إزالة البطاقة")}
-                  </button>
+                  </button>}
                 </>
               )
             ) : (
@@ -494,7 +499,7 @@ function HubBody({
 
               <section aria-labelledby="hub-children">
                 <h3 id="hub-children" className={sectionTitle}>{t("Children", "الأبناء")}</h3>
-                {canEdit && childRows.length > 1 && (
+                {canSort && (
                   <p id="hub-children-hint" className="mb-2 text-xs text-[var(--muted-foreground)]">
                     {t(
                       "Oldest at the top. Drag the handle, use the arrow keys on it, or the ••• menu. The tree shows them oldest to youngest, left to right.",
@@ -508,7 +513,7 @@ function HubBody({
                     const row = childRows.find((r) => r.person.id === id);
                     if (!row) return null;
                     const c = row.person;
-                    const sortable = canEdit && childRows.length > 1;
+                    const sortable = canSort;
                     const name = getDisplayName(c, lang);
                     return (
                       <Row
