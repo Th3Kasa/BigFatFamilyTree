@@ -4,7 +4,7 @@ import { fetchBirthOrders, withBirthOrder } from "@/lib/people/birth-order";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Camera, PenLine, Plus, UserPen, Waypoints } from "lucide-react";
+import { ArrowLeft, ArrowRight, PenLine, Plus, UserPen, Waypoints } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getLang, type Lang } from "@/lib/lang/server";
 import { deletePerson } from "@/lib/actions/people";
@@ -21,6 +21,11 @@ import { cn, getDisplayName, getNameParts } from "@/lib/utils";
 import { avatarTone, formatEventDate, initialsOf, lifeYears } from "@/lib/people/display";
 import { formatPartialDate } from "@/lib/people/partial-date";
 import { familyOf, kinLabel, type FamilyMember, type FamilyPerson, type FamilyRelationship } from "@/lib/people/family";
+import { getViewer } from "@/lib/timeline/viewer";
+import { loadTimeline } from "@/lib/timeline/load";
+import { driveReady } from "@/lib/drive/client";
+import type { TimelineViewer } from "@/lib/timeline/types";
+import { Timeline, type TimelineEvent, type TimelinePerson } from "@/components/timeline/Timeline";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -101,17 +106,34 @@ export default async function PersonPage({ params, searchParams }: Props) {
   const ref = encodeURIComponent((person.slug as string | null) ?? personId);
 
   const { data: { user } } = await supabase.auth.getUser();
-  const [{ data: viewerProfile }, { data: events }, { data: peopleRows }, { data: relRows }, birthOrders] = await Promise.all([
+  const [{ data: viewerProfile }, { data: events }, { data: peopleRows }, { data: relRows }, birthOrders, viewer, photosEnabled] = await Promise.all([
     user ? supabase.from("profiles").select("role").eq("id", user.id).single() : Promise.resolve({ data: null }),
     supabase.from("events").select("*").eq("person_id", personId),
     supabase.from("people").select(FAMILY_COLUMNS).is("deleted_at", null),
     supabase.from("relationships").select("id, person_a_id, person_b_id, type, status, order_index"),
     fetchBirthOrders(supabase),
+    getViewer(supabase),
+    driveReady(),
   ]);
+  const timeline = await loadTimeline(supabase, personId, viewer?.userId ?? null);
+  const timelineViewer: TimelineViewer | null = viewer?.approved
+    ? { userId: viewer.userId, name: viewer.name, isAdmin: viewer.isAdmin, ownsProfile: viewer.personId === personId, personId: viewer.personId }
+    : null;
   const role = (viewerProfile as { role?: string } | null)?.role ?? "";
   const canEdit = role === "admin" || role === "editor";
 
   const allPeople = withBirthOrder(await withSignedPhotos(supabase, (peopleRows ?? []) as FamilyPerson[]), birthOrders);
+  const timelinePeople: TimelinePerson[] = allPeople
+    .filter((p) => !p.is_placeholder)
+    .map((p) => ({
+      id: p.id,
+      slug: p.slug ?? null,
+      name: getDisplayName(p, lang),
+      given_en: p.given_en ?? null,
+      given_ar: p.given_ar ?? null,
+      family_name_en: p.family_name_en ?? null,
+      family_name_ar: p.family_name_ar ?? null,
+    }));
   const family = familyOf(personId, allPeople, (relRows ?? []) as FamilyRelationship[]);
 
   async function handleDelete() {
@@ -253,7 +275,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
                   className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
                 >
                   <PenLine className="h-4 w-4" aria-hidden />
-                  {t("Add a memory", "أضف ذكرى")}
+                  {t("Add a life event", "أضف حدثًا")}
                 </Link>
               )}
               {canEdit && (
@@ -375,40 +397,31 @@ export default async function PersonPage({ params, searchParams }: Props) {
             </aside>
 
             <section aria-label={t("Life story", "قصة الحياة")} className="flex min-w-0 flex-1 flex-col gap-4">
-              {canEdit && (
-                <div className="flex items-center gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--card)] px-4 py-3.5">
-                  <PersonAvatar person={person} lang={lang} className="h-10 w-10" textClassName="text-[13px]" />
-                  <Link
-                    href={`/person/${ref}/event/new?kind=memory`}
-                    className="flex h-11 min-w-0 flex-1 items-center rounded-full bg-[var(--input)] px-4 text-[15px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-                  >
-                    <span className="truncate">{t(`Share a memory of ${firstName}…`, `شارك ذكرى عن ${firstName}…`)}</span>
-                  </Link>
-                  <Link
-                    href={`/person/${ref}?tab=photos`}
-                    aria-label={t("Add a photo", "أضف صورة")}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-                  >
-                    <Camera className="h-5 w-5" aria-hidden />
-                  </Link>
-                </div>
-              )}
-
-              {sorted.length > 0 ? (
-                <ol className="flex flex-col gap-3.5">
-                  {sorted.map((e) => {
-                    const style = EVENT_STYLE[e.type] ?? EVENT_STYLE.custom;
-                    const story = pick(e.story_en, e.story_ar);
-                    const date = formatEventDate(e.date_value, e.date_precision, lang);
-                    const meta = [date, e.type === "migration" || e.type === "birth" || e.type === "death" ? null : e.location]
-                      .filter(Boolean)
-                      .join(" · ");
-                    const removeEvent = async () => {
-                      "use server";
-                      await deleteEvent(e.id as string, personId);
-                    };
-                    return (
-                      <li key={e.id} className="flex flex-col gap-2.5 rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-5">
+              <Timeline
+                personId={personId}
+                firstName={firstName}
+                posts={timeline.posts}
+                viewer={timelineViewer}
+                people={timelinePeople}
+                photosEnabled={photosEnabled}
+                available={timeline.available}
+                lang={lang}
+                events={sorted.map((e): TimelineEvent => {
+                  const style = EVENT_STYLE[e.type] ?? EVENT_STYLE.custom;
+                  const story = pick(e.story_en, e.story_ar);
+                  const date = formatEventDate(e.date_value, e.date_precision, lang);
+                  const meta = [date, e.type === "migration" || e.type === "birth" || e.type === "death" ? null : e.location]
+                    .filter(Boolean)
+                    .join(" · ");
+                  const removeEvent = async () => {
+                    "use server";
+                    await deleteEvent(e.id as string, personId);
+                  };
+                  return {
+                    id: e.id as string,
+                    dateValue: e.date_value ?? null,
+                    node: (
+                      <div className="flex flex-col gap-2.5 rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-5">
                         <div className="flex items-center gap-3">
                           <span className="rounded-full px-2.5 py-1 text-xs font-bold" style={{ background: style.bg, color: style.fg }}>
                             {lang === "ar" ? style.ar : style.en}
@@ -431,31 +444,23 @@ export default async function PersonPage({ params, searchParams }: Props) {
                             {story}
                           </p>
                         )}
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
-                <div className="rounded-[20px] border border-dashed border-[var(--border-strong)] bg-[var(--card)] px-6 py-10 text-center">
-                  <p className="text-[15px] font-semibold text-[var(--foreground)]">
-                    {t(`${firstName}'s story hasn't been written yet`, `لم تُكتب قصة ${firstName} بعد`)}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                    {canEdit
-                      ? t("Start with a memory, a move, a wedding: anything worth remembering.", "ابدأ بذكرى أو انتقال أو زفاف: أي شيء يستحق أن يُذكر.")
-                      : t("When the family adds memories and life events, they'll appear here.", "عندما تضيف العائلة ذكريات وأحداثًا، ستظهر هنا.")}
-                  </p>
-                  {canEdit && (
-                    <Link
-                      href={`/person/${ref}/event/new?kind=memory`}
-                      className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]"
-                    >
-                      <PenLine className="h-4 w-4" aria-hidden />
-                      {t("Write the first memory", "اكتب أول ذكرى")}
-                    </Link>
-                  )}
-                </div>
-              )}
+                      </div>
+                    ),
+                  };
+                })}
+                emptyState={
+                  <div className="rounded-[20px] border border-dashed border-[var(--border-strong)] bg-[var(--card)] px-6 py-10 text-center">
+                    <p className="text-[15px] font-semibold text-[var(--foreground)]">
+                      {t(`${firstName}'s timeline is empty so far`, `الخط الزمني لـ${firstName} فارغ حتى الآن`)}
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                      {timelineViewer && timeline.available
+                        ? t("Be the first to share a photo, a story or a video.", "كن أول من يشارك صورة أو قصة أو فيديو.")
+                        : t("When the family shares photos, stories and life events, they'll appear here.", "عندما تشارك العائلة الصور والقصص والأحداث، ستظهر هنا.")}
+                    </p>
+                  </div>
+                }
+              />
             </section>
           </div>
         </TabsContent>
