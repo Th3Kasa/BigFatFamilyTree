@@ -2,11 +2,13 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { checkLimit } from "@/lib/ratelimit";
 import { DriveError, startUpload, trashFile } from "@/lib/drive/client";
+import { binDeletedPostPhotos } from "@/lib/drive/bin";
 import { isPhotoType, MAX_DISPLAY_BYTES, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_POST, megabytes } from "@/lib/media/limits";
 import { parseVideoLink } from "@/lib/media/video";
 import { getViewer } from "@/lib/timeline/viewer";
@@ -249,6 +251,15 @@ export async function deletePost(postId: string): Promise<Result> {
   const { error } = await supabase.rpc("delete_post", { p_post: postId });
   if (error) return { success: false, error: error.code === "42501" ? "Only the author, the profile owner or an admin can delete this." : "Couldn't delete that." };
   refresh();
+  // Move its photos to the Drive bin after replying, so deleting stays instant.
+  // Also retries any earlier deletes whose photos Drive couldn't take.
+  after(async () => {
+    try {
+      await binDeletedPostPhotos(20);
+    } catch (e) {
+      console.error("[drive] binning deleted photos failed:", e instanceof Error ? e.message : e);
+    }
+  });
   return { success: true };
 }
 

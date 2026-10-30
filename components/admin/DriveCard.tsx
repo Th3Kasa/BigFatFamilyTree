@@ -1,6 +1,7 @@
 import { CheckCircle2, CloudOff, HardDrive, TriangleAlert } from "lucide-react";
 import { driveStatus } from "@/lib/drive/client";
-import { disconnectDrive } from "@/lib/actions/drive";
+import { cleanUpDeletedPhotos, disconnectDrive } from "@/lib/actions/drive";
+import { countDeletedPostPhotos } from "@/lib/drive/bin";
 
 const NOTICES: Record<string, { ok: boolean; text: string }> = {
   connected: { ok: true, text: "Google Drive is connected. Family members can now post photos." },
@@ -22,6 +23,9 @@ const NOTICES: Record<string, { ok: boolean; text: string }> = {
     ok: false,
     text: "The Google Drive API isn't switched on. In Google Cloud → APIs and services → Library, open Google Drive API and press Enable, wait a minute, then connect again.",
   },
+  cleaned: { ok: true, text: "Photos from deleted posts were moved to the Drive bin. Google empties the bin after 30 days; until then you can restore them from Drive." },
+  "cleaned-partly": { ok: false, text: "Some photos were moved to the Drive bin, but Google Drive didn't take them all. Press Clean up again in a minute." },
+  "cleanup-unavailable": { ok: false, text: "Clean-up needs one more database change. Run supabase/migrations/20260604000034_bin_deleted_photos.sql in the Supabase SQL editor first." },
   "bad-key": {
     ok: false,
     text: "DRIVE_TOKEN_KEY in Vercel isn't a valid key. Make a new one (32 random bytes, base64), save it in Vercel, redeploy, then connect again.",
@@ -34,6 +38,7 @@ const NOTICES: Record<string, { ok: boolean; text: string }> = {
  */
 export async function DriveCard({ notice }: { notice?: string }) {
   const status = await driveStatus();
+  const leftover = status.state === "connected" ? await countDeletedPostPhotos() : null;
   const n = notice ? NOTICES[notice] : undefined;
   const button =
     "inline-flex min-h-11 items-center rounded-full px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
@@ -93,6 +98,24 @@ export async function DriveCard({ notice }: { notice?: string }) {
                 <form action={disconnectDrive}>
                   <button type="submit" className={`${button} border border-[var(--border-strong)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]`}>
                     Disconnect
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+          {status.state === "connected" && (
+            <div className="mt-5 border-t border-[var(--border)] pt-4">
+              <p className="text-sm text-[var(--foreground)]">
+                When a post is deleted, its photos move to the Drive bin automatically. Google empties the bin after 30 days, so a photo deleted by
+                mistake can be restored from Drive until then.
+              </p>
+              {leftover != null && leftover > 0 && (
+                <form action={cleanUpDeletedPhotos} className="mt-3 flex flex-wrap items-center gap-3">
+                  <p className="text-sm font-semibold text-[var(--foreground)]">
+                    {leftover === 1 ? "1 photo" : `${leftover} photos`} from deleted posts {leftover === 1 ? "is" : "are"} still in the folder.
+                  </p>
+                  <button type="submit" className={`${button} border border-[var(--border-strong)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]`}>
+                    Clean up
                   </button>
                 </form>
               )}
