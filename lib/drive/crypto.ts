@@ -7,9 +7,15 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const PREFIX = "v1.";
 
+export class BadKeyError extends Error {
+  constructor() {
+    super("DRIVE_TOKEN_KEY must be 32 bytes, base64 encoded.");
+  }
+}
+
 function keyFrom(base64: string): Buffer {
   const key = Buffer.from(base64, "base64");
-  if (key.length !== 32) throw new Error("DRIVE_TOKEN_KEY must be 32 bytes, base64 encoded.");
+  if (key.length !== 32) throw new BadKeyError();
   return key;
 }
 

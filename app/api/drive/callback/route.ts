@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { completeConnection, DriveError } from "@/lib/drive/client";
+import { BadKeyError } from "@/lib/drive/crypto";
 import { getViewer } from "@/lib/timeline/viewer";
 
 const STATE_COOKIE = "bfft_drive_state";
@@ -33,6 +34,9 @@ export async function GET(request: NextRequest) {
     return back("connected");
   } catch (e) {
     console.error("[drive] connect failed:", e instanceof Error ? e.message : e);
-    return back(e instanceof DriveError && e.status === 400 ? "missing-permission" : "failed");
+    if (e instanceof BadKeyError) return back("bad-key");
+    if (e instanceof DriveError && e.status === 400) return back("missing-permission");
+    if (e instanceof DriveError && e.code !== "unknown") return back(e.code);
+    return back("failed");
   }
 }
