@@ -206,7 +206,7 @@ export default async function PersonPage({ params, searchParams }: Props) {
                   lang={lang}
                 />
               ) : (
-                <span className="block rounded-full border-[5px] border-[var(--card)] shadow-[0_6px_20px_rgba(36,21,23,0.12)]">
+                <span className="flex rounded-full border-[5px] border-[var(--card)] shadow-[0_6px_20px_rgba(36,21,23,0.12)]">
                   <PersonAvatar
                     person={person}
                     lang={lang}
@@ -569,8 +569,9 @@ function FamilyCircle({ member, lang }: { member: FamilyMember; lang: Lang }) {
       href={`/person/${encodeURIComponent(p.slug ?? p.id)}`}
       className="flex w-[76px] flex-col items-center gap-1.5 rounded-2xl text-center text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
     >
-      <span className={cn("rounded-full p-[3px]", ringed ? "bg-[var(--primary)]" : "bg-[#D9C6C0]")}>
-        <span className="block rounded-full border-[3px] border-[var(--card)]">
+      {/* flex (not inline/block) so the avatar sits exactly centred, with no text-baseline gap under it */}
+      <span className={cn("flex rounded-full p-[3px]", ringed ? "bg-[var(--primary)]" : "bg-[#D9C6C0]")}>
+        <span className="flex rounded-full border-[3px] border-[var(--card)]">
           <PersonAvatar person={p} lang={lang} className="h-[52px] w-[52px]" textClassName="text-[15px]" />
         </span>
       </span>

@@ -80,7 +80,7 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       )}
 
       <div className="flex flex-col items-center gap-1">
-        <PhotoUpload currentUrl={photoUrl} onUpload={setPhotoUrl} />
+        <PhotoUpload currentUrl={photoUrl} onUpload={setPhotoUrl} lang={lang} />
         <input type="hidden" name="photo_url" value={photoUrl ?? ""} />
       </div>
 

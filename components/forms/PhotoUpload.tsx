@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 
 type Props = {
   currentUrl: string | null;
-  onUpload: (url: string) => void;
+  /** The new photo's storage path, or null when the photo was removed (blank card). */
+  onUpload: (url: string | null) => void;
+  lang?: "ar" | "en";
 };
 
 const MIME_TO_EXT: Record<string, string> = {
@@ -15,7 +17,7 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/gif": "gif",
 };
 
-export function PhotoUpload({ currentUrl, onUpload }: Props) {
+export function PhotoUpload({ currentUrl, onUpload, lang = "en" }: Props) {
   const [preview, setPreview] = useState<string | null>(currentUrl);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +87,20 @@ export function PhotoUpload({ currentUrl, onUpload }: Props) {
         className="sr-only"
         onChange={handleChange}
       />
+      {preview && !uploading ? (
+        <button
+          type="button"
+          onClick={() => {
+            setPreview(null);
+            setError(null);
+            if (inputRef.current) inputRef.current.value = "";
+            onUpload(null);
+          }}
+          className="inline-flex min-h-11 items-center rounded-full px-2 text-xs font-semibold text-[var(--muted-foreground)] underline-offset-4 hover:text-[var(--destructive)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+        >
+          {lang === "ar" ? "إزالة الصورة" : "Remove photo"}
+        </button>
+      ) : null}
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   );
