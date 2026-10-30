@@ -18,7 +18,7 @@ and have nothing extra to do.
 | Delete a comment | Its author, the post's author, the profile's owner, or an admin |
 | Remove a tag | The post's author, the tagged person's owner, or an admin |
 
-These rules are enforced by the database (migration `20260531000030_profile_timeline.sql`),
+These rules are enforced by the database (migration `20260602000032_profile_timeline.sql`),
 not only by the buttons. Deleted posts are hidden (soft delete); their photos stay in the Drive.
 
 ## How photos are stored
@@ -39,7 +39,7 @@ not only by the buttons. Deleted posts are hidden (soft delete); their photos st
 
 ### 1. Apply the database change
 
-Supabase → SQL editor → paste and run `supabase/migrations/20260531000030_profile_timeline.sql`.
+Supabase → SQL editor → paste and run `supabase/migrations/20260602000032_profile_timeline.sql`.
 (The site works before this: the timeline shows life events only, with no composer.)
 
 ### 2. Create the Google sign-in for the site (about 10 minutes)
