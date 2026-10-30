@@ -9,7 +9,7 @@ import { ADMIN_ONLY_DELETE, OUT_OF_SCOPE, scopeErrorMessage, writeErrorMessage }
 // deletes, claimed cards, storage, viewers, admins); these guard the properties
 // that are easy to break in a later edit.
 
-const sql = readFileSync(path.resolve(__dirname, "../../supabase/migrations/20260531000030_scoped_editing.sql"), "utf8");
+const sql = readFileSync(path.resolve(__dirname, "../../supabase/migrations/20260601000031_scoped_editing.sql"), "utf8");
 
 function fn(signature: string): string {
   const start = sql.indexOf(`create or replace function public.${signature}`);
@@ -17,7 +17,7 @@ function fn(signature: string): string {
   return sql.slice(start, sql.indexOf("$$;", start));
 }
 
-describe("20260531000030_scoped_editing.sql", () => {
+describe("20260601000031_scoped_editing.sql", () => {
   it("records who added each person, defaulting to the caller", () => {
     expect(sql).toMatch(/add column if not exists created_by uuid references auth\.users\(id\) on delete set null default auth\.uid\(\)/);
   });

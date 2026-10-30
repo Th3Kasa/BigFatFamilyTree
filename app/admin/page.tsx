@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, ClipboardList, Link2, Shield } from "lucide-react";
 import Link from "next/link";
 import type { Database } from "@/lib/db/types";
+import { DriveCard } from "@/components/admin/DriveCard";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
@@ -49,8 +50,9 @@ function RoleSelect({ profile }: { profile: Profile }) {
   );
 }
 
-export default async function AdminDashboardPage() {
+export default async function AdminDashboardPage({ searchParams }: { searchParams: Promise<{ drive?: string | string[] }> }) {
   const supabase = await createClient();
+  const { drive } = await searchParams;
 
   const [
     { count: peopleCount },
@@ -69,6 +71,8 @@ export default async function AdminDashboardPage() {
   return (
     <div className="px-4 py-4 sm:px-6 sm:py-6 max-w-6xl mx-auto pb-20 md:pb-6">
       <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-6 sm:mb-8">Admin Dashboard</h1>
+
+      <DriveCard notice={typeof drive === "string" ? drive : undefined} />
 
       {/* Bento grid — stat cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-8">

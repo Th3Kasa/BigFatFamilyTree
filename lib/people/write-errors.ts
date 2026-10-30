@@ -1,5 +1,5 @@
 // Plain-language messages for writes the database refused because of the
-// family-scope rule (migration 30). Postgres RLS refuses an INSERT with an
+// family-scope rule (migration 31). Postgres RLS refuses an INSERT with an
 // error but quietly skips UPDATE/DELETE rows the caller may not touch, so
 // callers also treat "nothing changed" as this refusal.
 

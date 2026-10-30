@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { PartialDateField } from "@/components/ui/partial-date-field";
+import { formatPartialDate } from "@/lib/people/partial-date";
 import { useFormStatus } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, SkipForward } from "lucide-react";
@@ -233,29 +235,23 @@ export function PersonStepper({
                       <PhotoUpload currentUrl={photoUrl} onUpload={setPhotoUrl} lang={lang} />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-[var(--muted-foreground)] mb-1">
-                          Birth date
-                        </label>
-                        <input
-                          type="date"
-                          className={INPUT_CLS}
-                          value={fields.birth_date}
-                          onChange={(e) => setFields((f) => ({ ...f, birth_date: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[var(--muted-foreground)] mb-1">
-                          Death date
-                        </label>
-                        <input
-                          type="date"
-                          className={INPUT_CLS}
-                          value={fields.death_date}
-                          onChange={(e) => setFields((f) => ({ ...f, death_date: e.target.value }))}
-                        />
-                      </div>
+                    <div className="grid grid-cols-1 gap-4">
+                      <PartialDateField
+                        label={lang === "ar" ? "تاريخ الميلاد" : "Birth date"}
+                        lang={lang}
+                        defaultValue={fields.birth_date}
+                        onChange={(v) => setFields((f) => ({ ...f, birth_date: v }))}
+                        inputClassName={INPUT_CLS}
+                        labelClassName="block text-xs text-[var(--muted-foreground)] mb-1"
+                      />
+                      <PartialDateField
+                        label={lang === "ar" ? "تاريخ الوفاة" : "Death date"}
+                        lang={lang}
+                        defaultValue={fields.death_date}
+                        onChange={(v) => setFields((f) => ({ ...f, death_date: v }))}
+                        inputClassName={INPUT_CLS}
+                        labelClassName="block text-xs text-[var(--muted-foreground)] mb-1"
+                      />
                     </div>
 
                     <div className="pt-4 flex justify-between">
@@ -340,8 +336,8 @@ export function PersonStepper({
                         <div className="flex justify-between">
                           <span className="text-[var(--muted-foreground)]">Dates</span>
                           <span className="font-medium">
-                            {fields.birth_date || "Not set"}
-                            {fields.death_date ? ` – ${fields.death_date}` : ""}
+                            {formatPartialDate(fields.birth_date, lang) ?? "Not set"}
+                            {fields.death_date ? ` – ${formatPartialDate(fields.death_date, lang) ?? fields.death_date}` : ""}
                           </span>
                         </div>
                       )}

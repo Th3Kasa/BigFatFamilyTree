@@ -11,6 +11,13 @@ export const envSchema = z.object({
   // approval (lib/notify). Without it notifications are skipped silently.
   // (An empty value counts as unset; it must never fail env validation.)
   RESEND_API_KEY: z.string().optional(),
+  // Optional: Google Drive storage for timeline photos (lib/drive). All three
+  // are needed to connect Drive; without them the timeline still works for
+  // stories and video links, and photo posting says Drive isn't set up.
+  // DRIVE_TOKEN_KEY: 32 random bytes, base64 (openssl rand -base64 32).
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  DRIVE_TOKEN_KEY: z.string().optional(),
   // Informational only; nothing reads it. Optional so a missing value in one
   // Vercel environment can't fail every request in middleware.
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),

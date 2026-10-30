@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { PartialDateField } from "@/components/ui/partial-date-field";
 import { useFormStatus } from "react-dom";
 import { X } from "lucide-react";
 import type { ActionState } from "@/lib/actions/people";
@@ -187,27 +188,23 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="birth_date" className="block text-xs text-gray-500 mb-1">Birth date</label>
-          <input
-            type="date"
-            id="birth_date"
-            name="birth_date"
-            defaultValue={initialData?.birth_date ?? ""}
-            className={INPUT_CLS}
-          />
-        </div>
-        <div>
-          <label htmlFor="death_date" className="block text-xs text-gray-500 mb-1">Death date</label>
-          <input
-            type="date"
-            id="death_date"
-            name="death_date"
-            defaultValue={initialData?.death_date ?? ""}
-            className={INPUT_CLS}
-          />
-        </div>
+      <div className="grid grid-cols-1 gap-4">
+        <PartialDateField
+          name="birth_date"
+          label={lang === "ar" ? "تاريخ الميلاد" : "Birth date"}
+          lang={lang}
+          defaultValue={initialData?.birth_date}
+          inputClassName={INPUT_CLS}
+          labelClassName="block text-xs text-gray-500 mb-1"
+        />
+        <PartialDateField
+          name="death_date"
+          label={lang === "ar" ? "تاريخ الوفاة" : "Death date"}
+          lang={lang}
+          defaultValue={initialData?.death_date}
+          inputClassName={INPUT_CLS}
+          labelClassName="block text-xs text-gray-500 mb-1"
+        />
       </div>
 
       {/* Preserve existing Arabic data as hidden fields so it isn't wiped on save */}

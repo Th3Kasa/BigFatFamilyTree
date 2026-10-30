@@ -24,7 +24,7 @@ function absolute(nodes: GraphNode[]) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   return nodes.map((n) => {
     const parent = n.parentId ? byId.get(n.parentId)! : null;
-    return { id: n.id, x: n.position.x + (parent?.position.x ?? 0), y: n.position.y + (parent?.position.y ?? 0) };
+    return { id: n.id, refOf: n.data.refOf, x: n.position.x + (parent?.position.x ?? 0), y: n.position.y + (parent?.position.y ?? 0) };
   });
 }
 
@@ -260,12 +260,15 @@ function yOf(nodes: GraphNode[], id: string) {
 
 /** Every child below its parents, every couple on one row with nobody between them. */
 function expectTidyRows(people: PersonInput[], nodes: GraphNode[], edges: GraphEdge[]) {
+  const abs = absolute(nodes);
   for (const p of people) {
     for (const parent of [p.father_id, p.mother_id]) {
-      if (parent) expect(yOf(nodes, p.id), `${p.id} below ${parent}`).toBeGreaterThan(yOf(nodes, parent));
+      if (!parent) continue;
+      // Below the parent as drawn beside the couple: their own card or a reference card of them.
+      const parentY = Math.min(...abs.filter((n) => n.id === parent || n.refOf === parent).map((n) => n.y));
+      expect(yOf(nodes, p.id), `${p.id} below ${parent}`).toBeGreaterThan(parentY);
     }
   }
-  const abs = absolute(nodes);
   for (const e of edges.filter((x) => x.data?.edgeKind === "spouse" && (x.data.lane ?? 0) === 0)) {
     const a = abs.find((n) => n.id === e.source)!;
     const b = abs.find((n) => n.id === e.target)!;
@@ -325,8 +328,9 @@ describe("generations", () => {
     expect(yOf(nodes, "bw")).toBe(yOf(nodes, "b"));
   });
 
-  test("a child is one row below the deeper of its two parents", () => {
-    // Dad is generation 1; Mum is generation 2 in her own family (both born into the tree).
+  test("a child sits one row below where its parents are drawn, even if a parent's own row is deeper", () => {
+    // Dad is generation 1; Mum is generation 2 in her own family (both born into the tree),
+    // so the couple is drawn in Dad's row with a reference card of Mum.
     const people = [
       m("g1"), f("g2"), m("h1"), f("h2"),
       m("dad", { father_id: "g1", mother_id: "g2" }),
@@ -338,7 +342,7 @@ describe("generations", () => {
     const { nodes, edges } = buildGraphElements(people, rels, "en");
     expectNoOverlaps(nodes);
     expectTidyRows(people, nodes, edges);
-    expect(yOf(nodes, "kid")).toBe(3 * ROW_HEIGHT);
+    expect(yOf(nodes, "kid")).toBe(2 * ROW_HEIGHT);
   });
 });
 
