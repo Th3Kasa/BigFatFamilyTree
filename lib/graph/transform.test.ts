@@ -183,3 +183,29 @@ describe("family branch groups", () => {
     expect(soloBranch?.data?.motherId).toBeNull();
   });
 });
+
+describe("Also in another branch, both ways", () => {
+  // Galila (Mansour family) marries Basem (Morkos family): both born into the tree,
+  // so her real card stays in the Mansour branch and a dashed copy sits beside Basem.
+  const people = [
+    person("nassif", { gender: "m", family_name_en: "Mansour" }),
+    person("galila", { gender: "f", father_id: "nassif", family_name_en: "Mansour" }),
+    person("wahib", { gender: "m", family_name_en: "Morkos" }),
+    person("basem", { gender: "m", father_id: "wahib", family_name_en: "Morkos" }),
+  ];
+  const rels = [spouse("r1", "basem", "galila")];
+  const { nodes } = buildGraphElements(people, rels, "en");
+
+  test("the copy beside the spouse points back to the real card", () => {
+    const ref = nodes.find((n) => n.type === "personRef");
+    expect(ref?.data.refOf).toBe("galila");
+    expect(ref?.parentId).toBe("basem");
+  });
+
+  test("the real card knows it is also in the spouse's branch", () => {
+    const real = nodes.find((n) => n.id === "galila")!;
+    expect(real.data.alsoIn?.map((a) => a.host.id)).toEqual(["basem"]);
+    expect(real.data.alsoIn?.[0].host.family_name_en).toBe("Morkos");
+    expect(nodes.find((n) => n.id === "basem")!.data.alsoIn).toBeUndefined();
+  });
+});

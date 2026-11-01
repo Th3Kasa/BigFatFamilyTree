@@ -500,6 +500,7 @@ function CanvasControllerInner({ initialEdges, people, lang, readOnly = false, g
             slots: showSlots ? slotsFor(n.id) : undefined,
             onSlot: showSlots ? (slot: SlotKind) => openSlot(n.id, slot) : undefined,
             onOpenOriginal: isRef ? (id: string) => focusOn(id) : undefined,
+            onOpenBranch: !isRef && n.data.alsoIn ? (hostId: string) => focusOn(hostId) : undefined,
           },
         };
       }),
