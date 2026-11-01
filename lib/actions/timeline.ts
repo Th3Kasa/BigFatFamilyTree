@@ -83,11 +83,16 @@ export async function startPhotoUploads(
   const mine = await checkLimitStrict("uploadBudget", viewer.userId, units);
   if (mine.unavailable) return { success: false, error: "Uploads are paused for a moment. Please try again shortly." };
   if (!mine.success) {
+    // A refused request still used its share; give it back (the cap itself is never passed).
+    await refundLimit("uploadBudget", viewer.userId, units);
     return { success: false, error: `You've shared a lot of photos today (up to ${megabytes(MAX_UPLOAD_BYTES_PER_DAY)} a day). Please try again tomorrow.` };
   }
   const family = await checkLimitStrict("uploadBudgetFamily", "family", units);
   if (!family.success) {
-    await refundLimit("uploadBudget", viewer.userId, units);
+    await Promise.all([
+      refundLimit("uploadBudget", viewer.userId, units),
+      family.unavailable ? null : refundLimit("uploadBudgetFamily", "family", units),
+    ]);
     if (family.unavailable) return { success: false, error: "Uploads are paused for a moment. Please try again shortly." };
     return { success: false, error: "The family has shared a lot of photos today. Please try again tomorrow." };
   }

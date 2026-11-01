@@ -106,7 +106,12 @@ export type StrictResult = { success: boolean; unavailable: boolean; reset: numb
 /** Consume one token (or `rate` tokens). Fails closed. */
 export async function checkLimitStrict(key: LimiterKey, identifier: string, rate = 1): Promise<StrictResult> {
   try {
-    const { success, reset, remaining } = await getLimiters()[key].limit(identifier, rate === 1 ? undefined : { rate });
+    const { success, reset, remaining, reason } = await getLimiters()[key].limit(identifier, rate === 1 ? undefined : { rate });
+    // On a slow Redis the library gives up and ALLOWS the request ("timeout").
+    if (reason === "timeout") {
+      console.error(`[ratelimit] "${key}" timed out; refusing`);
+      return { success: false, unavailable: true, reset: 0, remaining: 0 };
+    }
     return { success, unavailable: false, reset, remaining };
   } catch (err) {
     console.error(`[ratelimit] "${key}" unavailable; refusing`, err instanceof Error ? err.message : err);
