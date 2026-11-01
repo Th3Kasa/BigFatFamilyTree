@@ -23,3 +23,6 @@ tsconfig.tsbuildinfo
 
 # Playwright runner auth state (scripts/pw.mjs --save-storage)
 /.auth/
+
+# Local git worktrees (Claude Code sessions); never commit them
+.claude/worktrees/
