@@ -81,3 +81,26 @@ describe("photo checks", () => {
     expect(UPLOAD_CHUNK_BYTES).toBeLessThan(4.5 * 1000 * 1000);
   });
 });
+
+describe("uploading several files at once", () => {
+  it("never runs more than the limit at the same time, and runs every file", async () => {
+    const { runAtMost } = await import("./upload-client");
+    let running = 0;
+    let peak = 0;
+    const done: number[] = [];
+    await runAtMost(3, [1, 2, 3, 4, 5, 6, 7], async (n) => {
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 5));
+      done.push(n);
+      running--;
+    });
+    expect(peak).toBe(3);
+    expect(done.sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("stops with the first failure", async () => {
+    const { runAtMost } = await import("./upload-client");
+    await expect(runAtMost(2, [1, 2, 3], async (n) => { if (n === 2) throw new Error("upload failed"); })).rejects.toThrow("upload failed");
+  });
+});

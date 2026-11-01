@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Calendar, ImagePlus, Link2, Loader2, X } from "lucide-react";
 import { createPost, discardUploads, startPhotoUploads, type DatePrecision } from "@/lib/actions/timeline";
 import { isPhotoType, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_POST, megabytes } from "@/lib/media/limits";
-import { makeDisplayCopy, uploadInChunks } from "@/lib/media/upload-client";
+import { makeDisplayCopy, runAtMost, uploadInChunks } from "@/lib/media/upload-client";
 import { parseVideoLink, PROVIDER_NAME } from "@/lib/media/video";
 import { DateFields, parseYear } from "./DateFields";
 import { TagPicker } from "./TagPicker";
@@ -113,22 +113,31 @@ export function Composer({
         setBusy(t("Preparing photos…", "جارٍ تجهيز الصور…"));
         const copies = await Promise.all(photos.map((p) => makeDisplayCopy(p.file)));
         const started = await startPhotoUploads(
+          personId,
           photos.map((p, i) => ({ originalBytes: p.file.size, originalMime: p.file.type, displayBytes: copies[i].blob.size })),
         );
         if (!started.success) throw new Error(started.error);
         uploadIds = started.uploads.flatMap((u) => [u.original, u.display]);
         const total = photos.reduce((s, p, i) => s + p.file.size + copies[i].blob.size, 0);
-        let done = 0;
-        const report = (n: number) => setBusy(t(`Uploading photos… ${Math.round((n / total) * 100)}%`, `جارٍ رفع الصور… ${Math.round((n / total) * 100)}%`));
-        for (let i = 0; i < photos.length; i++) {
-          const before = done;
-          await uploadInChunks(started.uploads[i].display, copies[i].blob, (n) => report(before + n));
-          done += copies[i].blob.size;
-          const mid = done;
-          await uploadInChunks(started.uploads[i].original, photos[i].file, (n) => report(mid + n));
-          done += photos[i].file.size;
-          uploaded.push({ original: started.uploads[i].original, display: started.uploads[i].display, width: copies[i].width, height: copies[i].height });
-        }
+        // Several files go up at once (each file's chunks stay in order).
+        const sent = new Map<string, number>();
+        const report = () => {
+          const n = [...sent.values()].reduce((a, b) => a + b, 0);
+          setBusy(t(`Uploading photos… ${Math.round((n / total) * 100)}%`, `جارٍ رفع الصور… ${Math.round((n / total) * 100)}%`));
+        };
+        const jobs = photos.flatMap((p, i) => [
+          { id: started.uploads[i].display, blob: copies[i].blob as Blob },
+          { id: started.uploads[i].original, blob: p.file as Blob },
+        ]);
+        await runAtMost(3, jobs, (job) =>
+          uploadInChunks(job.id, job.blob, (n) => {
+            sent.set(job.id, n);
+            report();
+          }),
+        );
+        photos.forEach((_, i) =>
+          uploaded.push({ original: started.uploads[i].original, display: started.uploads[i].display, width: copies[i].width, height: copies[i].height }),
+        );
       }
       setBusy(t("Sharing…", "جارٍ النشر…"));
       const res = await createPost({

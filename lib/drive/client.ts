@@ -257,7 +257,14 @@ export async function driveStatus(): Promise<DriveStatus> {
 // ── Files ───────────────────────────────────────────────────────────────────
 
 /** Start a resumable upload into the family folder; returns the session URL (server-only). */
-export async function startUpload(opts: { name: string; mime: string; bytes: number; appProperties: Record<string, string> }): Promise<string> {
+export async function startUpload(opts: {
+  name: string;
+  mime: string;
+  bytes: number;
+  appProperties: Record<string, string>;
+  /** Folder to upload into (from ensureFolder); the family folder itself when left out. */
+  parentId?: string;
+}): Promise<string> {
   const c = await connection();
   const res = await driveFetch(c.token, `${UPLOAD}?uploadType=resumable&fields=id,size`, {
     method: "POST",
@@ -266,13 +273,55 @@ export async function startUpload(opts: { name: string; mime: string; bytes: num
       "x-upload-content-type": opts.mime,
       "x-upload-content-length": String(opts.bytes),
     },
-    body: JSON.stringify({ name: opts.name, mimeType: opts.mime, parents: [c.folderId], appProperties: opts.appProperties }),
+    body: JSON.stringify({ name: opts.name, mimeType: opts.mime, parents: [opts.parentId ?? c.folderId], appProperties: opts.appProperties }),
   });
   const location = res.headers.get("location");
   if (!location || !location.startsWith("https://www.googleapis.com/upload/drive/v3/files")) {
     throw new DriveError("Google Drive didn't start the upload.");
   }
   return location;
+}
+
+// ── Folders ─────────────────────────────────────────────────────────────────
+//
+// Inside the family folder:
+//   People/<person's name>/   full-quality originals, named by date and poster
+//   Timeline copies/          the smaller copies the site shows (not for browsing)
+// Folders are found by a hidden key (appProperties.bfftKey), not by name, so a
+// renamed person or folder never makes a duplicate. Found ids are remembered
+// for the life of the server instance.
+
+const folderCache = new Map<string, string>();
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+/** Find (or make) the folder with hidden key `key` inside `parentId` (default: the family folder). */
+export async function ensureFolder(key: string, name: string, parentId?: string): Promise<string> {
+  const c = await connection();
+  const parent = parentId ?? c.folderId;
+  const cacheKey = `${parent}/${key}`;
+  const known = folderCache.get(cacheKey);
+  if (known) return known;
+
+  const q = [`'${parent}' in parents`, `mimeType = '${FOLDER_MIME}'`, "trashed = false", `appProperties has { key='bfftKey' and value='${key.replace(/'/g, "")}' }`].join(" and ");
+  const list = await driveFetch(c.token, `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`);
+  const found = ((await list.json()) as { files?: { id: string }[] }).files?.[0]?.id;
+  if (found) {
+    folderCache.set(cacheKey, found);
+    return found;
+  }
+  const made = await driveFetch(c.token, `${DRIVE}/files?fields=id`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: safeFileName(name) || "Untitled", mimeType: FOLDER_MIME, parents: [parent], appProperties: { bfft: "folder", bfftKey: key } }),
+  });
+  const id = ((await made.json()) as { id: string }).id;
+  folderCache.set(cacheKey, id);
+  return id;
+}
+
+/** Drive allows almost anything in a name; keep names readable and free of path-like characters. */
+export function safeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 export type ChunkResult = { done: false; received: number } | { done: true; fileId: string; size: number };

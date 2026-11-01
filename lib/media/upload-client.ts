@@ -63,3 +63,15 @@ export async function uploadInChunks(uploadId: string, blob: Blob, onBytes: (sen
     onBytes(start);
   }
 }
+
+/** Run `fn` over `items`, at most `limit` at a time; rejects on the first failure. */
+export async function runAtMost<T>(limit: number, items: T[], fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await fn(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
