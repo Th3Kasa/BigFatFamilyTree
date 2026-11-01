@@ -204,7 +204,7 @@ export function describeAudit(row: AuditInput, names: AuditNames): AuditView {
     }
 
     case "profiles": {
-      const member = memberFromRow(both) ?? names.member(row.row_id) ?? "a member";
+      const member = names.member(row.row_id) ?? memberFromRow(both) ?? "a member";
       const self = row.actor_id && row.actor_id === row.row_id;
       if (op === "insert") return { who: self || !row.actor_id ? member : who, what: self || !row.actor_id ? "joined the site" : `created an account for ${member}`, changes: [], kind };
       if (op === "delete") return { who, what: `deleted ${possessive(member)} account`, changes: [], kind };

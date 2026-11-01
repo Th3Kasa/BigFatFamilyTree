@@ -60,6 +60,14 @@ describe("describeAudit", () => {
   });
 });
 
+describe("member names", () => {
+  it("uses the name the page looked up (their tree card) over what's stored on the account", () => {
+    const tree = { member: (id: string | null | undefined) => (id === "nina" ? "Nina-Joyce Gaballah" : null), person: () => null };
+    const v = describeAudit(row({ table_name: "profiles", row_id: "nina", actor_id: null, operation: "insert", after: { first_name: "Nina", last_name: null } }), tree);
+    expect(v.who).toBe("Nina-Joyce Gaballah");
+  });
+});
+
 describe("referencedIds", () => {
   it("collects every member and person a page of entries mentions", () => {
     const ids = referencedIds([
