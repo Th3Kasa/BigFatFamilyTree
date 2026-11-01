@@ -11,6 +11,7 @@ import { DriveError, ensureFolder, safeFileName, startUpload, trashFile } from "
 import { binDeletedPostPhotos } from "@/lib/drive/bin";
 import {
   ABANDONED_UPLOAD_MS,
+  gigabytes,
   GIVE_UP_UPLOAD_MS,
   isPhotoType,
   MAX_DISPLAY_BYTES,
@@ -85,7 +86,7 @@ export async function startPhotoUploads(
   if (!mine.success) {
     // A refused request still used its share; give it back (the cap itself is never passed).
     await refundLimit("uploadBudget", viewer.userId, units);
-    return { success: false, error: `You've shared a lot of photos today (up to ${megabytes(MAX_UPLOAD_BYTES_PER_DAY)} a day). Please try again tomorrow.` };
+    return { success: false, error: `You've shared a lot of photos today (up to ${gigabytes(MAX_UPLOAD_BYTES_PER_DAY)} a day). Please try again tomorrow.` };
   }
   const family = await checkLimitStrict("uploadBudgetFamily", "family", units);
   if (!family.success) {

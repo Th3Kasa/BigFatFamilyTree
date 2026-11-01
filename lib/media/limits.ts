@@ -9,11 +9,11 @@ export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
 export const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
 /**
  * Photo bytes one member may upload in 24 hours, and the whole family together.
- * The photos land in the owner's Google Drive, whose space Gmail shares, so a
- * runaway (or hostile) uploader must never be able to fill it.
+ * The photos land in the owner's Google Drive (5 TB): generous for real use,
+ * but a runaway (or hostile) uploader still can't fill it.
  */
-export const MAX_UPLOAD_BYTES_PER_DAY = 500 * 1024 * 1024;
-export const MAX_FAMILY_UPLOAD_BYTES_PER_DAY = 3 * 1024 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES_PER_DAY = 5 * 1024 * 1024 * 1024;
+export const MAX_FAMILY_UPLOAD_BYTES_PER_DAY = 50 * 1024 * 1024 * 1024;
 /** The daily budgets are counted in whole megabytes (every upload costs at least one). */
 export const UPLOAD_BUDGET_UNIT = 1024 * 1024;
 /** A finished upload must be posted within this long, so the bin sweep below can never race a post. */
@@ -38,6 +38,9 @@ export const isPhotoType = (t: string): t is PhotoType => (PHOTO_TYPES as readon
 
 /** "15 MB" */
 export const megabytes = (bytes: number) => `${Math.round(bytes / (1024 * 1024))} MB`;
+
+/** "5 GB" */
+export const gigabytes = (bytes: number) => `${Math.round(bytes / (1024 * 1024 * 1024))} GB`;
 
 /**
  * Does the start of a file really look like the image type it claims? Checked
