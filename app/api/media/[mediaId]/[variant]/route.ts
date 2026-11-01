@@ -1,19 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { downloadFile, DriveError } from "@/lib/drive/client";
+import { resizeForDisplay } from "@/lib/media/resize";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * A timeline photo, fetched from Google Drive for an approved member.
- * variant "display" is the timeline copy; "original" the full-quality file
+ * variant "thumb" is a ~720px copy for photo grids (made from the timeline
+ * copy), "display" is the timeline copy; "original" the full-quality file
  * (add ?download=1 to save it). The row is read with the member's own session,
  * so RLS decides access: signed-out visitors, unapproved members and deleted
  * posts get a 404. The browser keeps its own private copy for a week.
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ mediaId: string; variant: string }> }) {
   const { mediaId, variant } = await params;
-  if (!UUID_RE.test(mediaId) || (variant !== "display" && variant !== "original")) {
+  if (!UUID_RE.test(mediaId) || (variant !== "thumb" && variant !== "display" && variant !== "original")) {
     return new NextResponse("Not found", { status: 404 });
   }
 
@@ -32,6 +34,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const file = await downloadFile(variant === "original" ? media.drive_original_id : media.drive_display_id);
+    if (variant === "thumb") {
+      const small = await resizeForDisplay(new Uint8Array(await file.arrayBuffer()), "image/jpeg", 720);
+      return new NextResponse(small.body, {
+        status: 200,
+        headers: {
+          "content-type": small.type,
+          "content-length": String(small.body.byteLength),
+          "cache-control": "private, max-age=604800, immutable",
+          etag,
+          "x-content-type-options": "nosniff",
+          "content-security-policy": "default-src 'none'; sandbox",
+        },
+      });
+    }
     const type = variant === "display" ? "image/jpeg" : media.mime;
     const ext = type.split("/")[1].replace("jpeg", "jpg");
     const headers = new Headers({

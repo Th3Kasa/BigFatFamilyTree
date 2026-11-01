@@ -307,7 +307,7 @@ function PhotoGrid({ post, lang }: { post: TimelinePost; lang: "ar" | "en" }) {
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- private photo served by /api/media */}
               <img
-                src={`/api/media/${m.id}/display`}
+                src={`/api/media/${m.id}/${single ? "display" : "thumb"}`}
                 alt=""
                 loading="lazy"
                 decoding="async"

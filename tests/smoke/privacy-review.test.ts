@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { claimWords, hasFullName } from "@/lib/members/claim-query";
 import { isExternalPhotoUrl, normalizePhotoValue, photoStoragePath } from "@/lib/storage/photo-path";
-import { signPhotoValues, signRowPhotos } from "@/lib/storage/sign";
+import { photoLink, signPhotoValues, signRowPhotos } from "@/lib/storage/sign";
 import { personSchema } from "@/lib/validation/people";
 import { DEFAULT_SITE_URL, inviteRedirectUrl } from "@/lib/members/account-admin";
 
@@ -108,69 +108,36 @@ describe("photo values", () => {
   });
 });
 
-describe("signing photos for a page", () => {
-  function fakeClient() {
-    const calls: string[][] = [];
-    return {
-      calls,
-      client: {
-        storage: {
-          from: (bucket: string) => {
-            expect(bucket).toBe("photos");
-            return {
-              createSignedUrls: vi.fn(async (paths: string[], ttl: number) => {
-                calls.push(paths);
-                expect(ttl).toBe(3600);
-                return {
-                  data: paths.map((p) =>
-                    p === "missing.jpg"
-                      ? { path: p, signedUrl: null, error: "Object not found" }
-                      : { path: p, signedUrl: `https://signed.example/${p}?t=1`, error: null },
-                  ),
-                  error: null,
-                };
-              }),
-            };
-          },
-        },
-      },
-    };
-  }
-
-  it("signs a whole page with ONE request, deduplicated", async () => {
-    const { client, calls } = fakeClient();
-    const map = await signPhotoValues(client, ["a.jpg", "a.jpg", "https://x.supabase.co/storage/v1/object/public/photos/a.jpg", "b.jpg", null]);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].sort()).toEqual(["a.jpg", "b.jpg"]);
-    expect(map.get("a.jpg")).toBe("https://signed.example/a.jpg?t=1");
-    // the legacy public URL for the same file maps to the same signed URL
-    expect(map.get("https://x.supabase.co/storage/v1/object/public/photos/a.jpg")).toBe("https://signed.example/a.jpg?t=1");
+describe("photo links for a page", () => {
+  it("links every bucket photo through /api/photo, deduplicated, with no storage calls", async () => {
+    const client = { storage: { from: () => { throw new Error("storage must not be called"); } } };
+    const map = await signPhotoValues(client, ["a.jpg", "a.jpg", "https://x.supabase.co/storage/v1/object/public/photos/a.jpg", "p/b.jpg", null]);
+    expect(map.get("a.jpg")).toBe("/api/photo?p=a.jpg&w=384");
+    // the legacy public URL for the same file maps to the same site link
+    expect(map.get("https://x.supabase.co/storage/v1/object/public/photos/a.jpg")).toBe("/api/photo?p=a.jpg&w=384");
+    expect(map.get("p/b.jpg")).toBe("/api/photo?p=p%2Fb.jpg&w=384");
   });
-  it("does not call storage when there is nothing to sign, and leaves external URLs alone", async () => {
-    const { client, calls } = fakeClient();
-    const map = await signPhotoValues(client, [null, "", "https://elsewhere.example/p.jpg"]);
-    expect(calls).toHaveLength(0);
+  it("leaves external URLs alone and drops empty or unsafe values", async () => {
+    const map = await signPhotoValues(null, [null, "", "https://elsewhere.example/p.jpg", "../etc/passwd"]);
     expect(map.get("https://elsewhere.example/p.jpg")).toBe("https://elsewhere.example/p.jpg");
+    expect(map.has("../etc/passwd")).toBe(false);
+    expect(photoLink("a.jpg", 128)).toBe("/api/photo?p=a.jpg&w=128");
   });
-  it("rows keep the same photo_url field, now signed; failures fall back to no photo", async () => {
-    const { client } = fakeClient();
-    const rows = await signRowPhotos(client, [
+  it("rows keep the same photo_url field, now a site link", async () => {
+    const rows = await signRowPhotos(null, [
       { id: 1, photo_url: "a.jpg" },
-      { id: 2, photo_url: "missing.jpg" },
+      { id: 2, photo_url: "../bad" },
       { id: 3, photo_url: null },
     ]);
     expect(rows).toEqual([
-      { id: 1, photo_url: "https://signed.example/a.jpg?t=1" },
+      { id: 1, photo_url: "/api/photo?p=a.jpg&w=384" },
       { id: 2, photo_url: null },
       { id: 3, photo_url: null },
     ]);
   });
-  it("a signing outage never breaks the page", async () => {
-    const boom = { storage: { from: () => ({ createSignedUrls: async () => { throw new Error("down"); } }) } };
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const rows = await signRowPhotos(boom, [{ photo_url: "a.jpg" }]);
-    expect(rows).toEqual([{ photo_url: null }]);
-    spy.mockRestore();
+  it("never puts a signed storage URL (which works without signing in) on a page", async () => {
+    const rows = await signRowPhotos(null, [{ photo_url: "https://x.supabase.co/storage/v1/object/sign/photos/a.jpg?token=abc" }]);
+    expect(rows[0].photo_url).toBe("/api/photo?p=a.jpg&w=384");
   });
 });
 
