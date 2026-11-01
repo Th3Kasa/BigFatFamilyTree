@@ -600,6 +600,7 @@ export type Database = {
           id: string
           invited_by: string | null
           is_super_admin: boolean
+          is_super_editor: boolean
           login_method: string
           name_key: string | null
           pin_must_change: boolean
@@ -622,6 +623,7 @@ export type Database = {
           id: string
           invited_by?: string | null
           is_super_admin?: boolean
+          is_super_editor?: boolean
           login_method?: string
           name_key?: string | null
           pin_must_change?: boolean
@@ -644,6 +646,7 @@ export type Database = {
           id?: string
           invited_by?: string | null
           is_super_admin?: boolean
+          is_super_editor?: boolean
           login_method?: string
           name_key?: string | null
           pin_must_change?: boolean
@@ -911,6 +914,7 @@ export type Database = {
       first_admin_name: { Args: never; Returns: string | null }
       is_approved: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      is_super_editor: { Args: never; Returns: boolean }
       owns_person: { Args: { p_person: string }; Returns: boolean }
       mark_onboarded: { Args: never; Returns: undefined }
       my_editable_person_ids: { Args: never; Returns: string[] | null }

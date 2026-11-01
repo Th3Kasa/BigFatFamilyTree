@@ -15,7 +15,7 @@ import {
 import { dobToBirthDateText, hasArabic, splitFullName } from "@/lib/members/match";
 import { searchClaimCandidates } from "@/lib/members/search";
 import { ClaimSearchLimitError } from "@/lib/members/claim-query";
-import { canTransitionRequest, isLastAdminError } from "@/lib/members/rules";
+import { canTransitionRequest, isLastAdminError, profileRoleOf, roleChoiceOf, type RoleChoice } from "@/lib/members/rules";
 import { canRemoveAccess } from "@/lib/members/approval";
 import { buildRequestNote } from "@/lib/members/request-note";
 import { resolveSuggestionSchema, suggestRelativeSchema, type SuggestRelativeInput } from "@/lib/members/suggestions";
@@ -477,20 +477,21 @@ export async function unlinkMember(input: { profileId: string }): Promise<Member
 }
 
 export async function changeMemberRole(
-  input: { profileId: string; role: MemberRole },
+  input: { profileId: string; role: RoleChoice },
 ): Promise<MemberActionResult> {
   const t = translator(await getLang());
   const ctx = await getAdminContext();
   if (!ctx) return FORBIDDEN(t);
   const parsed = memberRoleSchema.safeParse(input);
   if (!parsed.success) return BAD_INPUT(t);
-  const { profileId, role } = parsed.data;
+  const { profileId, role: choice } = parsed.data;
+  const next = profileRoleOf(choice);
 
-  // Normal admins can switch Viewer <-> Editor; anything to or from Admin is the
-  // owner's call (the database guard enforces the same rule).
+  // Normal admins can switch Viewer / Editor / Super editor; anything to or from
+  // Admin is the owner's call (the database guard enforces the same rule).
   const { data: target } = await ctx.supabase
     .from("profiles")
-    .select("id, role, is_super_admin")
+    .select("id, role, is_super_admin, is_super_editor")
     .eq("id", profileId)
     .maybeSingle();
   if (!target) return fail(t("That member no longer exists.", "هذا العضو لم يعد موجودًا."));
@@ -499,9 +500,12 @@ export async function changeMemberRole(
     ctx.userId,
     "change_role",
     { id: target.id, role: target.role, isSuperAdmin: target.is_super_admin },
-    role,
+    // Editor <-> Super editor keeps the role, so only a role change is passed on.
+    next.role === target.role ? undefined : next.role,
   );
-  if (!verdict.ok) {
+  const unchanged = choice === roleChoiceOf({ role: target.role, superEditor: target.is_super_editor });
+  if (!verdict.ok || unchanged) {
+    if (verdict.ok) return fail(t("That's already their permission.", "هذه صلاحيتهم الحالية بالفعل."));
     if (verdict.reason === "super_admin") {
       return fail(t("The owner's account can't be changed.", "لا يمكن تغيير حساب المالك."));
     }
@@ -517,7 +521,7 @@ export async function changeMemberRole(
   // advisory lock, so two admins demoting each other at once can't both win.
   const { data, error } = await ctx.supabase
     .from("profiles")
-    .update({ role })
+    .update(next)
     .eq("id", profileId)
     .select("id");
   if (isLastAdminError(error)) {

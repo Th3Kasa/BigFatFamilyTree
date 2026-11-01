@@ -29,6 +29,7 @@ interface UserMenuProps {
 
 const ROLE_LABELS: Record<string, { en: string; ar: string }> = {
   admin: { en: "Admin", ar: "مشرف" },
+  super_editor: { en: "Super editor", ar: "محرّر رئيسي" },
   editor: { en: "Editor", ar: "محرّر" },
   viewer: { en: "Family member", ar: "فرد من العائلة" },
 };

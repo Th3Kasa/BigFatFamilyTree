@@ -45,7 +45,7 @@ export function InviteMemberForm({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
-  const [role, setRole] = useState<MemberRole>("viewer");
+  const [role, setRole] = useState<MemberRole>("editor");
   const [approveNow, setApproveNow] = useState(true);
   const [person, setPerson] = useState<PersonSummary | null>(null);
   const [comboKey, setComboKey] = useState(0);
@@ -85,7 +85,7 @@ export function InviteMemberForm({
         setFullName("");
         setEmail("");
         setDob("");
-        setRole("viewer");
+        setRole("editor");
         setApproveNow(true);
         setPerson(null);
         setComboKey((k) => k + 1);

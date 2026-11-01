@@ -88,7 +88,8 @@ describe("wouldRemoveLastAdmin", () => {
 describe("roleLabel", () => {
   it("uses the friendly names", () => {
     expect(roleLabel("viewer", "en")).toBe("View & add memories");
-    expect(roleLabel("editor", "en")).toBe("Edit the tree");
+    expect(roleLabel("editor", "en")).toBe("Edit their family");
+    expect(roleLabel("super_editor", "en")).toBe("Super editor: edit the whole tree");
     expect(roleLabel("admin", "en")).toBe("Admin");
     expect(roleLabel("admin", "ar")).not.toBe("Admin");
   });
