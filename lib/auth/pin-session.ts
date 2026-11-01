@@ -108,6 +108,19 @@ export async function clearPinLockout(lockId: string): Promise<void> {
   await Promise.all([resetLimit("pinFail", lockId), resetLimit("pinFailDay", lockId)]);
 }
 
+/**
+ * The address an account signs in with (its real email, or the generated
+ * member address). Read-only, so sign-in starts it alongside the rate-limit
+ * checks instead of after them. Never rejects.
+ */
+function signInEmail(profileId: string | null): Promise<string> {
+  if (!profileId) return Promise.resolve(memberEmail(DUMMY_ID));
+  return createServiceClient()
+    .auth.admin.getUserById(profileId)
+    .then(({ data }) => data.user?.email ?? memberEmail(DUMMY_ID))
+    .catch(() => memberEmail(DUMMY_ID));
+}
+
 /** Supabase refused for a reason that is not "wrong password" (its own rate limit, an outage). */
 const notACredentialError = (status: number | undefined) => (status ?? 0) === 429 || (status ?? 0) >= 500;
 
@@ -132,6 +145,13 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
   const { firstName, lastName, dateOfBirth, pin } = parsed.data;
   const secret = env().SUPABASE_SERVICE_ROLE_KEY;
 
+  const nameKey = lastName && dateOfBirth ? makeNameKey(firstName, lastName) : null;
+  // Read-only lookups start now and run while the limits below are taken; no
+  // PIN is tried until both limits have passed. (Saves two round trips.)
+  const lookup = nameKey && dateOfBirth
+    ? findPinProfile(nameKey, dateOfBirth).then(async (profile) => ({ profile, email: await signInEmail(profile?.id ?? null) }))
+    : null;
+
   // 1. Per IP: 20 attempts / 15 minutes.
   const ip = await clientIp();
   const ipCheck = await checkLimitStrict("pinIp", sha(`ip:${ip}`));
@@ -139,14 +159,13 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
   if (!ipCheck.success) return fail("too_many_ip", lang);
 
   // New-device sign-in by first name (+ optional last name / birthday).
-  if (!lastName || !dateOfBirth) {
+  if (!nameKey || !dateOfBirth || !lookup) {
     return signInByFirstName({ firstName, lastName, dateOfBirth, pin, startedAt, lang, secret });
   }
 
   // 2. Per account, keyed on the normalised name + birthday (the same key the
   // account is looked up by): 5 tries / 15 minutes and 10 tries / 24 hours.
   // Counted for names that do not exist too, so a lock reveals nothing.
-  const nameKey = makeNameKey(firstName, lastName);
   const lockId = pinAccountLockId(nameKey, dateOfBirth);
   const gate = await takeAttempt(lockId);
   if (!gate.ok) {
@@ -154,9 +173,9 @@ export async function signInWithPin(raw: PinSignInInput, lang: Lang): Promise<Pi
     return fail(gate.code, lang);
   }
 
-  // 3 + 4. Look the account up and try the derived password.
-  const profile = await findPinProfile(nameKey, dateOfBirth);
-  const result = await attemptPinSignIn({ profile, lockId, gate, pin, startedAt, lang, secret });
+  // 3 + 4. The account (looked up above) and the derived password.
+  const { profile, email } = await lookup;
+  const result = await attemptPinSignIn({ profile, email, lockId, gate, pin, startedAt, lang, secret });
   if (result.ok && profile) await rememberDevice(profile.id);
   return result;
 }
@@ -210,13 +229,15 @@ async function signInByFirstName(args: {
   const { firstName, lastName, dateOfBirth, pin, startedAt, lang, secret } = args;
   const fkey = firstNameKey(firstName);
 
+  // Read-only: list the accounts while the first-name limits are taken.
+  const candidatesLookup = listPinCandidates();
   const firstGate = await takeFirstNameAttempt(fkey);
   if (!firstGate.ok) {
     await padTo(startedAt);
     return fail(firstGate.code, lang);
   }
 
-  const candidates = await listPinCandidates();
+  const candidates = await candidatesLookup;
   if (!candidates) {
     await padTo(startedAt);
     return fail("busy", lang);
@@ -235,13 +256,14 @@ async function signInByFirstName(args: {
     resolution.kind === "one"
       ? pinAccountLockId(resolution.profile.name_key, resolution.profile.date_of_birth)
       : pinAccountLockId(`first:${fkey}`, dateOfBirth ?? "");
+  const email = signInEmail(profile?.id ?? null);
   const gate = await takeAttempt(lockId);
   if (!gate.ok) {
     await padTo(startedAt);
     return fail(gate.code, lang);
   }
 
-  const result = await attemptPinSignIn({ profile, lockId, gate, pin, startedAt, lang, secret });
+  const result = await attemptPinSignIn({ profile, email: await email, lockId, gate, pin, startedAt, lang, secret });
   if (result.ok && profile) {
     await rememberDevice(profile.id);
     // Reached through the "no birthday" fallback: keep the birthday they just
@@ -280,6 +302,8 @@ async function saveFallbackBirthday(profile: { id: string; name_key: string }, d
  */
 async function attemptPinSignIn(args: {
   profile: PinProfile | null;
+  /** From signInEmail(), fetched while the limits were taken. */
+  email: string;
   lockId: string;
   gate: Extract<AttemptGate, { ok: true }>;
   pin: string;
@@ -287,13 +311,8 @@ async function attemptPinSignIn(args: {
   lang: Lang;
   secret: string;
 }): Promise<PinResult> {
-  const { profile, lockId, gate, pin, startedAt, lang, secret } = args;
+  const { profile, email, lockId, gate, pin, startedAt, lang, secret } = args;
   const userId = profile?.id ?? DUMMY_ID;
-  let email = memberEmail(DUMMY_ID);
-  if (profile) {
-    const { data } = await createServiceClient().auth.admin.getUserById(profile.id);
-    if (data.user?.email) email = data.user.email;
-  }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
@@ -302,8 +321,8 @@ async function attemptPinSignIn(args: {
   });
 
   if (!error && profile) {
-    await clearPinLockout(lockId);
-    await padTo(startedAt);
+    // Forget the failed tries during the response-time padding, which runs anyway.
+    await Promise.all([clearPinLockout(lockId), padTo(startedAt)]);
     return { ok: true, redirectTo: "/" };
   }
 
@@ -342,12 +361,14 @@ export async function signInWithDevice(rawPin: string, lang: Lang): Promise<PinR
   const pin = parsed.data;
   const secret = env().SUPABASE_SERVICE_ROLE_KEY;
 
+  // Read-only: find the device while the IP limit is taken.
+  const deviceLookup = lookupRememberedDevice();
   const ip = await clientIp();
   const ipCheck = await checkLimitStrict("pinIp", sha(`ip:${ip}`));
   if (ipCheck.unavailable) return fail("busy", lang);
   if (!ipCheck.success) return fail("too_many_ip", lang);
 
-  const lookup = await lookupRememberedDevice();
+  const lookup = await deviceLookup;
   if (lookup.state !== "ok") {
     if (lookup.state === "stale") await clearDeviceCookie();
     await padTo(startedAt);
@@ -356,13 +377,14 @@ export async function signInWithDevice(rawPin: string, lang: Lang): Promise<PinR
   const { device } = lookup;
 
   const lockId = pinAccountLockId(device.nameKey, device.dateOfBirth);
+  const email = signInEmail(device.profileId);
   const gate = await takeAttempt(lockId);
   if (!gate.ok) {
     await padTo(startedAt);
     return fail(gate.code, lang);
   }
 
-  const result = await attemptPinSignIn({ profile: { id: device.profileId }, lockId, gate, pin, startedAt, lang, secret });
+  const result = await attemptPinSignIn({ profile: { id: device.profileId }, email: await email, lockId, gate, pin, startedAt, lang, secret });
   if (result.ok) await touchDevice(device.deviceId);
   return result;
 }
