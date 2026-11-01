@@ -1,6 +1,7 @@
 "use client";
 
 import { CanvasController } from "./CanvasController";
+import { useNoPageZoom } from "@/lib/client/use-no-page-zoom";
 import type { GraphEdge, GraphNode, PersonInput } from "@/lib/graph/transform";
 import type { PathHighlight } from "@/lib/graph/highlight";
 
@@ -25,6 +26,7 @@ type Props = {
 };
 
 export function CanvasView(props: Props) {
+  useNoPageZoom();
   return (
     <div className="relative h-full w-full">
       <CanvasController
