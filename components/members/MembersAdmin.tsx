@@ -21,11 +21,10 @@ import {
 import { resetMemberPin } from "@/lib/actions/pin";
 import { canActOn, callerOf, confirmationName } from "@/lib/members/permissions";
 import { formatPersonSubline } from "@/lib/members/match";
-import { ROLE_ORDER, roleLabel, wouldRemoveLastAdmin } from "@/lib/members/rules";
+import { ROLE_CHOICES, roleChoiceOf, roleLabel, wouldRemoveLastAdmin, type RoleChoice } from "@/lib/members/rules";
 import type {
   MemberActionResult,
   MemberAccount,
-  MemberRole,
   MembersAdminData,
   PendingRequest,
   PersonSummary,
@@ -100,7 +99,7 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
   const [status, setStatus] = useState<StatusFilter>("all");
   // A freshly reset PIN, shown once to the admin and then gone.
   const [reveal, setReveal] = useState<{ name: string; pin: string } | null>(null);
-  const [roleDraft, setRoleDraft] = useState<Record<string, MemberRole>>({});
+  const [roleDraft, setRoleDraft] = useState<Record<string, RoleChoice>>({});
   const [prefill, setPrefill] = useState<SuggestionPrefill | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({
@@ -213,10 +212,10 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
     }
   }
 
-  function changeRole(m: MemberAccount, role: MemberRole) {
+  function changeRole(m: MemberAccount, role: RoleChoice) {
     setRoleDraft((d) => ({ ...d, [m.id]: role }));
     void run(`role:${m.id}`, () => changeMemberRole({ profileId: m.id, role })).then((ok) => {
-      if (!ok) setRoleDraft((d) => ({ ...d, [m.id]: m.role })); // snap back
+      if (!ok) setRoleDraft((d) => ({ ...d, [m.id]: roleChoiceOf(m) })); // snap back
     });
   }
 
@@ -448,10 +447,10 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
                 </thead>
                 <tbody>
                   {filteredMembers.map((m) => {
-                    const role = roleDraft[m.id] ?? m.role;
+                    const role = roleDraft[m.id] ?? roleChoiceOf(m);
                     const soleAdmin = wouldRemoveLastAdmin(adminProfiles, m.id, "viewer");
                     const target = { id: m.id, role: m.role, isSuperAdmin: m.isSuperAdmin };
-                    // A normal admin can only switch Viewer <-> Editor; the Admin role is the owner's call.
+                    // A normal admin can switch Viewer / Editor / Super editor; the Admin role is the owner's call.
                     const roleLocked = m.isSuperAdmin || (m.role === "admin" && !isSuperAdmin);
                     const canRemoveAccessHere = !m.isSuperAdmin && canActOn(caller, currentUserId, "remove_access", target).ok && m.approved;
                     const canDeleteHere = canActOn(caller, currentUserId, "delete_account", target).ok;
@@ -511,7 +510,7 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
                           </label>
                           {roleLocked ? (
                             <span id={roleId} className="inline-flex min-h-11 items-center text-sm font-medium">
-                              {roleLabel(m.role, lang)}
+                              {roleLabel(roleChoiceOf(m), lang)}
                             </span>
                           ) : (
                           <div className="flex items-center gap-2">
@@ -524,10 +523,10 @@ export function MembersAdmin({ lang, data, currentUserId, isSuperAdmin, initialT
                                   ? t("The only admin can't be demoted", "لا يمكن تخفيض المشرف الوحيد")
                                   : undefined
                               }
-                              onChange={(e) => changeRole(m, e.target.value as MemberRole)}
+                              onChange={(e) => changeRole(m, e.target.value as RoleChoice)}
                               className="min-h-11 rounded-xl border border-[#E2D6D2] bg-white px-3 text-sm disabled:opacity-60"
                             >
-                              {ROLE_ORDER.filter((r) => isSuperAdmin || r !== "admin").map((r) => (
+                              {ROLE_CHOICES.filter((r) => isSuperAdmin || r !== "admin").map((r) => (
                                 <option key={r} value={r}>
                                   {roleLabel(r, lang)}
                                 </option>

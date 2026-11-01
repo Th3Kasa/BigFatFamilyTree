@@ -27,6 +27,8 @@ type Props = {
 /** Signed-in frame: top bar, labelled side nav (≥768px), bottom tab bar (<768px). */
 export function AppShell({ user, lang, role, editable, membersBadge, mustChangePin = false, children }: Props) {
   const isAdmin = role === "admin";
+  // The menu names super editors (editors who may edit everyone) as such.
+  const menuRole = role === "editor" && editable === "all" ? "super_editor" : role;
   return (
     <div className="flex min-h-svh flex-col">
       <a
@@ -35,7 +37,7 @@ export function AppShell({ user, lang, role, editable, membersBadge, mustChangeP
       >
         {lang === "ar" ? "تخطَّ إلى المحتوى" : "Skip to content"}
       </a>
-      <TopBar user={user} lang={lang} role={role} />
+      <TopBar user={user} lang={lang} role={menuRole} />
       {mustChangePin ? (
         <div
           role="status"
@@ -59,7 +61,7 @@ export function AppShell({ user, lang, role, editable, membersBadge, mustChangeP
           <RoleProvider role={role} editable={editable} userId={user.id}>{children}</RoleProvider>
         </main>
       </div>
-      <MobileTabBar lang={lang} user={user} role={role} />
+      <MobileTabBar lang={lang} user={user} role={menuRole} />
       <AddMenu lang={lang} role={role} />
       <PeopleSheet lang={lang} />
       <BirthdayNotice lang={lang} />

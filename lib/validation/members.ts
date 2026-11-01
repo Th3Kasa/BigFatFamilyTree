@@ -61,7 +61,7 @@ export const linkProfileSchema = z.object({ profileId: uuid, personId: uuid });
 export const unlinkProfileSchema = z.object({ profileId: uuid });
 export const memberRoleSchema = z.object({
   profileId: uuid,
-  role: z.enum(["admin", "editor", "viewer"]),
+  role: z.enum(["admin", "editor", "super_editor", "viewer"]),
 });
 
 const optionalText = z

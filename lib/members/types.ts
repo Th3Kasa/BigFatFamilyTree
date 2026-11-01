@@ -56,6 +56,8 @@ export type MemberAccount = {
   approved: boolean;
   /** The owner account (always an admin). */
   isSuperAdmin: boolean;
+  /** An editor who may edit anyone in the tree (no admin powers). */
+  superEditor: boolean;
   /** How they sign in: "pin" = name + birthday + PIN (no email). */
   loginMethod: "email" | "pin";
   /** An admin reset their PIN and they have not chosen a new one yet. */

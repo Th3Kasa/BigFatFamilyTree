@@ -88,12 +88,32 @@ export function isLastAdminError(
 
 export const ROLE_ORDER: MemberRole[] = ["viewer", "editor", "admin"];
 
-export function roleLabel(role: MemberRole, lang: "ar" | "en"): string {
+/**
+ * What an admin picks in the members table: the three roles plus "Super
+ * editor", which is stored as an editor with profiles.is_super_editor
+ * (migration 35): they may edit anyone in the tree, with no admin powers.
+ */
+export type RoleChoice = MemberRole | "super_editor";
+
+export const ROLE_CHOICES: RoleChoice[] = ["viewer", "editor", "super_editor", "admin"];
+
+export function roleChoiceOf(p: { role: MemberRole; superEditor?: boolean | null }): RoleChoice {
+  return p.role === "editor" && p.superEditor ? "super_editor" : p.role;
+}
+
+/** The profile columns a choice is stored as. */
+export function profileRoleOf(choice: RoleChoice): { role: MemberRole; is_super_editor: boolean } {
+  return choice === "super_editor" ? { role: "editor", is_super_editor: true } : { role: choice, is_super_editor: false };
+}
+
+export function roleLabel(role: RoleChoice, lang: "ar" | "en"): string {
   switch (role) {
     case "viewer":
       return lang === "ar" ? "عرض وإضافة ذكريات" : "View & add memories";
     case "editor":
-      return lang === "ar" ? "تعديل الشجرة" : "Edit the tree";
+      return lang === "ar" ? "تعديل عائلته" : "Edit their family";
+    case "super_editor":
+      return lang === "ar" ? "محرّر رئيسي: تعديل الشجرة كلها" : "Super editor: edit the whole tree";
     case "admin":
       return lang === "ar" ? "مشرف" : "Admin";
   }

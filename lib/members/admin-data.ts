@@ -26,6 +26,7 @@ type ProfileRow = {
   person_id: string | null;
   approved_at: string | null;
   is_super_admin: boolean;
+  is_super_editor?: boolean | null;
   login_method: "email" | "pin";
   pin_must_change: boolean;
 };
@@ -49,6 +50,7 @@ function toAccount(p: ProfileRow, auth: AuthStatus | undefined): MemberAccount {
     personId: p.person_id,
     approved: isApproved(p),
     isSuperAdmin: p.is_super_admin,
+    superEditor: !!p.is_super_editor,
     loginMethod: p.login_method ?? "email",
     pinMustChange: !!p.pin_must_change,
   };
@@ -59,7 +61,7 @@ export async function loadMembersAdminData(supabase: Client): Promise<MembersAdm
   const [profilesRes, requestsRes, peopleRes, authRes, suggestionsRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, display_name, full_name, email, date_of_birth, created_at, role, person_id, approved_at, is_super_admin, login_method, pin_must_change")
+      .select("id, display_name, full_name, email, date_of_birth, created_at, role, person_id, approved_at, is_super_admin, is_super_editor, login_method, pin_must_change")
       .order("created_at", { ascending: false }),
     supabase
       .from("link_requests")
