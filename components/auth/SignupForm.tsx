@@ -62,6 +62,7 @@ export function SignupForm({ lang, onDone, onSignIn }: Props) {
   const [nameDone, setNameDone] = useState(false);
   const [needBirthday, setNeedBirthday] = useState(false);
   const [dob, setDob] = useState("");
+  const [birthYear, setBirthYear] = useState("");
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [busy, setBusy] = useState<null | "family" | "name" | "join">(null);
@@ -134,7 +135,7 @@ export function SignupForm({ lang, onDone, onSignIn }: Props) {
     if (!nameDone) return void checkName();
     if (!showPins) return;
     setErrorMsg(null);
-    const input = { ticket, firstName, dateOfBirth: needBirthday ? dob : "", pin, pinConfirm };
+    const input = { ticket, firstName, dateOfBirth: needBirthday ? dob : "", birthYear, pin, pinConfirm };
     const parsed = pinJoinSchema.safeParse(input);
     if (!parsed.success) {
       setErrorMsg(pinMessage(firstIssueCode(parsed.error), lang));
@@ -217,20 +218,49 @@ export function SignupForm({ lang, onDone, onSignIn }: Props) {
         </div>
       ) : null}
 
-      {/* 4. Your own PIN, twice */}
+      {/* 4. Year of birth (so the PIN can't be it), then your own PIN, twice */}
       {showPins ? (
         <div className="step-in flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={`${uid}-birth-year`} className="text-sm font-semibold">
+              {t("Year you were born", "سنة ميلادك")}
+            </label>
+            <input
+              id={`${uid}-birth-year`}
+              name="bday-year"
+              type="text"
+              inputMode="numeric"
+              autoComplete="bday-year"
+              required
+              maxLength={4}
+              value={birthYear}
+              onChange={(e) => setBirthYear(e.target.value)}
+              disabled={loading}
+              autoFocus={!needBirthday}
+              placeholder={t("e.g. 1985", "مثال: 1985")}
+              aria-describedby={`${uid}-birth-year-hint`}
+              className={fieldClass}
+            />
+            <p id={`${uid}-birth-year-hint`} className="text-xs text-[var(--muted-foreground)]">
+              {t(
+                "Only used to check your PIN isn't your birth year. It isn't saved.",
+                "يُستخدم فقط للتأكد من أن رمزك ليس سنة ميلادك، ولا يُحفظ.",
+              )}
+            </p>
+          </div>
           <PinField
             lang={lang}
             name="new-pin"
             label={t("Choose your own 4-digit PIN", "اختر رمزك السري الخاص (٤ أرقام)")}
-            hint={t("You'll use it to sign in. Avoid 1234 or 1111.", "ستستخدمه لتسجيل الدخول. تجنّب 1234 أو 1111.")}
+            hint={t(
+              "You'll use it to sign in. Not a year, a date, 1234 or 1111.",
+              "ستستخدمه لتسجيل الدخول. ليس سنة أو تاريخًا أو 1234 أو 1111.",
+            )}
             length={4}
             autoComplete="new-password"
             value={pin}
             onChange={setPin}
             disabled={loading}
-            autoFocus={!needBirthday}
           />
           <PinField
             lang={lang}

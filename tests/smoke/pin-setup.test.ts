@@ -95,6 +95,11 @@ describe("pinSetupSchema", () => {
     expect(code({ pinConfirm: "7392" })).toBe("pin_mismatch");
     expect(code({ dateOfBirth: "" })).toBe("dob_invalid");
   });
+  it("names their own birth year, and refuses any other year or date as too easy", () => {
+    expect(code({ pin: "1998", pinConfirm: "1998" })).toBe("pin_birth_year");
+    expect(code({ pin: "0204", pinConfirm: "0204" })).toBe("pin_trivial");
+    expect(code({ pin: "1985", pinConfirm: "1985" })).toBe("pin_trivial");
+  });
   it("accepts Arabic-Indic digits in both PIN boxes", () => {
     expect(pinSetupSchema.safeParse({ ...ok, pin: "٧٣٩١", pinConfirm: "٧٣٩١" }).success).toBe(true);
   });

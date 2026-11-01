@@ -311,7 +311,7 @@ describe("join steps on the server", () => {
   it("join re-checks the ticket and the name rules before creating anything", async () => {
     const { joinWithPin } = await import("@/lib/auth/pin-session");
     const ticket = issueJoinTicket("123456", SECRET);
-    const base = { ticket, firstName: "Samuel", pin: "4821", pinConfirm: "4821" };
+    const base = { ticket, firstName: "Samuel", birthYear: "1970", pin: "4821", pinConfirm: "4821" };
     expect(await joinWithPin({ ...base, ticket: issueJoinTicket("999999", SECRET) }, "en")).toMatchObject({ ok: false, code: "join_expired" });
     expect(await joinWithPin(base, "en")).toMatchObject({ ok: false, code: "join_need_birthday" });
     expect(await joinWithPin({ ...base, dateOfBirth: "1970-05-05" }, "en")).toMatchObject({ ok: false, code: "duplicate" });

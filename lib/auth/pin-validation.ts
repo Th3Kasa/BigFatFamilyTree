@@ -20,6 +20,11 @@ export const PIN_MESSAGES = {
     "That PIN is too easy to guess (like 1234, 1111, a year or a date). Pick another.",
     "هذا الرمز سهل التخمين (مثل 1234 أو 1111 أو سنة أو تاريخ). اختر رمزًا آخر.",
   ],
+  pin_birth_year: [
+    "You can't use your year of birth as your PIN. Pick another.",
+    "لا يمكنك استخدام سنة ميلادك رمزًا سريًا. اختر رمزًا آخر.",
+  ],
+  birth_year_invalid: ["Enter the year you were born (4 digits).", "أدخل سنة ميلادك (٤ أرقام)."],
   pin_mismatch: ["The two PINs don't match.", "الرمزان غير متطابقين."],
   family_pin_format: ["The family PIN is 6 digits.", "رمز العائلة مكوّن من ٦ أرقام."],
   family_pin_wrong: [
@@ -197,6 +202,24 @@ export const newPinSchema = z.preprocess(
 /** An existing PIN being typed to sign in: format only (never reveal the trivial-PIN rule at sign-in). */
 export const pinSchema = z.preprocess(digitsPreprocess, z.string().regex(/^\d{4}$/, "pin_format"));
 
+/** The year someone was born, asked at sign-up only so their PIN can't be it (not stored). */
+export const birthYearSchema = z.preprocess(
+  digitsPreprocess,
+  z
+    .string()
+    .regex(/^\d{4}$/, "birth_year_invalid")
+    .refine((v) => Number(v) >= 1900 && Number(v) <= new Date().getFullYear(), "birth_year_invalid"),
+);
+
+/**
+ * Why a new (4-digit) PIN is refused, or null. Their own birth year gets its own
+ * message, since that is the first PIN anyone would guess for them.
+ */
+export function newPinIssue(pin: string, birthYear?: string | null): "pin_birth_year" | "pin_trivial" | null {
+  if (birthYear && pin === birthYear) return "pin_birth_year";
+  return isTrivialPin(pin) ? "pin_trivial" : null;
+}
+
 export const familyPinSchema = z.preprocess(digitsPreprocess, z.string().regex(/^\d{6}$/, "family_pin_format"));
 
 /** An optional field: missing, null or "" all mean "not given". */
@@ -217,9 +240,10 @@ export const pinSignInSchema = z.object({
 export type PinSignInInput = z.input<typeof pinSignInSchema>;
 
 /**
- * Join, after the family PIN step: first name and your own PIN twice. The
- * birthday is optional here; the server asks for it (join_need_birthday) when
- * another PIN account already has this first name. `ticket` is the short-lived
+ * Join, after the family PIN step: first name, year of birth and your own PIN
+ * twice. The full birthday is optional here; the server asks for it
+ * (join_need_birthday) when another PIN account already has this first name.
+ * The year is only used to refuse it as the PIN. `ticket` is the short-lived
  * proof that the family PIN was right (lib/auth/join-ticket.ts).
  */
 export const pinJoinSchema = z
@@ -227,10 +251,15 @@ export const pinJoinSchema = z
     ticket: z.string().min(1).max(200),
     firstName: pinNameSchema,
     dateOfBirth: optionalField(pinDobSchema),
-    pin: newPinSchema,
+    birthYear: birthYearSchema,
+    pin: pinSchema,
     pinConfirm: z.preprocess(digitsPreprocess, z.string()),
   })
-  .refine((v) => v.pin === v.pinConfirm, { path: ["pinConfirm"], message: "pin_mismatch" });
+  .superRefine((v, ctx) => {
+    const issue = newPinIssue(v.pin, v.birthYear);
+    if (issue) ctx.addIssue({ code: "custom", path: ["pin"], message: issue });
+    else if (v.pin !== v.pinConfirm) ctx.addIssue({ code: "custom", path: ["pinConfirm"], message: "pin_mismatch" });
+  });
 export type PinJoinInput = z.input<typeof pinJoinSchema>;
 
 export const changePinSchema = z

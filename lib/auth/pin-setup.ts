@@ -3,7 +3,7 @@
 // is unit-tested; lib/auth/pin-setup-session.ts does the work around them.
 
 import { z } from "zod";
-import { newPinSchema, normaliseDigits, pinDobSchema, pinNameSchema } from "@/lib/auth/pin-validation";
+import { newPinIssue, normaliseDigits, pinDobSchema, pinNameSchema, pinSchema } from "@/lib/auth/pin-validation";
 
 /** An email account's session must have started within this long (convert to PIN). */
 export const SETUP_FRESH_SESSION_MS = 24 * 60 * 60 * 1000;
@@ -96,10 +96,14 @@ export const pinSetupSchema = z
     firstName: pinNameSchema,
     lastName: pinNameSchema,
     dateOfBirth: pinDobSchema,
-    pin: newPinSchema,
+    pin: pinSchema,
     pinConfirm: z.string(),
   })
-  .refine((v) => v.pin === normaliseDigits(v.pinConfirm), { path: ["pinConfirm"], message: "pin_mismatch" });
+  .superRefine((v, ctx) => {
+    const issue = newPinIssue(v.pin, v.dateOfBirth.slice(0, 4));
+    if (issue) ctx.addIssue({ code: "custom", path: ["pin"], message: issue });
+    else if (v.pin !== normaliseDigits(v.pinConfirm)) ctx.addIssue({ code: "custom", path: ["pinConfirm"], message: "pin_mismatch" });
+  });
 export type PinSetupInput = z.input<typeof pinSetupSchema>;
 
 /** Prefill for the form: stored first/last name if any, else split full_name at the first space. */
