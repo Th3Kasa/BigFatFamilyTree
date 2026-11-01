@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Cake, ChevronUp, Minus } from "lucide-react";
 import { useFamilyDirectory } from "@/lib/client/family-directory";
-import { birthdayTurns, birthdayWhen, upcomingBirthdays, type UpcomingBirthday } from "@/lib/people/birthdays";
+import { birthdayWhen, upcomingBirthdays, type UpcomingBirthday } from "@/lib/people/birthdays";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 import { getDisplayName } from "@/lib/utils";
 import type { DirectoryPerson } from "@/lib/client/family-directory";
@@ -148,7 +148,6 @@ function BirthdayGroup({
         {list.map((b) => {
           const name = getDisplayName(b.person, lang);
           const when = birthdayWhen(b, today, lang);
-          const turns = birthdayTurns(b, lang);
           const isToday = b.daysAway === 0;
           return (
             <li key={b.person.id}>
@@ -157,10 +156,8 @@ function BirthdayGroup({
                 className="flex min-h-11 items-center gap-3 rounded-2xl px-2 py-1.5 hover:bg-[#FBF7F4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
               >
                 <PersonAvatar person={b.person} lang={lang} className="h-9 w-9" textClassName="text-xs" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold">{name}</span>
-                  {turns && <span className="block text-[13px] text-[var(--muted-foreground)]">{turns}</span>}
-                </span>
+                {/* Ages aren't shown: just the name and when. */}
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{name}</span>
                 <span
                   className={
                     isToday

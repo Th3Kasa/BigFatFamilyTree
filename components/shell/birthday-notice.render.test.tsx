@@ -62,7 +62,7 @@ describe("BirthdayNotice", () => {
     expect(text()).toContain("Family birthdays");
     expect(text()).toContain("This week");
     expect(text()).toContain("Basem Morkos");
-    expect(text()).toContain("turns 28");
+    expect(text()).not.toContain("turns");
     expect(text()).toContain("Today");
     expect(text()).toContain("Later this month");
     expect(text()).toContain("Hanan Morkos");
