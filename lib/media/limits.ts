@@ -7,6 +7,16 @@ export const MAX_PHOTOS_PER_POST = 5;
 export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
 /** The smaller copy shown on the timeline (made in the browser). */
 export const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
+/**
+ * Photo bytes one member may upload in 24 hours, and the whole family together.
+ * The photos land in the owner's Google Drive, whose space Gmail shares, so a
+ * runaway (or hostile) uploader must never be able to fill it.
+ */
+export const MAX_UPLOAD_BYTES_PER_DAY = 500 * 1024 * 1024;
+export const MAX_FAMILY_UPLOAD_BYTES_PER_DAY = 3 * 1024 * 1024 * 1024;
+/** Uploads never posted are binned from Drive after this long (the upload itself expires after 6 hours). */
+export const ABANDONED_UPLOAD_MS = 24 * 60 * 60 * 1000;
+
 /** Long edge of the timeline copy, in pixels. */
 export const DISPLAY_LONG_EDGE = 1600;
 /**

@@ -6,10 +6,19 @@ import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { checkLimit } from "@/lib/ratelimit";
+import { checkLimit, checkLimitStrict } from "@/lib/ratelimit";
 import { DriveError, ensureFolder, safeFileName, startUpload, trashFile } from "@/lib/drive/client";
 import { binDeletedPostPhotos } from "@/lib/drive/bin";
-import { isPhotoType, MAX_DISPLAY_BYTES, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_POST, megabytes } from "@/lib/media/limits";
+import {
+  ABANDONED_UPLOAD_MS,
+  isPhotoType,
+  MAX_DISPLAY_BYTES,
+  MAX_FAMILY_UPLOAD_BYTES_PER_DAY,
+  MAX_PHOTO_BYTES,
+  MAX_PHOTOS_PER_POST,
+  MAX_UPLOAD_BYTES_PER_DAY,
+  megabytes,
+} from "@/lib/media/limits";
 import { parseVideoLink } from "@/lib/media/video";
 import { getViewer } from "@/lib/timeline/viewer";
 
@@ -53,16 +62,30 @@ export async function startPhotoUploads(
     if (p.originalBytes > MAX_PHOTO_BYTES) return { success: false, error: `Each photo can be up to ${megabytes(MAX_PHOTO_BYTES)}.` };
     if (p.displayBytes > MAX_DISPLAY_BYTES) return { success: false, error: "That photo couldn't be prepared. Please try another." };
   }
-  const [{ success: allowed }, { data: person }] = await Promise.all([
-    checkLimit("upload", viewer.userId),
+  // Fails closed: without the counter there is nothing between a member and the owner's Drive.
+  const [limit, { data: person }] = await Promise.all([
+    checkLimitStrict("upload", viewer.userId),
     supabase.from("people").select("id, given_en, family_name_en, given_ar, family_name_ar").eq("id", personId).is("deleted_at", null).maybeSingle(),
   ]);
-  if (!allowed) return { success: false, error: "That's a lot of uploads for one hour. Please try again later." };
+  if (limit.unavailable) return { success: false, error: "Uploads are paused for a moment. Please try again shortly." };
+  if (!limit.success) return { success: false, error: "That's a lot of uploads for one hour. Please try again later." };
   if (!person) return { success: false, error: "That person isn't on the tree." };
+
+  const db = createServiceClient();
+  after(() => sweepAbandonedUploads(db));
+  const requested = parsed.data.reduce((sum, p) => sum + p.originalBytes + p.displayBytes, 0);
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [mine, family] = await Promise.all([bytesUploadedSince(db, since, viewer.userId), bytesUploadedSince(db, since)]);
+  if (mine === null || family === null) return { success: false, error: "Couldn't start the upload. Please try again." };
+  if (mine + requested > MAX_UPLOAD_BYTES_PER_DAY) {
+    return { success: false, error: `You've shared a lot of photos today (up to ${megabytes(MAX_UPLOAD_BYTES_PER_DAY)} a day). Please try again tomorrow.` };
+  }
+  if (family + requested > MAX_FAMILY_UPLOAD_BYTES_PER_DAY) {
+    return { success: false, error: "The family has shared a lot of photos today. Please try again tomorrow." };
+  }
 
   const personName =
     [person.given_en ?? person.given_ar, person.family_name_en ?? person.family_name_ar].filter(Boolean).join(" ").trim() || "Unnamed";
-  const db = createServiceClient();
   const stamp = new Date().toISOString().slice(0, 10);
   const batch = randomUUID().slice(0, 6);
   try {
@@ -100,6 +123,45 @@ export async function startPhotoUploads(
   } catch (e) {
     return { success: false, error: e instanceof DriveError || e instanceof Error ? e.message : "Couldn't start the upload. Please try again." };
   }
+}
+
+type Db = ReturnType<typeof createServiceClient>;
+
+/**
+ * Photo bytes sent to Drive since `since`: uploads not yet posted, plus photos
+ * on posts made since then (each with its timeline copy, counted at the most it
+ * can be). One member's, or everyone's. Null if it couldn't be read.
+ */
+async function bytesUploadedSince(db: Db, since: string, userId?: string): Promise<number | null> {
+  let pending = db.from("media_uploads").select("expected_bytes").gte("created_at", since);
+  let posted = db.from("post_media").select("bytes_original, posts!inner(author_id, created_at)").gte("posts.created_at", since);
+  if (userId) {
+    pending = pending.eq("user_id", userId);
+    posted = posted.eq("posts.author_id", userId);
+  }
+  const [p, m] = await Promise.all([pending, posted]);
+  if (p.error || m.error) {
+    console.error("[uploads] daily total unavailable:", (p.error ?? m.error)?.message);
+    return null;
+  }
+  return (
+    (p.data ?? []).reduce((sum, u) => sum + u.expected_bytes, 0) +
+    (m.data ?? []).reduce((sum, r) => sum + r.bytes_original + MAX_DISPLAY_BYTES, 0)
+  );
+}
+
+/**
+ * Bin photos that were uploaded but never posted (a closed tab, or someone
+ * filling the Drive on purpose), a few at a time after each new upload starts.
+ * Binned files stay recoverable in the owner's Drive bin for 30 days.
+ */
+async function sweepAbandonedUploads(db: Db): Promise<void> {
+  const cutoff = new Date(Date.now() - ABANDONED_UPLOAD_MS).toISOString();
+  const { data, error } = await db.from("media_uploads").select("id, drive_file_id").lt("created_at", cutoff).limit(25);
+  if (error || !data?.length) return;
+  const gone: string[] = [];
+  for (const u of data) if (!u.drive_file_id || (await trashFile(u.drive_file_id))) gone.push(u.id);
+  if (gone.length) await db.from("media_uploads").delete().in("id", gone);
 }
 
 // ── Posts ───────────────────────────────────────────────────────────────────
