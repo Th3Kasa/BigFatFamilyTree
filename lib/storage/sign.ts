@@ -1,67 +1,48 @@
-import { PHOTO_BUCKET, photoStoragePath } from "./photo-path";
+import { photoStoragePath } from "./photo-path";
 
-// Batch-signing for the private `photos` bucket. Client-agnostic: it works with
-// the server client (pages and loaders) and with the browser client (the people
-// directory). Callers must be approved members: signing is allowed by the same
-// storage RLS policy as reading (photos_approved_read).
+// Links for photos in the private `photos` bucket. Every photo is served by
+// /api/photo, which checks the viewer is an approved member (storage RLS,
+// photos_approved_read) and shrinks it to the size asked for. The link for a
+// photo never changes, so browsers keep it instead of downloading it again on
+// every page, and pages no longer ask storage to sign anything: making the
+// links is free, however many people a page shows.
+//
+// The function names (and the unused client argument) are kept from when
+// pages signed hourly storage URLs, so callers don't change.
 
-export const PHOTO_URL_TTL_SECONDS = 3600;
+/** Widths /api/photo serves. 384 covers avatars up to ~190px on 2x screens. */
+export const PHOTO_SIZES = [128, 384, 1024] as const;
+export type PhotoSize = (typeof PHOTO_SIZES)[number];
+export const DEFAULT_PHOTO_SIZE: PhotoSize = 384;
 
-type StorageClient = {
-  storage: {
-    from: (bucket: string) => {
-      createSignedUrls: (
-        paths: string[],
-        expiresIn: number,
-      ) => Promise<{ data: Array<{ path: string | null; signedUrl: string | null; error: string | null }> | null; error: unknown }>;
-    };
-  };
-};
+/** The site link for one stored photo value, or null (empty or invalid). External URLs are returned as they are. */
+export function photoLink(value: string | null | undefined, size: PhotoSize = DEFAULT_PHOTO_SIZE): string | null {
+  const v = (value ?? "").trim();
+  if (!v) return null;
+  const path = photoStoragePath(v);
+  if (path) return `/api/photo?p=${encodeURIComponent(path)}&w=${size}`;
+  return /^https?:\/\//i.test(v) ? v : null;
+}
 
-/**
- * Sign every bucket photo in `values` with ONE request. Returns original value
- * -> URL to render. External URLs map to themselves; empty values, unknown
- * paths and failures map to nothing (callers fall back to initials).
- */
+/** Stored value -> link to render, for every photo in `values`. Empty and invalid values are left out. */
 export async function signPhotoValues(
-  client: StorageClient,
+  _client: unknown,
   values: ReadonlyArray<string | null | undefined>,
-  expiresIn: number = PHOTO_URL_TTL_SECONDS,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  const byPath = new Map<string, string[]>(); // path -> the stored values that point at it
   for (const raw of values) {
     const v = (raw ?? "").trim();
     if (!v || out.has(v)) continue;
-    const path = photoStoragePath(v);
-    if (path) byPath.set(path, [...(byPath.get(path) ?? []), v]);
-    else if (/^https?:\/\//i.test(v)) out.set(v, v); // external image
-  }
-  if (byPath.size === 0) return out;
-
-  try {
-    const { data } = await client.storage.from(PHOTO_BUCKET).createSignedUrls([...byPath.keys()], expiresIn);
-    for (const item of data ?? []) {
-      if (!item.path || item.error || !item.signedUrl) continue;
-      for (const v of byPath.get(item.path) ?? []) out.set(v, item.signedUrl);
-    }
-  } catch (e) {
-    console.error("[photos] signing failed:", e instanceof Error ? e.message : e);
+    const link = photoLink(v);
+    if (link) out.set(v, link);
   }
   return out;
 }
 
-/** Copy of `rows` whose photo_url is ready to render (signed, or null when there is none). */
-export async function signRowPhotos<T extends { photo_url?: string | null }>(
-  client: StorageClient,
-  rows: ReadonlyArray<T>,
-): Promise<T[]> {
-  const signed = await signPhotoValues(
-    client,
-    rows.map((r) => r.photo_url),
-  );
+/** Copy of `rows` whose photo_url is ready to render (a site link, or null when there is none). */
+export async function signRowPhotos<T extends { photo_url?: string | null }>(_client: unknown, rows: ReadonlyArray<T>): Promise<T[]> {
   return rows.map((r) => {
     const v = (r.photo_url ?? "").trim();
-    return v ? { ...r, photo_url: signed.get(v) ?? null } : r;
+    return v ? { ...r, photo_url: photoLink(v) } : r;
   });
 }
