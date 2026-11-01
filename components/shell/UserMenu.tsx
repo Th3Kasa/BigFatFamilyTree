@@ -69,6 +69,8 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
   const signOutRef = useRef<HTMLFormElement>(null);
   // Accounts made with the family PIN have a PIN to change (app_metadata is server-set).
   const isPinAccount = user.app_metadata?.login === "pin";
+  // Admins with a real email sign in by email only (lib/auth/pin-session.ts), so no PIN items.
+  const emailOnly = role === "admin" && hasRealEmail(user.email);
   const roleLabel = role ? (lang === "ar" ? ROLE_LABELS[role]?.ar : ROLE_LABELS[role]?.en) ?? role : null;
 
   return (
@@ -128,7 +130,7 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
             <DropdownMenuSeparator />
           </>
         )}
-        {isPinAccount && (
+        {isPinAccount && !emailOnly && (
           <DropdownMenuItem asChild>
             <Link href="/account/pin">
               <KeyRound />
@@ -136,7 +138,7 @@ export function UserMenu({ user, role, lang, variant = "avatar", active = false 
             </Link>
           </DropdownMenuItem>
         )}
-        {!isPinAccount && (
+        {!isPinAccount && !emailOnly && (
           <DropdownMenuItem asChild>
             <Link href="/account/pin/setup">
               <KeyRound />

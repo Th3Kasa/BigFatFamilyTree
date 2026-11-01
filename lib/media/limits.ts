@@ -14,8 +14,14 @@ export const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
  */
 export const MAX_UPLOAD_BYTES_PER_DAY = 500 * 1024 * 1024;
 export const MAX_FAMILY_UPLOAD_BYTES_PER_DAY = 3 * 1024 * 1024 * 1024;
+/** The daily budgets are counted in whole megabytes (every upload costs at least one). */
+export const UPLOAD_BUDGET_UNIT = 1024 * 1024;
+/** A finished upload must be posted within this long, so the bin sweep below can never race a post. */
+export const POSTABLE_UPLOAD_MS = 20 * 60 * 60 * 1000;
 /** Uploads never posted are binned from Drive after this long (the upload itself expires after 6 hours). */
 export const ABANDONED_UPLOAD_MS = 24 * 60 * 60 * 1000;
+/** An abandoned upload Drive keeps refusing to bin is forgotten after this long, so it can't block the sweep. */
+export const GIVE_UP_UPLOAD_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Long edge of the timeline copy, in pixels. */
 export const DISPLAY_LONG_EDGE = 1600;

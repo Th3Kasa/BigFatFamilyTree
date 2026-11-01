@@ -2,11 +2,14 @@ import "server-only";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { env } from "@/lib/env";
+import { MAX_FAMILY_UPLOAD_BYTES_PER_DAY, MAX_UPLOAD_BYTES_PER_DAY, UPLOAD_BUDGET_UNIT } from "@/lib/media/limits";
 
 let _limiters: {
   auth: Ratelimit;
   extraction: Ratelimit;
   upload: Ratelimit;
+  uploadBudget: Ratelimit;
+  uploadBudgetFamily: Ratelimit;
   generic: Ratelimit;
   pinIp: Ratelimit;
   pinFail: Ratelimit;
@@ -35,6 +38,18 @@ function getLimiters() {
       redis,
       limiter: Ratelimit.slidingWindow(20, "1 h"),
       prefix: "rl:upload",
+    }),
+    // Photo bytes per 24 hours, in UPLOAD_BUDGET_UNIT tokens, taken atomically
+    // before any upload starts and never given back for a discarded upload.
+    uploadBudget: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(MAX_UPLOAD_BYTES_PER_DAY / UPLOAD_BUDGET_UNIT, "24 h"),
+      prefix: "rl:upload-budget",
+    }),
+    uploadBudgetFamily: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(MAX_FAMILY_UPLOAD_BYTES_PER_DAY / UPLOAD_BUDGET_UNIT, "24 h"),
+      prefix: "rl:upload-budget-family",
     }),
     generic: new Ratelimit({
       redis,
@@ -88,10 +103,10 @@ export async function checkLimit(key: LimiterKey, identifier: string) {
 
 export type StrictResult = { success: boolean; unavailable: boolean; reset: number; remaining: number };
 
-/** Consume one token. Fails closed. */
-export async function checkLimitStrict(key: LimiterKey, identifier: string): Promise<StrictResult> {
+/** Consume one token (or `rate` tokens). Fails closed. */
+export async function checkLimitStrict(key: LimiterKey, identifier: string, rate = 1): Promise<StrictResult> {
   try {
-    const { success, reset, remaining } = await getLimiters()[key].limit(identifier);
+    const { success, reset, remaining } = await getLimiters()[key].limit(identifier, rate === 1 ? undefined : { rate });
     return { success, unavailable: false, reset, remaining };
   } catch (err) {
     console.error(`[ratelimit] "${key}" unavailable; refusing`, err instanceof Error ? err.message : err);
@@ -110,6 +125,15 @@ export async function remainingStrict(
   } catch (err) {
     console.error(`[ratelimit] "${key}" unavailable; refusing`, err instanceof Error ? err.message : err);
     return { remaining: 0, reset: 0, unavailable: true };
+  }
+}
+
+/** Give back `rate` tokens taken for work that then didn't happen. Best effort. */
+export async function refundLimit(key: LimiterKey, identifier: string, rate: number): Promise<void> {
+  try {
+    await getLimiters()[key].limit(identifier, { rate: -rate });
+  } catch (err) {
+    console.error(`[ratelimit] "${key}" refund failed`, err instanceof Error ? err.message : err);
   }
 }
 

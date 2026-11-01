@@ -1,9 +1,10 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { getViewer, checkLimitStrict, startUpload, trashFile, afterCallbacks, db } = vi.hoisted(() => ({
+const { getViewer, checkLimitStrict, refundLimit, startUpload, trashFile, afterCallbacks, db } = vi.hoisted(() => ({
   getViewer: vi.fn(),
   checkLimitStrict: vi.fn(),
+  refundLimit: vi.fn(),
   startUpload: vi.fn(),
   trashFile: vi.fn(),
   afterCallbacks: [] as (() => unknown)[],
@@ -13,7 +14,7 @@ const { getViewer, checkLimitStrict, startUpload, trashFile, afterCallbacks, db 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => db }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db }));
 vi.mock("@/lib/timeline/viewer", () => ({ getViewer }));
-vi.mock("@/lib/ratelimit", () => ({ checkLimitStrict, checkLimit: vi.fn(async () => ({ success: true })) }));
+vi.mock("@/lib/ratelimit", () => ({ checkLimitStrict, refundLimit, checkLimit: vi.fn(async () => ({ success: true })) }));
 vi.mock("@/lib/drive/client", () => ({
   DriveError: class DriveError extends Error {},
   ensureFolder: vi.fn(async () => "folder"),
@@ -25,22 +26,24 @@ vi.mock("@/lib/drive/bin", () => ({ binDeletedPostPhotos: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after: (fn: () => unknown) => afterCallbacks.push(fn) }));
 
-import { startPhotoUploads } from "@/lib/actions/timeline";
-import { MAX_DISPLAY_BYTES, MAX_FAMILY_UPLOAD_BYTES_PER_DAY, MAX_UPLOAD_BYTES_PER_DAY } from "@/lib/media/limits";
+import { createPost, startPhotoUploads } from "@/lib/actions/timeline";
+import { GIVE_UP_UPLOAD_MS, POSTABLE_UPLOAD_MS } from "@/lib/media/limits";
 
 const ME = "11111111-1111-4111-8111-111111111111";
 const PERSON = "22222222-2222-4222-8222-222222222222";
+const UP_O = "33333333-3333-4333-8333-333333333333";
+const UP_D = "44444444-4444-4444-8444-444444444444";
 const MB = 1024 * 1024;
 const photo = { originalBytes: 10 * MB, originalMime: "image/jpeg", displayBytes: MB };
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 type Call = { method: string; args: unknown[] };
-type Resolver = (table: string, calls: Call[]) => unknown;
 
 /** A chainable, awaitable query whose result is worked out from the calls made on it. */
-function query(table: string, resolve: Resolver) {
+function query(table: string, resolve: (table: string, calls: Call[]) => unknown) {
   const calls: Call[] = [];
   const q: Record<string, unknown> = {};
-  for (const m of ["select", "gte", "lt", "eq", "in", "is", "limit", "delete", "insert", "maybeSingle", "single"]) {
+  for (const m of ["select", "gte", "lt", "eq", "in", "is", "order", "limit", "delete", "insert", "maybeSingle", "single"]) {
     q[m] = (...args: unknown[]) => {
       calls.push({ method: m, args });
       return q;
@@ -51,23 +54,30 @@ function query(table: string, resolve: Resolver) {
 }
 
 const queries: { table: string; calls: Call[] }[] = [];
-const filteredBy = (calls: Call[], column: string) => calls.some((c) => c.method === "eq" && c.args[0] === column);
+const has = (calls: Call[], method: string) => calls.some((c) => c.method === method);
 
-/** Daily totals: `mine` bytes for this member, `others` more for everyone else; `stale` old unposted uploads. */
-function useDb({ mine = 0, others = 0, stale = [] as { id: string; drive_file_id: string | null }[] } = {}) {
+function useDb({ stale = [] as { id: string; drive_file_id: string | null; created_at: string }[], uploads = [] as object[] } = {}) {
   db.from.mockImplementation((table: string) => {
     const { q, calls } = query(table, (t, c) => {
       if (t === "people") return { data: { id: PERSON, given_en: "Nadia", family_name_en: "Haddad" }, error: null };
-      if (t === "post_media") return { data: [], error: null };
-      if (c.some((x) => x.method === "insert")) return { data: { id: "upload-id" }, error: null };
-      if (c.some((x) => x.method === "lt")) return { data: stale, error: null };
-      if (c.some((x) => x.method === "delete")) return { data: null, error: null };
-      const bytes = filteredBy(c, "user_id") ? mine : mine + others;
-      return { data: bytes ? [{ expected_bytes: bytes }] : [], error: null };
+      if (t === "posts") return { data: { id: "post-1" }, error: null };
+      if (has(c, "insert")) return { data: { id: "upload-id" }, error: null };
+      if (has(c, "lt")) return { data: stale, error: null };
+      if (has(c, "delete")) return { data: null, error: null };
+      if (t === "media_uploads") return { data: uploads, error: null };
+      return { data: null, error: null };
     });
     queries.push({ table, calls });
     return q;
   });
+}
+
+const ok = { success: true, unavailable: false, remaining: 10, reset: 0 };
+const refused = { success: false, unavailable: false, remaining: 0, reset: 0 };
+const down = { success: false, unavailable: true, remaining: 0, reset: 0 };
+/** Set what each limiter answers. */
+function limits(answers: Partial<Record<"upload" | "uploadBudget" | "uploadBudgetFamily", object>>) {
+  checkLimitStrict.mockImplementation(async (key: string) => answers[key as keyof typeof answers] ?? ok);
 }
 
 beforeEach(() => {
@@ -75,7 +85,7 @@ beforeEach(() => {
   afterCallbacks.length = 0;
   queries.length = 0;
   getViewer.mockResolvedValue({ approved: true, userId: ME, name: "Nadia" });
-  checkLimitStrict.mockResolvedValue({ success: true, unavailable: false, remaining: 10, reset: 0 });
+  limits({});
   startUpload.mockResolvedValue("https://www.googleapis.com/upload/drive/v3/files?upload_id=x");
   trashFile.mockResolvedValue(true);
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -84,61 +94,99 @@ beforeEach(() => {
 describe("startPhotoUploads: protecting the owner's Drive", () => {
   it("refuses (fails closed) when the rate limiter can't be reached", async () => {
     useDb();
-    checkLimitStrict.mockResolvedValue({ success: false, unavailable: true, remaining: 0, reset: 0 });
-    const res = await startPhotoUploads(PERSON, [photo]);
-    expect(res).toMatchObject({ success: false });
+    limits({ upload: down });
+    expect(await startPhotoUploads(PERSON, [photo])).toMatchObject({ success: false });
     expect(startUpload).not.toHaveBeenCalled();
   });
 
-  it("refuses once a member has uploaded their daily share", async () => {
-    useDb({ mine: MAX_UPLOAD_BYTES_PER_DAY - 5 * MB });
-    const res = await startPhotoUploads(PERSON, [photo]);
-    expect(res).toMatchObject({ success: false, error: expect.stringContaining("today") });
-    expect(startUpload).not.toHaveBeenCalled();
-  });
-
-  it("refuses once the whole family has uploaded the daily total", async () => {
-    useDb({ others: MAX_FAMILY_UPLOAD_BYTES_PER_DAY - 5 * MB });
-    const res = await startPhotoUploads(PERSON, [photo]);
-    expect(res).toMatchObject({ success: false, error: expect.stringContaining("family") });
-    expect(startUpload).not.toHaveBeenCalled();
-  });
-
-  it("starts an original and a timeline copy per photo when under the limits", async () => {
-    useDb({ mine: 50 * MB, others: 100 * MB });
-    const res = await startPhotoUploads(PERSON, [photo, photo]);
-    expect(res).toMatchObject({ success: true });
-    expect(startUpload).toHaveBeenCalledTimes(4);
-  });
-
-  it("counts posted photos with their timeline copy", async () => {
+  it("takes the photos' size, in whole megabytes, from the member's and the family's daily budgets", async () => {
     useDb();
-    const posted = Array.from({ length: 45 }, () => ({ bytes_original: 10 * MB }));
-    const base = db.from.getMockImplementation()!;
-    db.from.mockImplementation((table: string) =>
-      table === "post_media" ? query(table, () => ({ data: posted, error: null })).q : base(table),
-    );
-    // 45 x (10 MB + the copy), plus this photo, is over one member's day.
-    expect(45 * (10 * MB + MAX_DISPLAY_BYTES) + 11 * MB).toBeGreaterThan(MAX_UPLOAD_BYTES_PER_DAY);
-    const res = await startPhotoUploads(PERSON, [photo]);
-    expect(res).toMatchObject({ success: false });
+    expect(await startPhotoUploads(PERSON, [photo, photo])).toMatchObject({ success: true });
+    expect(checkLimitStrict).toHaveBeenCalledWith("uploadBudget", ME, 22);
+    expect(checkLimitStrict).toHaveBeenCalledWith("uploadBudgetFamily", "family", 22);
+    expect(startUpload).toHaveBeenCalledTimes(4);
+    expect(refundLimit).not.toHaveBeenCalled();
   });
 
-  it("bins abandoned uploads in the background and forgets them", async () => {
-    useDb({ stale: [{ id: "a", drive_file_id: "driveFileAAAAAA" }, { id: "b", drive_file_id: null }] });
+  it("every upload costs at least one unit, however small", async () => {
+    useDb();
+    await startPhotoUploads(PERSON, [{ originalBytes: 10, originalMime: "image/jpeg", displayBytes: 10 }]);
+    expect(checkLimitStrict).toHaveBeenCalledWith("uploadBudget", ME, 1);
+  });
+
+  it("refuses once the member's day is used up", async () => {
+    useDb();
+    limits({ uploadBudget: refused });
+    expect(await startPhotoUploads(PERSON, [photo])).toMatchObject({ success: false, error: expect.stringContaining("today") });
+    expect(startUpload).not.toHaveBeenCalled();
+  });
+
+  it("refuses once the family's day is used up, and gives the member's share back", async () => {
+    useDb();
+    limits({ uploadBudgetFamily: refused });
+    expect(await startPhotoUploads(PERSON, [photo])).toMatchObject({ success: false, error: expect.stringContaining("family") });
+    expect(refundLimit).toHaveBeenCalledWith("uploadBudget", ME, 11);
+    expect(startUpload).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the budgets can't be read", async () => {
+    useDb();
+    limits({ uploadBudget: down });
+    expect(await startPhotoUploads(PERSON, [photo])).toMatchObject({ success: false, error: expect.stringContaining("paused") });
+  });
+
+  it("gives both budgets back if Drive couldn't start the uploads", async () => {
+    useDb();
+    startUpload.mockRejectedValue(new Error("Drive is down"));
+    expect(await startPhotoUploads(PERSON, [photo])).toMatchObject({ success: false });
+    expect(refundLimit).toHaveBeenCalledWith("uploadBudget", ME, 11);
+    expect(refundLimit).toHaveBeenCalledWith("uploadBudgetFamily", "family", 11);
+  });
+});
+
+describe("abandoned uploads", () => {
+  it("are binned oldest first in the background and forgotten", async () => {
+    useDb({
+      stale: [
+        { id: "a", drive_file_id: "driveFileAAAAAA", created_at: ago(30 * 60 * 60 * 1000) },
+        { id: "b", drive_file_id: null, created_at: ago(30 * 60 * 60 * 1000) },
+      ],
+    });
     await startPhotoUploads(PERSON, [photo]);
     expect(afterCallbacks).toHaveLength(1);
     await afterCallbacks[0]();
     expect(trashFile).toHaveBeenCalledWith("driveFileAAAAAA");
-    const del = queries.find((q) => q.table === "media_uploads" && q.calls.some((c) => c.method === "delete"));
+    const sweep = queries.find((q) => q.table === "media_uploads" && has(q.calls, "lt"));
+    expect(sweep?.calls.find((c) => c.method === "order")?.args).toEqual(["created_at"]);
+    const del = queries.find((q) => q.table === "media_uploads" && has(q.calls, "delete"));
     expect(del?.calls.find((c) => c.method === "in")?.args).toEqual(["id", ["a", "b"]]);
   });
 
-  it("keeps an abandoned upload's row if Drive wouldn't bin the file, to try again later", async () => {
-    useDb({ stale: [{ id: "a", drive_file_id: "driveFileAAAAAA" }] });
+  it("are kept for another try if Drive won't bin them, and given up on after a week", async () => {
+    useDb({
+      stale: [
+        { id: "recent", drive_file_id: "driveFileAAAAAA", created_at: ago(30 * 60 * 60 * 1000) },
+        { id: "ancient", drive_file_id: "driveFileBBBBBB", created_at: ago(GIVE_UP_UPLOAD_MS + 1000) },
+      ],
+    });
     trashFile.mockResolvedValue(false);
     await startPhotoUploads(PERSON, [photo]);
     await afterCallbacks[0]();
-    expect(queries.some((q) => q.table === "media_uploads" && q.calls.some((c) => c.method === "delete"))).toBe(false);
+    const del = queries.find((q) => q.table === "media_uploads" && has(q.calls, "delete"));
+    expect(del?.calls.find((c) => c.method === "in")?.args).toEqual(["id", ["ancient"]]);
+  });
+
+  it("can't be posted once they're close to being binned", async () => {
+    const row = (id: string, variant: string) => ({
+      id,
+      variant,
+      mime: "image/jpeg",
+      expected_bytes: MB,
+      drive_file_id: "driveFile" + id.slice(0, 6),
+      created_at: ago(POSTABLE_UPLOAD_MS + 60 * 1000),
+    });
+    useDb({ uploads: [row(UP_O, "original"), row(UP_D, "display")] });
+    const res = await createPost({ personId: PERSON, photos: [{ original: UP_O, display: UP_D, width: 10, height: 10 }] });
+    expect(res).toMatchObject({ success: false, error: expect.stringContaining("too long ago") });
   });
 });

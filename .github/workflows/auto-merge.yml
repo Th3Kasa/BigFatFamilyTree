@@ -36,17 +36,21 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Held unless EVERY package in the PR is dev tooling or a GitHub Action
+      # (grouped PRs carry several; the single-value outputs describe only one).
       - name: Leave production dependency updates for a human
         id: hold
-        if: >-
-          github.event.pull_request.user.login == 'dependabot[bot]' &&
-          steps.deps.outputs.package-ecosystem != 'github_actions' &&
-          steps.deps.outputs.dependency-type != 'direct:development'
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
         env:
           NAMES: ${{ steps.deps.outputs.dependency-names }}
+          DEPS: ${{ steps.deps.outputs.updated-dependencies-json }}
         run: |
-          echo "::notice::This updates a package the live site runs ($NAMES). Review and merge it by hand."
-          echo "hold=true" >> "$GITHUB_OUTPUT"
+          if echo "${DEPS:-[]}" | jq -e 'length > 0 and all(.[]; .dependencyType == "direct:development" or .packageEcosystem == "github_actions")' > /dev/null; then
+            echo "Dev tooling or GitHub Actions only: can merge once checks pass."
+          else
+            echo "::notice::This updates a package the live site runs ($NAMES). Review and merge it by hand."
+            echo "hold=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Wait for checks and the Vercel build, then merge if all passed
         if: steps.hold.outputs.hold != 'true'

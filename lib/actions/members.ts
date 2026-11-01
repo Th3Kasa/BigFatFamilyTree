@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getLang, type Lang } from "@/lib/lang/server";
 import { checkLimit } from "@/lib/ratelimit";
+import { createServiceClient } from "@/lib/supabase/service";
+import { isPlaceholderEmail } from "@/lib/auth/pin-setup";
 import { getAdminContext, getSignedInUserId, getSuperAdminContext, type AdminContext } from "@/lib/members/auth";
 import { deleteAccount, inviteAccount, inviteRedirectUrl } from "@/lib/members/account-admin";
 import {
@@ -515,6 +517,20 @@ export async function changeMemberRole(
       );
     }
     return fail(t("That's already their permission.", "هذه صلاحيتهم الحالية بالفعل."));
+  }
+
+  // Admins sign in by email (a 4-digit PIN is too weak for an admin account),
+  // so an account with nowhere to send a sign-in link can't become one.
+  if (next.role === "admin" && target.role !== "admin") {
+    const { data: account } = await createServiceClient().auth.admin.getUserById(profileId);
+    if (isPlaceholderEmail(account.user?.email)) {
+      return fail(
+        t(
+          "Admins sign in with email, and this member only has a PIN. Ask them to add an email to their account first.",
+          "يدخل المشرفون بالبريد الإلكتروني، وهذا العضو لديه رمز سري فقط. اطلب منه إضافة بريد إلى حسابه أولًا.",
+        ),
+      );
+    }
   }
 
   // No read-then-write pre-check: the profiles_guard trigger decides, under an

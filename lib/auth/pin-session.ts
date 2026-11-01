@@ -5,7 +5,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { env } from "@/lib/env";
-import { checkLimitStrict, resetLimit } from "@/lib/ratelimit";
+import { checkLimitStrict, refundLimit, resetLimit } from "@/lib/ratelimit";
 import { writeAudit } from "@/lib/members/account-admin";
 import { getOrCreateFamilyPin } from "@/lib/auth/family-pin";
 import { constantTimeEqual, derivePinPassword, memberEmail } from "@/lib/auth/pin-crypto";
@@ -102,6 +102,11 @@ async function takeAttempt(lockId: string): Promise<AttemptGate> {
   if (day.unavailable) return { ok: false, code: "busy" };
   if (!day.success) return { ok: false, code: "locked_day" };
   return { ok: true, lastShort: short.remaining <= 0, lastDay: day.remaining <= 0 };
+}
+
+/** Give back a try taken for an attempt that never ran (the server couldn't check). Best effort. */
+async function refundAttempt(lockId: string): Promise<void> {
+  await Promise.all([refundLimit("pinFail", lockId, 1), refundLimit("pinFailDay", lockId, 1)]);
 }
 
 /** Forget an account's failed tries (correct PIN, or an admin reset it). Best effort. */
@@ -314,8 +319,15 @@ async function attemptPinSignIn(args: {
 }): Promise<PinResult> {
   const { profile, email, lockId, gate, pin, startedAt, lang, secret } = args;
   // An admin's PIN is never tried: the attempt runs against the placeholder
-  // account instead, so a right PIN fails exactly like a wrong one.
-  const emailOnly = profile ? await isEmailOnlyAccount(profile.id, email) : false;
+  // account instead, so a right PIN fails exactly like a wrong one. If the role
+  // can't be read, nothing is tried (and the try is not counted against them).
+  const kind = profile ? await pinAccountKind(profile.id, email) : "member";
+  if (kind === "unknown") {
+    await refundAttempt(lockId);
+    await padTo(startedAt);
+    return fail("busy", lang);
+  }
+  const emailOnly = kind === "admin";
   const userId = profile && !emailOnly ? profile.id : DUMMY_ID;
 
   const supabase = await createClient();
@@ -351,19 +363,20 @@ async function attemptPinSignIn(args: {
 /**
  * Admins and the owner sign in by email: a 4-digit PIN is far too weak to guard
  * the whole family's data and every member's account. An admin with no real
- * email (nothing to send a link to) keeps their PIN, so nobody is locked out.
- * Fails closed: if the role can't be read, the PIN is not tried.
+ * email (nothing to send a link to) keeps their PIN, so nobody is locked out
+ * (lib/actions/members.ts won't make such an account an admin any more).
+ * "unknown" when the role can't be read: callers then try no PIN at all.
  */
-async function isEmailOnlyAccount(profileId: string, email: string): Promise<boolean> {
-  if (isPlaceholderEmail(email)) return false;
+async function pinAccountKind(profileId: string, email: string): Promise<"admin" | "member" | "unknown"> {
+  if (isPlaceholderEmail(email)) return "member";
   const { data, error } = await createServiceClient()
     .from("profiles")
     .select("role, is_super_admin")
     .eq("id", profileId)
     .maybeSingle();
-  if (error) return true;
+  if (error) return "unknown";
   const row = data as { role?: string; is_super_admin?: boolean } | null;
-  return row?.role === "admin" || !!row?.is_super_admin;
+  return row?.role === "admin" || row?.is_super_admin ? "admin" : "member";
 }
 
 // ── sign in from a remembered device (PIN only) ──────────────────────────────
@@ -401,10 +414,11 @@ export async function signInWithDevice(rawPin: string, lang: Lang): Promise<PinR
   // The cookie already ties this browser to the account, so an admin can be
   // told plainly to use email (and the device is forgotten).
   const email = await signInEmail(device.profileId);
-  if (await isEmailOnlyAccount(device.profileId, email)) {
-    await clearDeviceCookie();
+  const kind = await pinAccountKind(device.profileId, email);
+  if (kind !== "member") {
+    if (kind === "admin") await clearDeviceCookie();
     await padTo(startedAt);
-    return fail("admin_email_only", lang);
+    return fail(kind === "admin" ? "admin_email_only" : "busy", lang);
   }
 
   const lockId = pinAccountLockId(device.nameKey, device.dateOfBirth);
@@ -620,6 +634,8 @@ export async function changeOwnPin(raw: ChangePinInput, lang: Lang): Promise<Pin
   const svc = createServiceClient();
   const { data: profile } = await svc.from("profiles").select("id, login_method").eq("id", user.id).maybeSingle();
   if ((profile as { login_method?: string } | null)?.login_method !== "pin") return fail("failed", lang);
+  // A PIN an admin could never sign in with is not worth setting.
+  if ((await pinAccountKind(user.id, user.email)) !== "member") return fail("admin_email_only", lang);
 
   const lockId = pinUserLockId(user.id);
   const gate = await takeAttempt(lockId);
