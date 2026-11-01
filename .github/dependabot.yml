@@ -4,9 +4,15 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Wait before taking a brand-new release: hijacked npm packages are usually
+    # caught and pulled within days, so we never pick one up on day one.
+    cooldown:
+      default-days: 5
     open-pull-requests-limit: 5
     labels: ["dependencies"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 5

@@ -1,8 +1,17 @@
 name: Auto Merge PRs
 
+# Who gets merged without a human look:
+#  * the owner's own PRs from a branch of this repo (never a fork);
+#  * Dependabot updates of dev tooling and GitHub Actions. Updates to packages
+#    the live site runs (production dependencies) wait for the owner, because a
+#    hijacked package would otherwise reach production, next to the service-role
+#    key, within minutes.
+# Anyone else's PR (forks included) is never auto-merged. This workflow never
+# checks out or runs PR code, and it merges only the exact commit that passed.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main]
 
 permissions:
   contents: write
@@ -14,9 +23,33 @@ jobs:
   automerge:
     name: Auto Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.login == github.repository_owner ||
+       github.event.pull_request.user.login == 'dependabot[bot]')
     steps:
+      - name: Read the Dependabot update
+        id: deps
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Leave production dependency updates for a human
+        id: hold
+        if: >-
+          github.event.pull_request.user.login == 'dependabot[bot]' &&
+          steps.deps.outputs.package-ecosystem != 'github_actions' &&
+          steps.deps.outputs.dependency-type != 'direct:development'
+        env:
+          NAMES: ${{ steps.deps.outputs.dependency-names }}
+        run: |
+          echo "::notice::This updates a package the live site runs ($NAMES). Review and merge it by hand."
+          echo "hold=true" >> "$GITHUB_OUTPUT"
+
       - name: Wait for checks and the Vercel build, then merge if all passed
+        if: steps.hold.outputs.hold != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ github.event.pull_request.head.sha }}
@@ -38,6 +71,13 @@ jobs:
               continue
             fi
 
+            # CI (.github/workflows/ci.yml) must have run on this commit too.
+            if [ "$(echo "$CHECKS" | jq '[.[] | select(.name == "Typecheck, lint, test")] | length')" -eq 0 ]; then
+              echo "Waiting for CI to start..."
+              sleep 15
+              continue
+            fi
+
             PENDING=$(( $(echo "$CHECKS" | jq '[.[] | select(.status != "completed")] | length') \
                       + $(echo "$STATUSES" | jq '[.[] | select(.state == "pending")] | length') ))
             if [ "$PENDING" -gt 0 ]; then
@@ -54,7 +94,9 @@ jobs:
             fi
 
             echo "All checks and the Vercel build passed. Merging."
-            gh pr merge --squash --delete-branch "$PR_URL"
+            # --match-head-commit: merge only the commit that just passed, so a
+            # commit pushed during the wait can't ride along unchecked.
+            gh pr merge --squash --delete-branch --match-head-commit "$SHA" "$PR_URL"
             exit 0
           done
           echo "Timed out waiting for checks (20 min). Not merging."
