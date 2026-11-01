@@ -1,5 +1,6 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
+import { isPlaceholderEmail } from "@/lib/auth/pin-setup";
 import type { MemberRole } from "./types";
 
 // The only place (with lib/notify/email.ts and the bootstrap-admin login) where
@@ -8,6 +9,22 @@ import type { MemberRole } from "./types";
 // verified the super admin (getSuperAdminContext) before calling anything here.
 
 export const DEFAULT_SITE_URL = "https://www.bigfatfamilytree.com.au";
+
+/**
+ * Can this account be made an admin? Admins sign in by email (a 4-digit PIN is
+ * too weak for an admin, lib/auth/pin-session.ts), so it needs a real email to
+ * send a sign-in link to. False if the account can't be read. Every path that
+ * makes an admin calls this.
+ */
+export async function canBecomeAdmin(profileId: string): Promise<boolean> {
+  const { data, error } = await createServiceClient().auth.admin.getUserById(profileId);
+  return !error && !isPlaceholderEmail(data.user?.email);
+}
+
+export const NEEDS_EMAIL_FOR_ADMIN = {
+  en: "Admins sign in with email, and this member only has a PIN. Ask them to add an email to their account first.",
+  ar: "يدخل المشرفون بالبريد الإلكتروني، وهذا العضو لديه رمز سري فقط. اطلب منه إضافة بريد إلى حسابه أولًا.",
+};
 
 /**
  * Where the invite email sends people: /auth/callback, then on to /welcome.

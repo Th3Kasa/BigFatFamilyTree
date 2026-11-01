@@ -17,9 +17,14 @@ export const PIN_MESSAGES = {
   dob_future: ["Date of birth can't be in the future.", "لا يمكن أن يكون تاريخ الميلاد في المستقبل."],
   pin_format: ["Your PIN is exactly 4 digits.", "رمزك السري مكوّن من ٤ أرقام بالضبط."],
   pin_trivial: [
-    "That PIN is too easy to guess (like 1234 or 1111). Pick another.",
-    "هذا الرمز سهل التخمين (مثل 1234 أو 1111). اختر رمزًا آخر.",
+    "That PIN is too easy to guess (like 1234, 1111, a year or a date). Pick another.",
+    "هذا الرمز سهل التخمين (مثل 1234 أو 1111 أو سنة أو تاريخ). اختر رمزًا آخر.",
   ],
+  pin_birth_year: [
+    "You can't use your year of birth as your PIN. Pick another.",
+    "لا يمكنك استخدام سنة ميلادك رمزًا سريًا. اختر رمزًا آخر.",
+  ],
+  birth_year_invalid: ["Enter the year you were born (4 digits).", "أدخل سنة ميلادك (٤ أرقام)."],
   pin_mismatch: ["The two PINs don't match.", "الرمزان غير متطابقين."],
   family_pin_format: ["The family PIN is 6 digits.", "رمز العائلة مكوّن من ٦ أرقام."],
   family_pin_wrong: [
@@ -72,6 +77,10 @@ export const PIN_MESSAGES = {
     "يرجى تسجيل الدخول باسمك وتاريخ ميلادك ورمزك السري.",
   ],
   not_allowed: ["This account can't do that.", "لا يمكن لهذا الحساب تنفيذ ذلك."],
+  admin_email_only: [
+    "Admins sign in with email, not a PIN. Use \"Admins: sign in with email\" below.",
+    "يدخل المشرفون بالبريد الإلكتروني لا بالرمز السري. استخدم «للمشرفين: سجّل الدخول بالبريد» في الأسفل.",
+  ],
   join_need_birthday: [
     "Someone with this first name has already joined. Add your birthday so we can tell you apart.",
     "انضم شخص بهذا الاسم من قبل. أضف تاريخ ميلادك لنميّز بينكما.",
@@ -109,9 +118,27 @@ export function normaliseDigits(input: string): string {
 
 const COMMON_PINS: ReadonlySet<string> = new Set(["2580", "0852", "1357", "2468", "1379", "1004", "2000", "1122", "6969", "1010"]);
 
-/** 0000/1111, 1234/4321/3456, 1212/2121, 1122/9900 and a few famous ones. */
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const isDayMonth = (day: number, month: number) => month >= 1 && month <= 12 && day >= 1 && day <= DAYS_IN_MONTH[month - 1];
+
+/**
+ * A year (1900-2039) or a calendar date (MMDD or DDMM). Birthdays are the first
+ * thing anyone guesses, and every approved member can read relatives' birthdays
+ * in the tree, so no date-shaped PIN is allowed.
+ */
+export function isDateLikePin(pin: string): boolean {
+  if (!/^\d{4}$/.test(pin)) return false;
+  const n = Number(pin);
+  if (n >= 1900 && n <= 2039) return true;
+  const a = Number(pin.slice(0, 2));
+  const b = Number(pin.slice(2));
+  return isDayMonth(b, a) || isDayMonth(a, b);
+}
+
+/** 0000/1111, 1234/4321/3456, 1212/2121, 1122/9900, years, dates and a few famous ones. */
 export function isTrivialPin(pin: string): boolean {
   if (!/^\d{4}$/.test(pin)) return false;
+  if (isDateLikePin(pin)) return true;
   const d = pin.split("").map(Number);
   if (d.every((x) => x === d[0])) return true;
   const steps = [d[1] - d[0], d[2] - d[1], d[3] - d[2]];
@@ -175,6 +202,24 @@ export const newPinSchema = z.preprocess(
 /** An existing PIN being typed to sign in: format only (never reveal the trivial-PIN rule at sign-in). */
 export const pinSchema = z.preprocess(digitsPreprocess, z.string().regex(/^\d{4}$/, "pin_format"));
 
+/** The year someone was born, asked at sign-up only so their PIN can't be it (not stored). */
+export const birthYearSchema = z.preprocess(
+  digitsPreprocess,
+  z
+    .string()
+    .regex(/^\d{4}$/, "birth_year_invalid")
+    .refine((v) => Number(v) >= 1900 && Number(v) <= new Date().getFullYear(), "birth_year_invalid"),
+);
+
+/**
+ * Why a new (4-digit) PIN is refused, or null. Their own birth year gets its own
+ * message, since that is the first PIN anyone would guess for them.
+ */
+export function newPinIssue(pin: string, birthYear?: string | null): "pin_birth_year" | "pin_trivial" | null {
+  if (birthYear && pin === birthYear) return "pin_birth_year";
+  return isTrivialPin(pin) ? "pin_trivial" : null;
+}
+
 export const familyPinSchema = z.preprocess(digitsPreprocess, z.string().regex(/^\d{6}$/, "family_pin_format"));
 
 /** An optional field: missing, null or "" all mean "not given". */
@@ -195,9 +240,10 @@ export const pinSignInSchema = z.object({
 export type PinSignInInput = z.input<typeof pinSignInSchema>;
 
 /**
- * Join, after the family PIN step: first name and your own PIN twice. The
- * birthday is optional here; the server asks for it (join_need_birthday) when
- * another PIN account already has this first name. `ticket` is the short-lived
+ * Join, after the family PIN step: first name, year of birth and your own PIN
+ * twice. The full birthday is optional here; the server asks for it
+ * (join_need_birthday) when another PIN account already has this first name.
+ * The year is only used to refuse it as the PIN. `ticket` is the short-lived
  * proof that the family PIN was right (lib/auth/join-ticket.ts).
  */
 export const pinJoinSchema = z
@@ -205,10 +251,15 @@ export const pinJoinSchema = z
     ticket: z.string().min(1).max(200),
     firstName: pinNameSchema,
     dateOfBirth: optionalField(pinDobSchema),
-    pin: newPinSchema,
+    birthYear: birthYearSchema,
+    pin: pinSchema,
     pinConfirm: z.preprocess(digitsPreprocess, z.string()),
   })
-  .refine((v) => v.pin === v.pinConfirm, { path: ["pinConfirm"], message: "pin_mismatch" });
+  .superRefine((v, ctx) => {
+    const issue = newPinIssue(v.pin, v.birthYear);
+    if (issue) ctx.addIssue({ code: "custom", path: ["pin"], message: issue });
+    else if (v.pin !== v.pinConfirm) ctx.addIssue({ code: "custom", path: ["pinConfirm"], message: "pin_mismatch" });
+  });
 export type PinJoinInput = z.input<typeof pinJoinSchema>;
 
 export const changePinSchema = z

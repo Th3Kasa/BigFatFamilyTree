@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { roleUpdateSchema } from "@/lib/validation/admin";
+import { canBecomeAdmin, NEEDS_EMAIL_FOR_ADMIN } from "@/lib/members/account-admin";
 
 export type AdminActionState = {
   success: boolean;
@@ -36,6 +37,11 @@ export async function updateUserRole(
 
   if (caller?.role !== "admin") {
     return { success: false, error: "Forbidden." };
+  }
+
+  // Admins sign in by email, so an account with only a PIN can't become one.
+  if (parsed.data.role === "admin" && !(await canBecomeAdmin(parsed.data.userId))) {
+    return { success: false, error: NEEDS_EMAIL_FOR_ADMIN.en };
   }
 
   const { error } = await supabase

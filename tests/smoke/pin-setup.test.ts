@@ -37,6 +37,12 @@ describe("canSetUpPin (self only, email accounts only)", () => {
     expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: "a@b.com" })).toEqual({ ok: true, mode: "recover" });
     expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: memberEmail(ME) })).toEqual({ ok: false, reason: "no_real_email" });
   });
+  it("admins and the owner with a real email stay on email sign-in", () => {
+    expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "email", email: "a@b.com", isAdmin: true })).toEqual({ ok: false, reason: "admin_email_only" });
+    expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: "a@b.com", isAdmin: true })).toEqual({ ok: false, reason: "admin_email_only" });
+    // No real email to sign in with: nothing to fall back on, so not refused here.
+    expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: memberEmail(ME), isAdmin: true })).toEqual({ ok: false, reason: "no_real_email" });
+  });
   it("refuses unknown login methods", () => {
     expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: null, email: "a@b.com" }).ok).toBe(false);
   });
@@ -88,6 +94,11 @@ describe("pinSetupSchema", () => {
     expect(code({ pin: "1234", pinConfirm: "1234" })).toBe("pin_trivial");
     expect(code({ pinConfirm: "7392" })).toBe("pin_mismatch");
     expect(code({ dateOfBirth: "" })).toBe("dob_invalid");
+  });
+  it("names their own birth year, and refuses any other year or date as too easy", () => {
+    expect(code({ pin: "1998", pinConfirm: "1998" })).toBe("pin_birth_year");
+    expect(code({ pin: "0204", pinConfirm: "0204" })).toBe("pin_trivial");
+    expect(code({ pin: "1985", pinConfirm: "1985" })).toBe("pin_trivial");
   });
   it("accepts Arabic-Indic digits in both PIN boxes", () => {
     expect(pinSetupSchema.safeParse({ ...ok, pin: "٧٣٩١", pinConfirm: "٧٣٩١" }).success).toBe(true);

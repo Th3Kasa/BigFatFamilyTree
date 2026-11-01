@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { getLang, type Lang } from "@/lib/lang/server";
 import { checkLimit } from "@/lib/ratelimit";
 import { getAdminContext, getSignedInUserId, getSuperAdminContext, type AdminContext } from "@/lib/members/auth";
-import { deleteAccount, inviteAccount, inviteRedirectUrl } from "@/lib/members/account-admin";
+import { canBecomeAdmin, deleteAccount, inviteAccount, inviteRedirectUrl, NEEDS_EMAIL_FOR_ADMIN } from "@/lib/members/account-admin";
 import {
   canActOn,
   confirmationMatches,
@@ -515,6 +515,11 @@ export async function changeMemberRole(
       );
     }
     return fail(t("That's already their permission.", "هذه صلاحيتهم الحالية بالفعل."));
+  }
+
+  // Admins sign in by email, so an account with only a PIN can't become one.
+  if (next.role === "admin" && target.role !== "admin" && !(await canBecomeAdmin(profileId))) {
+    return fail(t(NEEDS_EMAIL_FOR_ADMIN.en, NEEDS_EMAIL_FOR_ADMIN.ar));
   }
 
   // No read-then-write pre-check: the profiles_guard trigger decides, under an

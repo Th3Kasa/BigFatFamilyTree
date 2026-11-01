@@ -3,6 +3,7 @@ import {
   changePinSchema,
   familyPinSchema,
   firstIssueCode,
+  isDateLikePin,
   isDuplicateIdentityError,
   isTrivialPin,
   makeNameKey,
@@ -51,9 +52,20 @@ describe("PIN validation", () => {
     },
   );
 
-  it.each(["4821", "7391", "0615", "9084"])("%s is accepted", (pin) => {
+  it.each(["4821", "7391", "0637", "9084"])("%s is accepted", (pin) => {
     expect(isTrivialPin(pin)).toBe(false);
     expect(newPinSchema.safeParse(pin).success).toBe(true);
+  });
+
+  it.each(["1943", "1990", "2005", "2039", "0412", "1204", "3112", "1231", "0229"])("%s (a year or a date) is too easy", (pin) => {
+    expect(isDateLikePin(pin)).toBe(true);
+    const r = newPinSchema.safeParse(pin);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].message).toBe("pin_trivial");
+  });
+
+  it.each(["1899", "2040", "0013", "3213", "0000", "4821"])("%s is not date-shaped", (pin) => {
+    expect(isDateLikePin(pin)).toBe(false);
   });
 
   it.each(["123", "12345", "12a4", "", "    "])("%j is not 4 digits", (pin) => {
@@ -91,11 +103,12 @@ describe("PIN validation", () => {
       ticket: "t",
       firstName: "Omar",
       dateOfBirth: "1990-04-12",
+      birthYear: "1990",
       pin: "4821",
       pinConfirm: "4821",
     };
     expect(pinJoinSchema.safeParse({ ...good, dateOfBirth: "" }).success).toBe(true);
-    expect(pinJoinSchema.safeParse({ ticket: "t", firstName: "Omar", pin: "4821", pinConfirm: "4821" }).success).toBe(true);
+    expect(pinJoinSchema.safeParse({ ticket: "t", firstName: "Omar", birthYear: "1990", pin: "4821", pinConfirm: "4821" }).success).toBe(true);
     expect(pinJoinSchema.safeParse(good).success).toBe(true);
     const code = (patch: Partial<typeof good>) => {
       const r = pinJoinSchema.safeParse({ ...good, ...patch });
@@ -103,6 +116,13 @@ describe("PIN validation", () => {
     };
     expect(code({ pinConfirm: "4822" })).toBe("pin_mismatch");
     expect(code({ pin: "1234", pinConfirm: "1234" })).toBe("pin_trivial");
+    // Their own birth year gets its own message; any other year is just too easy.
+    expect(code({ pin: "1990", pinConfirm: "1990" })).toBe("pin_birth_year");
+    expect(code({ pin: "1991", pinConfirm: "1991" })).toBe("pin_trivial");
+    expect(code({ birthYear: "" })).toBe("birth_year_invalid");
+    expect(code({ birthYear: "1899" })).toBe("birth_year_invalid");
+    expect(code({ birthYear: "3000" })).toBe("birth_year_invalid");
+    expect(code({ birthYear: "١٩٩٠", pin: "1990", pinConfirm: "1990" })).toBe("pin_birth_year");
     expect(code({ dateOfBirth: "1899-12-31" })).toBe("dob_invalid");
     expect(code({ dateOfBirth: "2999-01-01" })).toBe("dob_future");
     expect(code({ dateOfBirth: "1990-02-31" })).toBe("dob_invalid");
