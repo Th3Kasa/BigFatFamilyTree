@@ -3,6 +3,7 @@ import {
   changePinSchema,
   familyPinSchema,
   firstIssueCode,
+  isDateLikePin,
   isDuplicateIdentityError,
   isTrivialPin,
   makeNameKey,
@@ -51,9 +52,20 @@ describe("PIN validation", () => {
     },
   );
 
-  it.each(["4821", "7391", "0615", "9084"])("%s is accepted", (pin) => {
+  it.each(["4821", "7391", "0637", "9084"])("%s is accepted", (pin) => {
     expect(isTrivialPin(pin)).toBe(false);
     expect(newPinSchema.safeParse(pin).success).toBe(true);
+  });
+
+  it.each(["1943", "1990", "2005", "2039", "0412", "1204", "3112", "1231", "0229"])("%s (a year or a date) is too easy", (pin) => {
+    expect(isDateLikePin(pin)).toBe(true);
+    const r = newPinSchema.safeParse(pin);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].message).toBe("pin_trivial");
+  });
+
+  it.each(["1899", "2040", "0013", "3213", "0000", "4821"])("%s is not date-shaped", (pin) => {
+    expect(isDateLikePin(pin)).toBe(false);
   });
 
   it.each(["123", "12345", "12a4", "", "    "])("%j is not 4 digits", (pin) => {

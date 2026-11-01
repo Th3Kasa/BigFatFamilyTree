@@ -46,6 +46,8 @@ const fail = (code: PinMessageCode, lang: Lang): PinResult => ({ ok: false, code
 
 type ProfileRow = {
   id: string;
+  role: string | null;
+  is_super_admin: boolean | null;
   login_method: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -85,7 +87,7 @@ export async function setUpOwnPin(raw: PinSetupInput, lang: Lang): Promise<PinRe
   const svc = createServiceClient();
   const { data: profileData } = await svc
     .from("profiles")
-    .select("id, login_method, first_name, last_name, full_name, display_name, name_key, date_of_birth")
+    .select("id, role, is_super_admin, login_method, first_name, last_name, full_name, display_name, name_key, date_of_birth")
     .eq("id", user.id)
     .maybeSingle();
   const profile = profileData as ProfileRow | null;
@@ -96,6 +98,7 @@ export async function setUpOwnPin(raw: PinSetupInput, lang: Lang): Promise<PinRe
     targetId: profile.id,
     loginMethod: profile.login_method,
     email: user.email,
+    isAdmin: profile.role === "admin" || !!profile.is_super_admin,
   });
   if (!verdict.ok) return fail("not_allowed", lang);
   const mode = verdict.mode;

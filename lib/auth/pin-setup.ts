@@ -24,7 +24,7 @@ export const hasRealEmail = (email: string | null | undefined): boolean => !isPl
 // ── who may set up a PIN ────────────────────────────────────────────────────
 
 export type SetupMode = "convert" | "recover";
-export type SetupDenied = "not_signed_in" | "not_self" | "no_profile" | "no_real_email";
+export type SetupDenied = "not_signed_in" | "not_self" | "no_profile" | "no_real_email" | "admin_email_only";
 export type SetupVerdict = { ok: true; mode: SetupMode } | { ok: false; reason: SetupDenied };
 
 /**
@@ -33,16 +33,20 @@ export type SetupVerdict = { ok: true; mode: SetupMode } | { ok: false; reason: 
  *    session user; the server never reads an id from the browser);
  *  * an email account may convert;
  *  * a PIN account may set a new PIN without the old one ("recover") only if it
- *    has a real email, since that is how it proves it is the owner.
+ *    has a real email, since that is how it proves it is the owner;
+ *  * admins and the owner (with a real email) never move to a PIN: they sign in
+ *    by email (lib/auth/pin-session.ts refuses their PIN too).
  */
 export function canSetUpPin(input: {
   sessionUserId: string | null | undefined;
   targetId: string;
   loginMethod: string | null | undefined;
   email: string | null | undefined;
+  isAdmin?: boolean;
 }): SetupVerdict {
   if (!input.sessionUserId) return { ok: false, reason: "not_signed_in" };
   if (input.sessionUserId !== input.targetId) return { ok: false, reason: "not_self" };
+  if (input.isAdmin && hasRealEmail(input.email)) return { ok: false, reason: "admin_email_only" };
   if (input.loginMethod === "email") return { ok: true, mode: "convert" };
   if (input.loginMethod === "pin") {
     return hasRealEmail(input.email) ? { ok: true, mode: "recover" } : { ok: false, reason: "no_real_email" };

@@ -12,6 +12,7 @@ import { constantTimeEqual, derivePinPassword, memberEmail } from "@/lib/auth/pi
 import { accountLockKey, remainingDelayMs } from "@/lib/auth/pin-lockout";
 import { checkJoinName, firstNameKey, resolvePinCandidates, type PinCandidate } from "@/lib/auth/pin-resolve";
 import { issueJoinTicket, verifyJoinTicket } from "@/lib/auth/join-ticket";
+import { isPlaceholderEmail } from "@/lib/auth/pin-setup";
 import {
   clearDeviceCookie,
   lookupRememberedDevice,
@@ -312,15 +313,18 @@ async function attemptPinSignIn(args: {
   secret: string;
 }): Promise<PinResult> {
   const { profile, email, lockId, gate, pin, startedAt, lang, secret } = args;
-  const userId = profile?.id ?? DUMMY_ID;
+  // An admin's PIN is never tried: the attempt runs against the placeholder
+  // account instead, so a right PIN fails exactly like a wrong one.
+  const emailOnly = profile ? await isEmailOnlyAccount(profile.id, email) : false;
+  const userId = profile && !emailOnly ? profile.id : DUMMY_ID;
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
-    email,
+    email: emailOnly ? memberEmail(DUMMY_ID) : email,
     password: derivePinPassword(userId, pin, secret),
   });
 
-  if (!error && profile) {
+  if (!error && profile && !emailOnly) {
     // Forget the failed tries during the response-time padding, which runs anyway.
     await Promise.all([clearPinLockout(lockId), padTo(startedAt)]);
     return { ok: true, redirectTo: "/" };
@@ -342,6 +346,24 @@ async function attemptPinSignIn(args: {
   if (gate.lastDay) return fail("locked_day", lang);
   if (gate.lastShort) return fail("locked", lang);
   return fail("generic_signin", lang);
+}
+
+/**
+ * Admins and the owner sign in by email: a 4-digit PIN is far too weak to guard
+ * the whole family's data and every member's account. An admin with no real
+ * email (nothing to send a link to) keeps their PIN, so nobody is locked out.
+ * Fails closed: if the role can't be read, the PIN is not tried.
+ */
+async function isEmailOnlyAccount(profileId: string, email: string): Promise<boolean> {
+  if (isPlaceholderEmail(email)) return false;
+  const { data, error } = await createServiceClient()
+    .from("profiles")
+    .select("role, is_super_admin")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (error) return true;
+  const row = data as { role?: string; is_super_admin?: boolean } | null;
+  return row?.role === "admin" || !!row?.is_super_admin;
 }
 
 // ── sign in from a remembered device (PIN only) ──────────────────────────────
@@ -376,15 +398,23 @@ export async function signInWithDevice(rawPin: string, lang: Lang): Promise<PinR
   }
   const { device } = lookup;
 
+  // The cookie already ties this browser to the account, so an admin can be
+  // told plainly to use email (and the device is forgotten).
+  const email = await signInEmail(device.profileId);
+  if (await isEmailOnlyAccount(device.profileId, email)) {
+    await clearDeviceCookie();
+    await padTo(startedAt);
+    return fail("admin_email_only", lang);
+  }
+
   const lockId = pinAccountLockId(device.nameKey, device.dateOfBirth);
-  const email = signInEmail(device.profileId);
   const gate = await takeAttempt(lockId);
   if (!gate.ok) {
     await padTo(startedAt);
     return fail(gate.code, lang);
   }
 
-  const result = await attemptPinSignIn({ profile: { id: device.profileId }, email: await email, lockId, gate, pin, startedAt, lang, secret });
+  const result = await attemptPinSignIn({ profile: { id: device.profileId }, email, lockId, gate, pin, startedAt, lang, secret });
   if (result.ok) await touchDevice(device.deviceId);
   return result;
 }

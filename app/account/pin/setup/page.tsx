@@ -29,7 +29,7 @@ export default async function SetUpPinPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, login_method, first_name, last_name, full_name, display_name, date_of_birth")
+    .select("id, role, is_super_admin, login_method, first_name, last_name, full_name, display_name, date_of_birth")
     .eq("id", user.id)
     .maybeSingle();
   if (!profile) redirect("/");
@@ -39,6 +39,7 @@ export default async function SetUpPinPage() {
     targetId: profile.id,
     loginMethod: profile.login_method,
     email: user.email,
+    isAdmin: profile.role === "admin" || !!profile.is_super_admin,
   });
   if (!verdict.ok) redirect("/");
   const mode = verdict.mode;

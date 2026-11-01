@@ -37,6 +37,12 @@ describe("canSetUpPin (self only, email accounts only)", () => {
     expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: "a@b.com" })).toEqual({ ok: true, mode: "recover" });
     expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: memberEmail(ME) })).toEqual({ ok: false, reason: "no_real_email" });
   });
+  it("admins and the owner with a real email stay on email sign-in", () => {
+    expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "email", email: "a@b.com", isAdmin: true })).toEqual({ ok: false, reason: "admin_email_only" });
+    expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: "a@b.com", isAdmin: true })).toEqual({ ok: false, reason: "admin_email_only" });
+    // No real email to sign in with: nothing to fall back on, so not refused here.
+    expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: "pin", email: memberEmail(ME), isAdmin: true })).toEqual({ ok: false, reason: "no_real_email" });
+  });
   it("refuses unknown login methods", () => {
     expect(canSetUpPin({ sessionUserId: ME, targetId: ME, loginMethod: null, email: "a@b.com" }).ok).toBe(false);
   });

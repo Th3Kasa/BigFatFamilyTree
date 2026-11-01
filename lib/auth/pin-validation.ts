@@ -17,8 +17,8 @@ export const PIN_MESSAGES = {
   dob_future: ["Date of birth can't be in the future.", "لا يمكن أن يكون تاريخ الميلاد في المستقبل."],
   pin_format: ["Your PIN is exactly 4 digits.", "رمزك السري مكوّن من ٤ أرقام بالضبط."],
   pin_trivial: [
-    "That PIN is too easy to guess (like 1234 or 1111). Pick another.",
-    "هذا الرمز سهل التخمين (مثل 1234 أو 1111). اختر رمزًا آخر.",
+    "That PIN is too easy to guess (like 1234, 1111, a year or a date). Pick another.",
+    "هذا الرمز سهل التخمين (مثل 1234 أو 1111 أو سنة أو تاريخ). اختر رمزًا آخر.",
   ],
   pin_mismatch: ["The two PINs don't match.", "الرمزان غير متطابقين."],
   family_pin_format: ["The family PIN is 6 digits.", "رمز العائلة مكوّن من ٦ أرقام."],
@@ -72,6 +72,10 @@ export const PIN_MESSAGES = {
     "يرجى تسجيل الدخول باسمك وتاريخ ميلادك ورمزك السري.",
   ],
   not_allowed: ["This account can't do that.", "لا يمكن لهذا الحساب تنفيذ ذلك."],
+  admin_email_only: [
+    "Admins sign in with email, not a PIN. Use \"Admins: sign in with email\" below.",
+    "يدخل المشرفون بالبريد الإلكتروني لا بالرمز السري. استخدم «للمشرفين: سجّل الدخول بالبريد» في الأسفل.",
+  ],
   join_need_birthday: [
     "Someone with this first name has already joined. Add your birthday so we can tell you apart.",
     "انضم شخص بهذا الاسم من قبل. أضف تاريخ ميلادك لنميّز بينكما.",
@@ -109,9 +113,27 @@ export function normaliseDigits(input: string): string {
 
 const COMMON_PINS: ReadonlySet<string> = new Set(["2580", "0852", "1357", "2468", "1379", "1004", "2000", "1122", "6969", "1010"]);
 
-/** 0000/1111, 1234/4321/3456, 1212/2121, 1122/9900 and a few famous ones. */
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const isDayMonth = (day: number, month: number) => month >= 1 && month <= 12 && day >= 1 && day <= DAYS_IN_MONTH[month - 1];
+
+/**
+ * A year (1900-2039) or a calendar date (MMDD or DDMM). Birthdays are the first
+ * thing anyone guesses, and every approved member can read relatives' birthdays
+ * in the tree, so no date-shaped PIN is allowed.
+ */
+export function isDateLikePin(pin: string): boolean {
+  if (!/^\d{4}$/.test(pin)) return false;
+  const n = Number(pin);
+  if (n >= 1900 && n <= 2039) return true;
+  const a = Number(pin.slice(0, 2));
+  const b = Number(pin.slice(2));
+  return isDayMonth(b, a) || isDayMonth(a, b);
+}
+
+/** 0000/1111, 1234/4321/3456, 1212/2121, 1122/9900, years, dates and a few famous ones. */
 export function isTrivialPin(pin: string): boolean {
   if (!/^\d{4}$/.test(pin)) return false;
+  if (isDateLikePin(pin)) return true;
   const d = pin.split("").map(Number);
   if (d.every((x) => x === d[0])) return true;
   const steps = [d[1] - d[0], d[2] - d[1], d[3] - d[2]];
