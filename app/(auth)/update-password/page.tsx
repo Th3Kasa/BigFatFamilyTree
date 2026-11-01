@@ -8,6 +8,17 @@ import { updatePasswordRedirect } from "@/lib/auth/pin-setup";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
+/** updatePasswordRedirect for the signed-in account (the profile row says whether it's an admin). */
+async function passwordRedirect(): Promise<string | null> {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+  if (!user || user.app_metadata?.login !== "pin") return null;
+  const { data: profile } = await supabase.from("profiles").select("role, is_super_admin").eq("id", user.id).maybeSingle();
+  const isAdmin = profile?.role === "admin" || !!profile?.is_super_admin;
+  return updatePasswordRedirect(user.app_metadata, { email: user.email, isAdmin });
+}
+
 export default function UpdatePasswordPage() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -17,12 +28,11 @@ export default function UpdatePasswordPage() {
   const [done, setDone] = useState(false);
 
   // A PIN account signs in with its PIN. Setting an email password here would
-  // replace the PIN-derived one and break PIN sign-in, so send it to "Change my PIN".
+  // replace the PIN-derived one and break PIN sign-in, so send it to "Change my
+  // PIN". Admins with a real email sign in by email, so they stay.
   useEffect(() => {
-    createClient()
-      .auth.getUser()
-      .then(({ data }) => {
-        const to = updatePasswordRedirect(data.user?.app_metadata);
+    passwordRedirect()
+      .then((to) => {
         if (to) router.replace(to);
       })
       .catch(() => {});
@@ -43,8 +53,7 @@ export default function UpdatePasswordPage() {
 
     startTransition(async () => {
       const supabase = createClient();
-      const { data: current } = await supabase.auth.getUser();
-      const to = updatePasswordRedirect(current.user?.app_metadata);
+      const to = await passwordRedirect();
       if (to) {
         router.replace(to);
         return;

@@ -20,6 +20,11 @@ export default async function ChangePinPage() {
   if (!user) redirect("/login?next=/account/pin");
   // Only PIN accounts have a PIN (app_metadata can't be edited by the member).
   if (user.app_metadata?.login !== "pin") redirect("/");
+  // Admins with a real email sign in by email, never by PIN: give them a password instead.
+  if (hasRealEmail(user.email)) {
+    const { data: profile } = await supabase.from("profiles").select("role, is_super_admin").eq("id", user.id).maybeSingle();
+    if (profile?.role === "admin" || profile?.is_super_admin) redirect("/update-password");
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[420px] flex-col gap-5 px-4 py-6 text-[#241517]">
