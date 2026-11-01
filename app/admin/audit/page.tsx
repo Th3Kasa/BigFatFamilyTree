@@ -66,7 +66,8 @@ export default async function AuditLogPage({ searchParams }: Props) {
       const fromTree = p.person_id ? personName.get(p.person_id) : null;
       // PIN accounts have a generated "m-<id>@…" address; that's no name.
       const fromEmail = p.email && !p.email.startsWith("m-") ? p.email.split("@")[0] : null;
-      return [p.id, own || fromTree || fromEmail || "A member"];
+      // The name on their tree card (e.g. "Nina-Joyce Gaballah") beats what they typed at sign-up ("Nina").
+      return [p.id, fromTree || own || fromEmail || "A member"];
     }),
   );
   const names = {
