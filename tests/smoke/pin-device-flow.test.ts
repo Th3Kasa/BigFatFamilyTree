@@ -20,7 +20,7 @@ const LIMITS: Record<string, number> = { pinIp: 1_000, pinFail: 5, pinFailDay: 1
 const signInCalls = { n: 0 };
 const audits: Array<{ after: Record<string, unknown> | null; actorId: string }> = [];
 let clock = Date.parse("2026-10-29T00:00:00Z");
-let userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+const userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
 function builder(table: "profiles" | "pin_devices") {
   let op: "select" | "insert" | "update" | "delete" = "select";

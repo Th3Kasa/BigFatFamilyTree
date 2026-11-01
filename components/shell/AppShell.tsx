@@ -9,6 +9,7 @@ import { PeopleSheet } from "@/components/shell/PeopleSheet";
 import { BirthdayNotice } from "@/components/shell/BirthdayNotice";
 import { RoleProvider, type EditableScope } from "@/components/providers/role-provider";
 import { WelcomeTour } from "@/components/onboarding/WelcomeTour";
+import { PresenceHeartbeat } from "@/components/shell/PresenceHeartbeat";
 import type { Lang } from "@/lib/lang/server";
 
 type Props = {
@@ -65,6 +66,7 @@ export function AppShell({ user, lang, role, editable, membersBadge, mustChangeP
       <AddMenu lang={lang} role={role} />
       <PeopleSheet lang={lang} />
       <BirthdayNotice lang={lang} />
+      <PresenceHeartbeat />
       <Suspense fallback={null}>
         <WelcomeTour lang={lang} />
       </Suspense>
