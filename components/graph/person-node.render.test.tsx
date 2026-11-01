@@ -5,7 +5,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
 import type { PersonInput } from "@/lib/graph/transform";
 
-vi.mock("@/lib/client/use-focus-person", () => ({ useIsCurrentPerson: () => false }));
+vi.mock("@/components/providers/current-person-provider", () => ({ useIsCurrentPerson: () => false }));
 const { PersonNode } = await import("./PersonNode");
 
 const person = (id: string, given: string, family: string): PersonInput => ({
