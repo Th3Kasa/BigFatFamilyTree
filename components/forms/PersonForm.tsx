@@ -217,6 +217,13 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       <input type="hidden" name="great_grandfather_name_en" value={initialData?.great_grandfather_name_en ?? ""} />
       <input type="hidden" name="great_grandfather_name_ar" value={initialData?.great_grandfather_name_ar ?? ""} />
 
+      {/* The reason a save didn't go through, next to the button (the top of a long form is off screen). */}
+      {(state?.error || (state?.fieldErrors && Object.keys(state.fieldErrors).length > 0)) && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+          {state?.error ??
+            (lang === "ar" ? "لم يُحفظ. صحّح الحقول المظللة بالأحمر في الأعلى." : "Not saved yet. Fix the fields marked in red above.")}
+        </p>
+      )}
       <SubmitButton label={submitLabel} />
     </form>
   );

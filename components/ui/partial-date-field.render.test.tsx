@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act } from "react";
+import { act, useActionState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { PartialDateField } from "./partial-date-field";
 
@@ -70,5 +70,29 @@ describe("PartialDateField", () => {
   test("an older free-text value is kept until the date is edited", () => {
     act(() => root.render(<PartialDateField label="Birth date" lang="en" name="birth_date" defaultValue="about 1917" />));
     expect(hidden()).toBe("about 1917");
+  });
+
+  test("keeps the chosen day and month on screen after the form is saved (React resets forms after an action)", async () => {
+    let sent = "";
+    function Form() {
+      const [, save] = useActionState(async (_prev: unknown, fd: FormData) => {
+        sent = String(fd.get("birth_date"));
+        return { error: "Not saved" };
+      }, null);
+      return (
+        <form action={save}>
+          <PartialDateField label="Birth date" lang="en" name="birth_date" />
+          <button type="submit">Save</button>
+        </form>
+      );
+    }
+    act(() => root.render(<Form />));
+    typeYear("1949");
+    pick(month(), "5");
+    pick(day(), "9");
+    await act(async () => host.querySelector("button")!.click());
+    await act(async () => new Promise((r) => setTimeout(r, 20)));
+    expect(sent).toBe("1949-05-09");
+    expect([year().value, month().value, day().value, hidden()]).toEqual(["1949", "5", "9", "1949-05-09"]);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   composePartialDate,
@@ -47,20 +47,42 @@ export function PartialDateField({ label, lang, defaultValue, onChange, name, in
     onChange?.(composePartialDate(next));
   };
 
+  // After a form action, React resets the form, which puts both selects back
+  // to their first option ("Day", "Month") while the chosen date is still held
+  // here. Put the chosen values back on screen right after any reset.
+  const fieldset = useRef<HTMLFieldSetElement>(null);
+  const dayRef = useRef<HTMLSelectElement>(null);
+  const monthRef = useRef<HTMLSelectElement>(null);
+  const current = useRef(d);
+  useEffect(() => {
+    current.current = d;
+  }, [d]);
+  useEffect(() => {
+    const form = fieldset.current?.form;
+    if (!form) return;
+    const restore = () =>
+      setTimeout(() => {
+        if (monthRef.current) monthRef.current.value = current.current.month;
+        if (dayRef.current) dayRef.current.value = current.current.day;
+      }, 0);
+    form.addEventListener("reset", restore);
+    return () => form.removeEventListener("reset", restore);
+  }, []);
+
   const days = d.month ? daysInMonth(d.year, d.month) : 31;
   const months = lang === "ar" ? MONTHS_AR : MONTHS_EN;
   const control = cn(inputClassName, "min-w-0");
   const hintId = `${uid}-hint`;
 
   return (
-    <fieldset className="min-w-0">
+    <fieldset ref={fieldset} className="min-w-0">
       <legend className={labelClassName}>{label}</legend>
       <div className="grid grid-cols-[1fr_1.6fr_1.2fr] gap-2">
         <div className="min-w-0">
           <label htmlFor={`${uid}-d`} className="sr-only">
             {t(`${label}: day (optional)`, `${label}: اليوم (اختياري)`)}
           </label>
-          <select id={`${uid}-d`} value={d.day} onChange={(e) => update({ day: e.target.value })} disabled={!d.month} aria-describedby={hintId} className={control}>
+          <select ref={dayRef} id={`${uid}-d`} value={d.day} onChange={(e) => update({ day: e.target.value })} disabled={!d.month} aria-describedby={hintId} className={control}>
             <option value="">{t("Day", "اليوم")}</option>
             {Array.from({ length: days }, (_, i) => String(i + 1)).map((n) => (
               <option key={n} value={n}>
@@ -73,7 +95,7 @@ export function PartialDateField({ label, lang, defaultValue, onChange, name, in
           <label htmlFor={`${uid}-m`} className="sr-only">
             {t(`${label}: month (optional)`, `${label}: الشهر (اختياري)`)}
           </label>
-          <select id={`${uid}-m`} value={d.month} onChange={(e) => update({ month: e.target.value, ...(e.target.value ? {} : { day: "" }) })} aria-describedby={hintId} className={control}>
+          <select ref={monthRef} id={`${uid}-m`} value={d.month} onChange={(e) => update({ month: e.target.value, ...(e.target.value ? {} : { day: "" }) })} aria-describedby={hintId} className={control}>
             <option value="">{t("Month", "الشهر")}</option>
             {months.map((m, i) => (
               <option key={m} value={String(i + 1)}>
