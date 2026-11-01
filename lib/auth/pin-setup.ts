@@ -181,8 +181,14 @@ export function buildPinMetadata(
  * Where /update-password must send a signed-in account instead of showing the
  * "set an email password" form. A PIN account signs in with its PIN, and a new
  * email password would silently replace the PIN-derived one, so it goes to
- * "Change my PIN". Email accounts (and visitors with no session) stay.
+ * "Change my PIN". Email accounts (and visitors with no session) stay, and so
+ * do admins with a real email: they sign in by email, never by PIN
+ * (lib/auth/pin-session.ts), so a password is exactly what they need.
  */
-export function updatePasswordRedirect(appMetadata: Json | null | undefined): string | null {
-  return appMetadata?.login === "pin" ? "/account/pin" : null;
+export function updatePasswordRedirect(
+  appMetadata: Json | null | undefined,
+  account?: { email?: string | null; isAdmin?: boolean },
+): string | null {
+  if (appMetadata?.login !== "pin") return null;
+  return account?.isAdmin && hasRealEmail(account.email) ? null : "/account/pin";
 }

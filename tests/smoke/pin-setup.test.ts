@@ -146,6 +146,11 @@ describe("/update-password redirect rule", () => {
     expect(updatePasswordRedirect({ provider: "email" })).toBeNull();
     expect(updatePasswordRedirect(undefined)).toBeNull();
   });
+  it("lets an admin with a real email set a password (they never sign in by PIN)", () => {
+    expect(updatePasswordRedirect({ login: "pin" }, { email: "owner@gmail.com", isAdmin: true })).toBeNull();
+    expect(updatePasswordRedirect({ login: "pin" }, { email: "owner@gmail.com", isAdmin: false })).toBe("/account/pin");
+    expect(updatePasswordRedirect({ login: "pin" }, { email: memberEmail("x"), isAdmin: true })).toBe("/account/pin");
+  });
 });
 
 describe("admin Reset PIN on a converted account", () => {
