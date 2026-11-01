@@ -200,3 +200,20 @@ describe("bootstrap admin only creates the FIRST admin", () => {
     expect(actions.match(/return FAILED/g)!.length).toBeGreaterThan(5);
   });
 });
+
+describe("saving a form that shows a photo", () => {
+  it("reads the site's own /api/photo link back to the stored path", () => {
+    expect(normalizePhotoValue("/api/photo?p=p%2F9f1c.jpg&w=384")).toBe("p/9f1c.jpg");
+    expect(normalizePhotoValue("https://www.bigfatfamilytree.com.au/api/photo?p=a.jpg&w=128")).toBe("a.jpg");
+    expect(photoStoragePath(photoLink("p/9f1c.jpg"))).toBe("p/9f1c.jpg");
+  });
+  it("still refuses unsafe paths and other site pages", () => {
+    expect(normalizePhotoValue("/api/photo?p=..%2Fsecret&w=384")).toBeNull();
+    expect(normalizePhotoValue("/api/photo?w=384")).toBeNull();
+    expect(normalizePhotoValue("/api/other?p=a.jpg")).toBeNull();
+  });
+  it("lets the person form's photo field pass validation", () => {
+    const r = personSchema.safeParse({ given_en: "Nassif", gender: "m", is_placeholder: false, photo_url: "/api/photo?p=p%2Fa.jpg&w=384" });
+    expect(r.success && r.data.photo_url).toBe("p/a.jpg");
+  });
+});

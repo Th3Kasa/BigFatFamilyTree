@@ -24,7 +24,7 @@ export const personSchema = z
       .string()
       .max(2000)
       .nullish()
-      .refine((v) => !v || normalizePhotoValue(v) !== null, "Invalid photo")
+      .refine((v) => !v || normalizePhotoValue(v) !== null, "The photo couldn't be read. Remove it and add it again.")
       .transform((v) => normalizePhotoValue(v)),
     notes_en: z.string().max(2000).nullish().transform((v) => v ?? null),
     notes_ar: z.string().max(2000).nullish().transform((v) => v ?? null),

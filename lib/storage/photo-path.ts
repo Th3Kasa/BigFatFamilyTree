@@ -3,6 +3,8 @@
 //   "9f1c….jpg" or "<personId>/9f1c….jpg"   a path inside the private `photos` bucket (new)
 //   "https://<proj>.supabase.co/storage/v1/object/public/photos/<path>"   a legacy public URL
 //   "…/object/sign/photos/<path>?token=…"   a signed URL that leaked back from a form
+//   "/api/photo?p=<path>&w=384"             this site's own photo link (what pages show),
+//                                           also as an absolute URL on any host
 //   "https://elsewhere.example/a.jpg"       an external image, left alone
 //
 // New uploads store the bare path. Anything that points into our bucket is
@@ -26,6 +28,9 @@ function isSafePath(v: string): boolean {
 export function photoStoragePath(value: string | null | undefined): string | null {
   const v = (value ?? "").trim();
   if (!v) return null;
+  // The site's own link (/api/photo?p=…), which forms send back when saving.
+  const siteLink = siteLinkPath(v);
+  if (siteLink !== undefined) return siteLink;
   if (isHttpUrl(v)) {
     let pathname: string;
     try {
@@ -44,6 +49,19 @@ export function photoStoragePath(value: string | null | undefined): string | nul
     return isSafePath(decoded) ? decoded : null;
   }
   return isSafePath(v) ? v : null;
+}
+
+/** Path from a "/api/photo?p=…" link (relative or absolute); undefined when it isn't one. */
+function siteLinkPath(v: string): string | null | undefined {
+  let url: URL;
+  try {
+    url = new URL(v, "https://site.invalid");
+  } catch {
+    return undefined;
+  }
+  if (url.pathname !== "/api/photo" || !(v.startsWith("/api/photo?") || isHttpUrl(v))) return undefined;
+  const p = url.searchParams.get("p");
+  return p && isSafePath(p) ? p : null;
 }
 
 /** An image hosted somewhere else: shown as is, never signed. */

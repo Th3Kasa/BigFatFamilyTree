@@ -221,7 +221,8 @@ export function PersonForm({ action, initialData, people, lang, submitLabel }: P
       {(state?.error || (state?.fieldErrors && Object.keys(state.fieldErrors).length > 0)) && (
         <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
           {state?.error ??
-            (lang === "ar" ? "لم يُحفظ. صحّح الحقول المظللة بالأحمر في الأعلى." : "Not saved yet. Fix the fields marked in red above.")}
+            // Name the problem itself: it may be a field the form doesn't show (like the photo).
+            `${lang === "ar" ? "لم يُحفظ:" : "Not saved:"} ${Object.values(state?.fieldErrors ?? {}).join(" ")}`}
         </p>
       )}
       <SubmitButton label={submitLabel} />
