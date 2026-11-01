@@ -182,6 +182,27 @@ export function PersonNode({ data, selected, positionAbsoluteX, positionAbsolute
   const fullName = getDisplayName(person, lang);
   const years = lifeYears(person.birth_date, person.death_date, lang);
 
+  // Also shown as a dashed copy beside a spouse in another branch: say where, and go there.
+  const elsewhere = data.refOf ? undefined : data.alsoIn?.[0];
+  const elsewhereFamily = elsewhere ? getNameParts(elsewhere.host, lang).family : "";
+  const elsewhereGiven = elsewhere ? getNameParts(elsewhere.host, lang).given || getDisplayName(elsewhere.host, lang) : "";
+  const more = (data.alsoIn?.length ?? 0) - 1;
+  const elsewhereText = elsewhere
+    ? elsewhereFamily
+      ? t(`Also in the ${elsewhereFamily} branch`, `أيضًا في فرع ${elsewhereFamily}`)
+      : t(`Also beside ${elsewhereGiven}`, `أيضًا بجانب ${elsewhereGiven}`)
+    : "";
+  const elsewhereLabel = elsewhere
+    ? t(
+        `${fullName}: ${elsewhereText}, beside ${getDisplayName(elsewhere.host, lang)}. Go there`,
+        `${fullName}: ${elsewhereText}، بجانب ${getDisplayName(elsewhere.host, lang)}. انتقل إلى هناك`,
+      )
+    : "";
+  const openElsewhere = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (elsewhere) data.onOpenBranch?.(elsewhere.host.id);
+  };
+
   // Zoomed far out (a big tree fit to the screen): initials and name only, set
   // large enough to stay legible after scaling. Same card size, so layout holds.
   if (compact) {
@@ -208,12 +229,25 @@ export function PersonNode({ data, selected, positionAbsoluteX, positionAbsolute
             !isRef && (selected || isMe ? "border-[var(--primary)]" : "border-[var(--border-strong)]"),
           )}
         >
-          <Avatar person={person} lang={lang} size={60} />
-          <span className="line-clamp-2 w-full text-[24px] font-bold leading-[1.1] text-[var(--foreground)]">
+          <Avatar person={person} lang={lang} size={elsewhere ? 48 : 60} />
+          <span className={cn("w-full text-[24px] font-bold leading-[1.1] text-[var(--foreground)]", elsewhere ? "truncate" : "line-clamp-2")}>
             {isRef && <span aria-hidden>↗ </span>}
             {givenName}
           </span>
+          {elsewhere && <span aria-hidden className="h-7" />}
         </button>
+        {elsewhere && (
+          <button
+            type="button"
+            onClick={openElsewhere}
+            aria-label={elsewhereLabel}
+            style={{ opacity: dimmed ? DIM_OPACITY : 1 }}
+            className="nodrag absolute inset-x-2 bottom-2 z-10 truncate rounded-xl bg-[var(--background)] px-2 text-[20px] font-bold leading-8 text-[var(--primary)] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--ring)]"
+          >
+            <span aria-hidden>↗ </span>
+            {elsewhereFamily || elsewhereGiven}
+          </button>
+        )}
       </>
     );
   }
@@ -239,7 +273,7 @@ export function PersonNode({ data, selected, positionAbsoluteX, positionAbsolute
           <PathMarker highlight={highlight} lang={lang} />
           <Avatar person={person} lang={lang} size={44} />
           <span className="w-full truncate text-[14px] font-semibold leading-5 text-[var(--foreground)]">{givenName}</span>
-          <span className="line-clamp-2 text-[11.5px] font-semibold leading-tight text-[var(--primary)]">
+          <span className="line-clamp-2 text-[11.5px] font-semibold leading-tight text-[var(--primary)] underline underline-offset-2">
             <span aria-hidden>↗ </span>
             {branch}
           </span>
@@ -257,17 +291,6 @@ export function PersonNode({ data, selected, positionAbsoluteX, positionAbsolute
         : "0 4px 14px rgba(36,21,23,0.08)";
 
   const label = [fullName, years, isMe ? t("you", "أنت") : ""].filter(Boolean).join(", ");
-
-  // Also shown as a dashed copy beside a spouse in another branch: say where, and go there.
-  const elsewhere = data.alsoIn?.[0];
-  const elsewhereFamily = elsewhere ? getNameParts(elsewhere.host, lang).family : "";
-  const elsewhereGiven = elsewhere ? getNameParts(elsewhere.host, lang).given || getDisplayName(elsewhere.host, lang) : "";
-  const more = (data.alsoIn?.length ?? 0) - 1;
-  const elsewhereText = elsewhere
-    ? (elsewhereFamily
-        ? t(`Also in the ${elsewhereFamily} branch`, `أيضًا في فرع ${elsewhereFamily}`)
-        : t(`Also beside ${elsewhereGiven}`, `أيضًا بجانب ${elsewhereGiven}`)) + (more > 0 ? t(` +${more}`, ` +${more}`) : "")
-    : "";
 
   return (
     <>
@@ -290,30 +313,27 @@ export function PersonNode({ data, selected, positionAbsoluteX, positionAbsolute
             {t("You", "أنت")}
           </span>
         )}
-        <Avatar person={person} lang={lang} />
-        <span className="mt-1 w-full truncate text-[15px] font-semibold leading-5 text-[var(--foreground)]" title={fullName}>
+        <Avatar person={person} lang={lang} size={elsewhere ? 40 : 52} />
+        <span className={cn("w-full truncate text-[15px] font-semibold leading-5 text-[var(--foreground)]", !elsewhere && "mt-1")} title={fullName}>
           {givenName}
         </span>
         <span className="h-4 w-full truncate text-xs leading-4 text-[var(--muted-foreground)]">{years}</span>
-        {elsewhere && <span aria-hidden className="h-4" />}
+        {elsewhere && <span aria-hidden className="h-[34px] shrink-0" />}
       </button>
       {elsewhere && (
         // A sibling of the card button (a button can't hold another button).
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            data.onOpenBranch?.(elsewhere.host.id);
-          }}
-          aria-label={t(
-            `${fullName}: ${elsewhereText.replace(/ \+\d+$/, "")}, beside ${getDisplayName(elsewhere.host, lang)}. Go there`,
-            `${fullName}: ${elsewhereText.replace(/ \+\d+$/, "")}، بجانب ${getDisplayName(elsewhere.host, lang)}. انتقل إلى هناك`,
-          )}
+          onClick={openElsewhere}
+          aria-label={elsewhereLabel}
           style={{ opacity: dimmed ? DIM_OPACITY : 1 }}
-          className="nodrag absolute inset-x-2 bottom-1.5 z-10 truncate rounded-md px-1 text-[11.5px] font-semibold leading-5 text-[var(--primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          className="nodrag absolute inset-x-1.5 bottom-1.5 z-10 flex min-h-[32px] items-center justify-center rounded-xl bg-[var(--background)] px-1.5 py-0.5 text-center text-[11.5px] font-semibold leading-tight text-[var(--primary)] hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         >
-          <span aria-hidden>↗ </span>
-          {elsewhereText}
+          <span className="line-clamp-2 underline underline-offset-2">
+            <span aria-hidden>↗ </span>
+            {elsewhereText}
+            {more > 0 && <span className="no-underline">{` +${more}`}</span>}
+          </span>
         </button>
       )}
       {selected && slots && slots.length > 0 && <Slots slots={slots} lang={lang} onSlot={data.onSlot} />}
