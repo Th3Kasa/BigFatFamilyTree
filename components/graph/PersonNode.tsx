@@ -258,6 +258,17 @@ export function PersonNode({ data, selected, positionAbsoluteX, positionAbsolute
 
   const label = [fullName, years, isMe ? t("you", "أنت") : ""].filter(Boolean).join(", ");
 
+  // Also shown as a dashed copy beside a spouse in another branch: say where, and go there.
+  const elsewhere = data.alsoIn?.[0];
+  const elsewhereFamily = elsewhere ? getNameParts(elsewhere.host, lang).family : "";
+  const elsewhereGiven = elsewhere ? getNameParts(elsewhere.host, lang).given || getDisplayName(elsewhere.host, lang) : "";
+  const more = (data.alsoIn?.length ?? 0) - 1;
+  const elsewhereText = elsewhere
+    ? (elsewhereFamily
+        ? t(`Also in the ${elsewhereFamily} branch`, `أيضًا في فرع ${elsewhereFamily}`)
+        : t(`Also beside ${elsewhereGiven}`, `أيضًا بجانب ${elsewhereGiven}`)) + (more > 0 ? t(` +${more}`, ` +${more}`) : "")
+    : "";
+
   return (
     <>
       <Handles />
@@ -284,7 +295,27 @@ export function PersonNode({ data, selected, positionAbsoluteX, positionAbsolute
           {givenName}
         </span>
         <span className="h-4 w-full truncate text-xs leading-4 text-[var(--muted-foreground)]">{years}</span>
+        {elsewhere && <span aria-hidden className="h-4" />}
       </button>
+      {elsewhere && (
+        // A sibling of the card button (a button can't hold another button).
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onOpenBranch?.(elsewhere.host.id);
+          }}
+          aria-label={t(
+            `${fullName}: ${elsewhereText.replace(/ \+\d+$/, "")}, beside ${getDisplayName(elsewhere.host, lang)}. Go there`,
+            `${fullName}: ${elsewhereText.replace(/ \+\d+$/, "")}، بجانب ${getDisplayName(elsewhere.host, lang)}. انتقل إلى هناك`,
+          )}
+          style={{ opacity: dimmed ? DIM_OPACITY : 1 }}
+          className="nodrag absolute inset-x-2 bottom-1.5 z-10 truncate rounded-md px-1 text-[11.5px] font-semibold leading-5 text-[var(--primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        >
+          <span aria-hidden>↗ </span>
+          {elsewhereText}
+        </button>
+      )}
       {selected && slots && slots.length > 0 && <Slots slots={slots} lang={lang} onSlot={data.onSlot} />}
     </>
   );

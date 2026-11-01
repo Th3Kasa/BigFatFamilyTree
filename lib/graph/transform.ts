@@ -54,6 +54,12 @@ export type PersonNodeData = {
   /** Reference card only: the branch the real card sits in, and how to get there. */
   refOf?: string;
   onOpenOriginal?: (personId: string) => void;
+  /**
+   * Real card only: the other places this person also appears, as a dashed
+   * copy beside a spouse ("Also in the Morkos branch"), and how to get there.
+   */
+  alsoIn?: { host: PersonInput }[];
+  onOpenBranch?: (hostId: string) => void;
 };
 
 export type GraphNode = {
@@ -123,10 +129,16 @@ export function buildGraphElements(
   const model = buildFamilyModel(people, relationships);
   const { positions, refPositions } = resolvePositions(people, relationships, model);
 
+  // Where each person also appears as a copy beside a spouse (the spouse is the copy's host).
+  const alsoIn = new Map<string, { host: PersonInput }[]>();
+  for (const ref of model.refs) {
+    const host = byId.get(ref.hostId);
+    if (host) alsoIn.set(ref.personId, [...(alsoIn.get(ref.personId) ?? []), { host }]);
+  }
   const nodes: GraphNode[] = people.map((p) => ({
     id: p.id,
     type: "person",
-    data: { person: p, lang },
+    data: alsoIn.has(p.id) ? { person: p, lang, alsoIn: alsoIn.get(p.id) } : { person: p, lang },
     position: positions.get(p.id) ?? { x: p.pos_x ?? 0, y: p.pos_y ?? 0 },
   }));
   // Reference cards come after every person so their host (parent) node exists first.
