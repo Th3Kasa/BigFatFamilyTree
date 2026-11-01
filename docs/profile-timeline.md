@@ -23,9 +23,11 @@ not only by the buttons. Deleted posts are hidden (soft delete); their photos mo
 
 ## How photos are stored
 
-- Photos are saved in a **"Big Fat Family Tree"** folder in the connected Google Drive.
-  Each photo is stored twice: the full-quality original, and a smaller timeline copy
-  (about 1600 px, made on the phone before upload) so timelines load fast.
+- Photos are saved in a **"Big Fat Family Tree"** folder in the connected Google Drive, organised like this:
+  - `People/<person's name>/`: the full-quality originals, named by upload date, profile and poster, e.g.
+    `2026-11-01 Nassif Mansour - from Basem Morkos 2 (a1b2c3).jpg`.
+  - `Timeline copies/`: the smaller (about 1600 px) copies the site shows, so timelines load fast. Not meant for browsing.
+  Folders are found by a hidden key, so renaming a person or a folder never creates a duplicate.
 - The site asks Google for the narrowest permission (`drive.file`): it can only see the
   files it created. The rest of the Drive is invisible to it.
 - Files are **never shared publicly**. Members get them through `/api/media/…`, which checks

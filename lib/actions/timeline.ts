@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { checkLimit } from "@/lib/ratelimit";
-import { DriveError, startUpload, trashFile } from "@/lib/drive/client";
+import { DriveError, ensureFolder, safeFileName, startUpload, trashFile } from "@/lib/drive/client";
 import { binDeletedPostPhotos } from "@/lib/drive/bin";
 import { isPhotoType, MAX_DISPLAY_BYTES, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_POST, megabytes } from "@/lib/media/limits";
 import { parseVideoLink } from "@/lib/media/video";
@@ -34,14 +34,18 @@ const photoRequest = z.object({
 
 /**
  * Step 1 of posting photos: check the limits (up to 5 photos, 15 MB each) and
- * open a Google Drive upload for each original and its timeline copy. The
- * browser then sends the bytes to /api/media/upload/[id].
+ * open a Google Drive upload for each original and its timeline copy, all at
+ * once. Originals go in People/<person>/ named by date, poster and number;
+ * timeline copies in "Timeline copies". The browser then sends the bytes to
+ * /api/media/upload/[id].
  */
 export async function startPhotoUploads(
+  personId: string,
   photos: z.input<typeof photoRequest>[],
 ): Promise<Result<{ uploads: { original: string; display: string }[] }>> {
-  const { viewer } = await approvedViewer();
+  const { supabase, viewer } = await approvedViewer();
   if (!viewer) return { success: false, error: "Please sign in as an approved family member." };
+  if (!uuid.safeParse(personId).success) return { success: false, error: "That person isn't on the tree." };
   const parsed = z.array(photoRequest).min(1).max(MAX_PHOTOS_PER_POST).safeParse(photos);
   if (!parsed.success) return { success: false, error: `Choose between 1 and ${MAX_PHOTOS_PER_POST} photos.` };
   for (const p of parsed.data) {
@@ -49,40 +53,53 @@ export async function startPhotoUploads(
     if (p.originalBytes > MAX_PHOTO_BYTES) return { success: false, error: `Each photo can be up to ${megabytes(MAX_PHOTO_BYTES)}.` };
     if (p.displayBytes > MAX_DISPLAY_BYTES) return { success: false, error: "That photo couldn't be prepared. Please try another." };
   }
-  const { success: allowed } = await checkLimit("upload", viewer.userId);
+  const [{ success: allowed }, { data: person }] = await Promise.all([
+    checkLimit("upload", viewer.userId),
+    supabase.from("people").select("id, given_en, family_name_en, given_ar, family_name_ar").eq("id", personId).is("deleted_at", null).maybeSingle(),
+  ]);
   if (!allowed) return { success: false, error: "That's a lot of uploads for one hour. Please try again later." };
+  if (!person) return { success: false, error: "That person isn't on the tree." };
 
+  const personName =
+    [person.given_en ?? person.given_ar, person.family_name_en ?? person.family_name_ar].filter(Boolean).join(" ").trim() || "Unnamed";
   const db = createServiceClient();
   const stamp = new Date().toISOString().slice(0, 10);
-  const uploads: { original: string; display: string }[] = [];
+  const batch = randomUUID().slice(0, 6);
   try {
-    for (const p of parsed.data) {
-      const base = `${stamp}-${randomUUID().slice(0, 8)}`;
-      const ext = p.originalMime.split("/")[1].replace("jpeg", "jpg");
-      const pair = { original: "", display: "" };
-      for (const variant of ["original", "display"] as const) {
-        const mime = variant === "original" ? p.originalMime : "image/jpeg";
-        const bytes = variant === "original" ? p.originalBytes : p.displayBytes;
-        const sessionUrl = await startUpload({
-          name: `${base}-${variant}.${variant === "original" ? ext : "jpg"}`,
-          mime,
-          bytes,
-          appProperties: { bfft: "photo", variant, uploader: viewer.userId },
-        });
-        const { data, error } = await db
-          .from("media_uploads")
-          .insert({ user_id: viewer.userId, variant, mime, expected_bytes: bytes, session_url: sessionUrl })
-          .select("id")
-          .single();
-        if (error || !data) return { success: false, error: "Couldn't start the upload. Please try again." };
-        pair[variant] = data.id;
-      }
-      uploads.push(pair);
-    }
+    const [peopleFolder, copiesFolder] = await Promise.all([ensureFolder("people", "People"), ensureFolder("copies", "Timeline copies")]);
+    const personFolder = await ensureFolder(`person:${personId}`, personName, peopleFolder);
+
+    const uploads = await Promise.all(
+      parsed.data.map(async (p, i) => {
+        const ext = p.originalMime.split("/")[1].replace("jpeg", "jpg");
+        const n = parsed.data.length > 1 ? ` ${i + 1}` : "";
+        const name = safeFileName(`${stamp} ${personName} - from ${viewer.name}${n} (${batch})`);
+        const start = async (variant: "original" | "display") => {
+          const mime = variant === "original" ? p.originalMime : "image/jpeg";
+          const bytes = variant === "original" ? p.originalBytes : p.displayBytes;
+          const sessionUrl = await startUpload({
+            name: variant === "original" ? `${name}.${ext}` : `${name} (timeline copy).jpg`,
+            mime,
+            bytes,
+            parentId: variant === "original" ? personFolder : copiesFolder,
+            appProperties: { bfft: "photo", variant, uploader: viewer.userId, person: personId },
+          });
+          const { data, error } = await db
+            .from("media_uploads")
+            .insert({ user_id: viewer.userId, variant, mime, expected_bytes: bytes, session_url: sessionUrl })
+            .select("id")
+            .single();
+          if (error || !data) throw new Error("Couldn't start the upload. Please try again.");
+          return data.id as string;
+        };
+        const [original, display] = await Promise.all([start("original"), start("display")]);
+        return { original, display };
+      }),
+    );
+    return { success: true, uploads };
   } catch (e) {
-    return { success: false, error: e instanceof DriveError ? e.message : "Couldn't start the upload. Please try again." };
+    return { success: false, error: e instanceof DriveError || e instanceof Error ? e.message : "Couldn't start the upload. Please try again." };
   }
-  return { success: true, uploads };
 }
 
 // ── Posts ───────────────────────────────────────────────────────────────────
