@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { useStore, type EdgeProps, type ReactFlowState } from "@xyflow/react";
+import { VineArtPaths } from "./VineArtPaths";
 import { EDGE_STYLES, GHOST_OPACITY, WIDOWED_GLYPH } from "@/lib/graph/edge-styles";
-import { coupleLine } from "@/lib/graph/geometry";
+import { coupleVine } from "@/lib/graph/vines";
 import { DIM_OPACITY, type EdgeHighlight } from "@/lib/graph/highlight";
 import { marriageLabel } from "@/lib/graph/family-view";
 import { COMPACT_ZOOM } from "@/lib/graph/viewport";
@@ -30,11 +32,12 @@ const same = (a: [XY, XY] | null, b: [XY, XY] | null) =>
   a === b || (!!a && !!b && a[0].x === b[0].x && a[0].y === b[0].y && a[1].x === b[1].x && a[1].y === b[1].y);
 
 /**
- * Marriage line. Uses the same geometry as the children's bracket, so a
- * couple's children always hang from the middle of this exact line. Past
- * marriages are soft (dashed, lighter) and labelled "1st marriage · widowed".
+ * Marriage vine: two strands twined together with a few leaves. Uses the same
+ * geometry as the children's vine, so a couple's children always hang from the
+ * middle of this exact line. Past marriages stay a single soft line (dashed,
+ * lighter), labelled "1st marriage · widowed".
  */
-export function SpouseEdge({ source, target, data }: EdgeProps) {
+export function SpouseEdge({ id, source, target, data }: EdgeProps) {
   const { status = "current", ghost = false, showOrder = false, ordinal, implicit = false, lane = 0, lang = "en", highlight } =
     (data ?? {}) as SpouseData;
 
@@ -44,11 +47,12 @@ export function SpouseEdge({ source, target, data }: EdgeProps) {
     return a && b ? [a.internals.positionAbsolute, b.internals.positionAbsolute] : null;
   }, same);
   const compact = useStore((s: ReactFlowState) => s.transform[2] < COMPACT_ZOOM);
-  if (!ends) return null;
+  const twined = status === "current" && !implicit;
+  const line = useMemo(() => (ends ? coupleVine(ends[0], ends[1], lane, id, twined) : null), [ends, lane, id, twined]);
+  if (!line) return null;
 
   const onPath = !!highlight?.on;
   const dimmed = !!highlight && !highlight.on;
-  const line = coupleLine(ends[0], ends[1], lane);
 
   const style = implicit
     ? { stroke: EDGE_STYLES.parentChild.stroke, dash: "1 5" }
@@ -64,12 +68,16 @@ export function SpouseEdge({ source, target, data }: EdgeProps) {
     <g opacity={dimmed ? DIM_OPACITY : 1}>
       {/* The line itself is soft for past marriages; the label stays full strength so it is readable. */}
       <g opacity={onPath ? 1 : soft}>
-        {onPath && <path d={line.d} style={{ stroke: "var(--path-soft)", strokeWidth: 10, fill: "none" }} strokeLinecap="round" />}
-        <path
-          d={line.d}
-          style={{ stroke, strokeWidth: onPath ? 4 : implicit ? 1.5 : 2, fill: "none", strokeDasharray: style.dash }}
-          strokeLinejoin="round"
-        />
+        {onPath && <path d={line.line} style={{ stroke: "var(--path-soft)", strokeWidth: 10, fill: "none" }} strokeLinecap="round" />}
+        {twined && !onPath ? (
+          <VineArtPaths art={line.art} />
+        ) : (
+          <path
+            d={line.line}
+            style={{ stroke, strokeWidth: onPath ? 4 : implicit ? 1.5 : 2, fill: "none", strokeDasharray: style.dash }}
+            strokeLinejoin="round"
+          />
+        )}
       </g>
       {status === "widowed" && !label && (
         <text x={line.label.x} y={line.label.y} textAnchor="middle" style={{ fill: stroke, fontSize: 12, fontWeight: 600, pointerEvents: "none" }}>

@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { useStore, type EdgeProps, type ReactFlowState } from "@xyflow/react";
-import { EDGE_STYLES } from "@/lib/graph/edge-styles";
-import { coupleLine, soloAnchor, type Rect } from "@/lib/graph/geometry";
+import { VineArtPaths } from "./VineArtPaths";
+import { familyVineFromCards } from "@/lib/graph/vines";
+import type { Rect } from "@/lib/graph/geometry";
 import { DIM_OPACITY, type EdgeHighlight } from "@/lib/graph/highlight";
 import { NODE_WIDTH } from "@/lib/graph/node-size";
 
@@ -25,63 +27,47 @@ function rectsEqual(a: Positions, b: Positions): boolean {
 }
 
 /**
- * Children's bracket for one family unit: a drop from the middle of the
- * couple's own line (or a single parent's card), a bar across, and a drop to
- * each child. Reads absolute positions live so it follows cards while dragging.
+ * One family's vine: a trunk dropping from the middle of the couple's own line
+ * (or a single parent's card), limbs reaching out, and a twig to each child.
+ * Reads absolute positions live so it follows cards while dragging.
  */
-export function FamilyBranchEdge({ data }: EdgeProps) {
+export function FamilyBranchEdge({ id, data }: EdgeProps) {
   const { childIds = [], partnerNodeIds, lane = 0, highlight } = (data ?? {}) as Partial<FamilyBranchData>;
   const ids: string[] = [...childIds];
-  for (const id of partnerNodeIds ?? []) if (id) ids.push(id);
+  for (const pid of partnerNodeIds ?? []) if (pid) ids.push(pid);
 
   const rects = useStore((s: ReactFlowState) => {
     const out: Positions = {};
-    for (const id of ids) {
-      const n = s.nodeLookup.get(id);
-      if (n) out[id] = { x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y };
+    for (const nid of ids) {
+      const n = s.nodeLookup.get(nid);
+      if (n) out[nid] = { x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y };
     }
     return out;
   }, rectsEqual);
 
   const [aId, bId] = partnerNodeIds ?? [null, null];
-  const a = aId ? rects[aId] : undefined;
-  const b = bId ? rects[bId] : undefined;
-  if (!a) return null;
-  const start = b ? coupleLine(a, b, lane).anchor : soloAnchor(a);
+  const vine = useMemo(() => {
+    const a = aId ? rects[aId] : undefined;
+    if (!a) return null;
+    const kids = childIds.filter((c) => rects[c]).map((c) => ({ id: c, rect: rects[c], width: NODE_WIDTH }));
+    return familyVineFromCards({ a, b: (bId && rects[bId]) || null, lane }, kids, id);
+    // childIds is rebuilt each render; `rects` already changes whenever the cards it names do.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rects, aId, bId, lane, id]);
+  if (!vine) return null;
 
-  const kids = childIds.map((id) => ({ id, r: rects[id] })).filter((k): k is { id: string; r: Rect } => !!k.r);
-  if (kids.length === 0) return null;
-  const xs = kids.map((k) => k.r.x + NODE_WIDTH / 2);
-  const tops = kids.map((k) => k.r.y);
-  const minTop = Math.min(...tops);
-  const gap = minTop - start.y;
-  // Never let the bar overshoot the topmost child, or the drop renders upward through a card.
-  const junctionY = gap > 0 ? Math.min(start.y + Math.max(gap * 0.5, 20), minTop - 2) : (start.y + minTop) / 2;
-
-  const parts = [`M ${start.x} ${start.y} L ${start.x} ${junctionY}`];
-  const barLeft = Math.min(start.x, ...xs);
-  const barRight = Math.max(start.x, ...xs);
-  if (barRight > barLeft) parts.push(`M ${barLeft} ${junctionY} L ${barRight} ${junctionY}`);
-  kids.forEach((_, i) => parts.push(`M ${xs[i]} ${junctionY} L ${xs[i]} ${tops[i]}`));
-
+  const dimmed = !!highlight;
   const base = (
-    <path
-      d={parts.join(" ")}
-      style={{ stroke: EDGE_STYLES.parentChild.stroke, strokeWidth: 2, fill: "none", opacity: highlight ? DIM_OPACITY : 1 }}
-      strokeLinejoin="round"
-    />
+    <g opacity={dimmed ? DIM_OPACITY : 1}>
+      <VineArtPaths art={vine.art} />
+    </g>
   );
 
-  // Relationship finder: redraw ONLY the route — parent drop, the bar out to
-  // each lit child, then that child's drop — never the whole bracket.
-  const lit = new Set(highlight?.childIds ?? []);
-  if (!highlight?.on || lit.size === 0) return base;
-  const route: string[] = [`M ${start.x} ${start.y} L ${start.x} ${junctionY}`];
-  kids.forEach((k, i) => {
-    if (!lit.has(k.id)) return;
-    route.push(`M ${start.x} ${junctionY} L ${xs[i]} ${junctionY}`, `M ${xs[i]} ${junctionY} L ${xs[i]} ${tops[i]}`);
-  });
-  const routeD = route.join(" ");
+  // Relationship finder: trace ONLY the route — trunk, the limb out to each lit
+  // child, then that child's twig — never the whole vine.
+  const lit = highlight?.childIds ?? [];
+  if (!highlight?.on || lit.length === 0) return base;
+  const routeD = vine.routeTo(lit);
   return (
     <g>
       {base}

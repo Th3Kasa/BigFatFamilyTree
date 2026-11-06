@@ -18,12 +18,14 @@ import "@xyflow/react/dist/style.css";
 import { PersonNode } from "./PersonNode";
 import { FamilyBranchEdge } from "./FamilyBranchEdge";
 import { SpouseEdge } from "./SpouseEdge";
+import { LinkVineEdge } from "./LinkVineEdge";
 import type { GraphNode, GraphEdge } from "@/lib/graph/transform";
 
 const nodeTypes: NodeTypes = { person: PersonNode, personRef: PersonNode };
 const edgeTypes: EdgeTypes = {
   "family-branch": FamilyBranchEdge,
   spouse: SpouseEdge,
+  "link-vine": LinkVineEdge,
 };
 
 type Props = {
