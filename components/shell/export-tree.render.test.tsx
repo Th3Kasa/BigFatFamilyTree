@@ -53,7 +53,7 @@ describe("ExportTreeButton", () => {
         </CurrentPersonProvider>,
       ),
     );
-    expect(buttonNamed("Download the family tree as a PDF")).toBeTruthy();
+    expect(buttonNamed("Download PDF of the family tree")).toBeTruthy();
   });
 
   test("an account not linked to the tree doesn't", () => {

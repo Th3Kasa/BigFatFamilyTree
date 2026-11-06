@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { FileDown, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +16,8 @@ type Props = {
   lang: Lang;
   onClose: () => void;
   load: () => Promise<TreeExportData>;
+  /** Where keyboard focus goes back to when this closes. */
+  returnFocusTo?: RefObject<HTMLElement | null>;
 };
 
 type Tree = { people: PersonInput[]; relationships: RelationshipInput[] };
@@ -40,7 +42,7 @@ function saveFile(bytes: Uint8Array, filename: string) {
 }
 
 /** Picks a paper size (with an honest word on how readable it will be), then builds and saves the PDF. */
-export function TreeExportDialog({ lang, onClose, load }: Props) {
+export function TreeExportDialog({ lang, onClose, load, returnFocusTo }: Props) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [choice, setChoice] = useState<PaperId | null>(null);
@@ -133,6 +135,13 @@ export function TreeExportDialog({ lang, onClose, load }: Props) {
     if (progress.stage === "cards") return 60 + part * 34;
     return 96;
   })();
+  // Screen readers hear each stage once; the running count stays on the progress bar.
+  const stageLabel = (() => {
+    if (progress === null || progress === "starting") return t("Getting started", "جارٍ البدء");
+    if (progress.stage === "photos") return t("Adding photos", "إضافة الصور");
+    if (progress.stage === "cards") return t("Adding names", "إضافة الأسماء");
+    return t("Saving your PDF", "جارٍ حفظ ملف PDF");
+  })();
   const progressLabel = (() => {
     if (progress === null || progress === "starting") return t("Getting started…", "جارٍ البدء…");
     if (progress.stage === "photos") return t(`Adding photos: ${progress.done} of ${progress.total}`, `إضافة الصور: ${progress.done} من ${progress.total}`);
@@ -142,7 +151,14 @@ export function TreeExportDialog({ lang, onClose, load }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent dir={lang === "ar" ? "rtl" : "ltr"} className="max-h-[92svh] w-[calc(100%-1.5rem)] overflow-y-auto rounded-[20px]">
+      <DialogContent
+        dir={lang === "ar" ? "rtl" : "ltr"}
+        className="max-h-[92svh] w-[calc(100%-1.5rem)] overflow-y-auto rounded-[20px]"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          returnFocusTo?.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="pe-8 font-heading text-xl font-bold leading-tight">
             {t("Download the whole family tree", "تنزيل شجرة العائلة كاملة")}
@@ -234,9 +250,10 @@ export function TreeExportDialog({ lang, onClose, load }: Props) {
             )}
 
             {busy ? (
-              <div className="grid gap-2" aria-live="polite">
-                <p className="text-sm font-semibold text-[var(--foreground)]">{progressLabel}</p>
-                <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} aria-label={t("Making your PDF", "جارٍ إنشاء ملف PDF")} className="h-2.5 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div className="grid gap-2">
+                <p role="status" className="sr-only">{stageLabel}</p>
+                <p aria-hidden className="text-sm font-semibold text-[var(--foreground)]">{progressLabel}</p>
+                <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} aria-valuetext={progressLabel} aria-label={t("Making your PDF", "جارٍ إنشاء ملف PDF")} className="h-2.5 overflow-hidden rounded-full bg-[var(--muted)]">
                   <div className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-200" style={{ width: `${percent}%` }} />
                 </div>
               </div>

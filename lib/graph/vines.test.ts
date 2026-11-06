@@ -54,6 +54,19 @@ describe("familyVine", () => {
     }
   });
 
+  test("no children: nothing to grow, and it returns straight away", () => {
+    const vine = familyVine(start, [], "fb-none");
+    expect(vine.art).toEqual({ stems: "", leaves: ["", "", ""], veins: "" });
+    expect(vine.routeTo(["x"])).toBe("");
+  });
+
+  test("limbs hang clear of tall parents' cards", () => {
+    const tall = familyVine({ x: 200, y: 100 }, [{ id: "a", x: 0, top: 400 }], "fb-tall", 240);
+    const ys = numbers(tall.routeTo(["a"])).filter((_, i) => i % 2 === 1);
+    // The trunk runs down past the cards (y 240) before the limb sets off along y 320.
+    expect(ys.some((y) => y > 300 && y < 340)).toBe(true);
+  });
+
   test("hangs from the middle of the couple's line, or under a single parent", () => {
     const a = { x: 0, y: 0 };
     const b = { x: 240, y: 0 };

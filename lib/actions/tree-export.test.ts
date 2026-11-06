@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+type Result = { data: unknown; error: { message: string } | null };
+
 const getUser = vi.fn();
-const fetchCurrentPerson = vi.fn();
-const tables: Record<string, { data: unknown; error: { message: string } | null }> = {};
+let profile: Result;
+let me: Result;
+let everyone: Result;
+let relationships: Result;
 const from = vi.fn((table: string) => {
-  const result = tables[table];
   const query = {
     select: () => query,
+    eq: () => query,
     is: () => query,
     order: () => query,
-    then: (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve),
+    // A single-row read is the account's own lookup; a list is the whole tree.
+    maybeSingle: () => Promise.resolve(table === "profiles" ? profile : me),
+    then: (resolve: (v: unknown) => unknown) => Promise.resolve(table === "people" ? everyone : relationships).then(resolve),
   };
   return query;
 });
@@ -17,7 +23,6 @@ const from = vi.fn((table: string) => {
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser }, from }),
 }));
-vi.mock("@/lib/members/current-person", () => ({ fetchCurrentPerson: (...a: unknown[]) => fetchCurrentPerson(...a) }));
 vi.mock("@/lib/people/birth-order", () => ({
   fetchBirthOrders: async () => new Map(),
   withBirthOrder: <T,>(rows: T[]) => rows,
@@ -26,35 +31,52 @@ vi.mock("@/lib/storage/photos", () => ({ withSignedPhotos: async <T,>(_: unknown
 
 import { loadTreeForExport } from "./tree-export";
 
+const treeWasRead = () => from.mock.calls.some(([t]) => t === "relationships");
+
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(console, "error").mockImplementation(() => {});
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-  fetchCurrentPerson.mockResolvedValue({ id: "p1" });
-  tables.people = { data: [{ id: "p1" }], error: null };
-  tables.relationships = { data: [{ id: "r1" }], error: null };
+  profile = { data: { person_id: "p1" }, error: null };
+  me = { data: { id: "p1" }, error: null };
+  everyone = { data: [{ id: "p1" }], error: null };
+  relationships = { data: [{ id: "r1" }], error: null };
 });
 
 describe("loadTreeForExport", () => {
-  test("a signed-out visitor gets nothing, and no family data is even asked for", async () => {
+  test("no session: nothing, not even a query", async () => {
     getUser.mockResolvedValue({ data: { user: null } });
-    expect(await loadTreeForExport()).toEqual({ ok: false, reason: "not-linked" });
+    expect(await loadTreeForExport()).toEqual({ ok: false, reason: "failed" });
     expect(from).not.toHaveBeenCalled();
   });
 
-  test("an account not linked to the tree gets nothing, and no family data is even asked for", async () => {
-    fetchCurrentPerson.mockResolvedValue(null);
+  test("an account not linked to the tree gets no family data", async () => {
+    profile = { data: { person_id: null }, error: null };
     expect(await loadTreeForExport()).toEqual({ ok: false, reason: "not-linked" });
-    expect(from).not.toHaveBeenCalled();
+    expect(treeWasRead()).toBe(false);
+  });
+
+  test("an account whose person can't be read (unapproved, or removed) gets no family data", async () => {
+    me = { data: null, error: null };
+    expect(await loadTreeForExport()).toEqual({ ok: false, reason: "not-linked" });
+    expect(treeWasRead()).toBe(false);
   });
 
   test("a linked member gets everyone on the tree", async () => {
     expect(await loadTreeForExport()).toEqual({ ok: true, people: [{ id: "p1" }], relationships: [{ id: "r1" }] });
   });
 
-  test("a database failure is reported, never shown as an empty tree", async () => {
-    tables.people = { data: null, error: { message: "boom" } };
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  test("a database hiccup is never reported as not being linked", async () => {
+    profile = { data: null, error: { message: "boom" } };
     expect(await loadTreeForExport()).toEqual({ ok: false, reason: "failed" });
-    spy.mockRestore();
+    profile = { data: { person_id: "p1" }, error: null };
+    me = { data: null, error: { message: "boom" } };
+    expect(await loadTreeForExport()).toEqual({ ok: false, reason: "failed" });
+    expect(treeWasRead()).toBe(false);
+  });
+
+  test("a failed tree read is reported, never shown as an empty tree", async () => {
+    everyone = { data: null, error: { message: "boom" } };
+    expect(await loadTreeForExport()).toEqual({ ok: false, reason: "failed" });
   });
 });

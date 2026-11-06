@@ -159,6 +159,17 @@ function textImage(lines: Line[], widthU: number, heightU: number, pxPerU: numbe
   return canvasPng(canvas);
 }
 
+/**
+ * Adds a picture to the PDF right away. Left to itself the library keeps every
+ * decoded picture in memory and compresses them all in one go when saving, which
+ * freezes the tab for many seconds on a big tree.
+ */
+async function embedNow(doc: PDFDocument, png: ArrayBuffer): Promise<PDFImage> {
+  const image = await doc.embedPng(png);
+  await image.embed();
+  return image;
+}
+
 /** A person's photo as a square JPEG at print resolution, or null if it can't be read. */
 async function photoJpeg(url: string, targetPx: number): Promise<ArrayBuffer | null> {
   try {
@@ -318,7 +329,8 @@ async function drawTitle(doc: PDFDocument, page: PDFPage, fit: PosterFit, people
   const title = t("The Big Fat Family", "عائلة بيغ فات");
 
   const u = fit.headerHeight / 100; // Header is laid out on a 100-unit-tall grid.
-  const pxPerU = Math.min(30, u * 4.2);
+  // Headline-sized type stays crisp at about 200 dpi, and this is the biggest picture in the file.
+  const pxPerU = u * 2.8;
   const titleWidthU = 620;
   const png = await textImage(
     [
@@ -331,7 +343,7 @@ async function drawTitle(doc: PDFDocument, page: PDFPage, fit: PosterFit, people
     fonts,
     lang,
   );
-  const image = await doc.embedPng(png);
+  const image = await embedNow(doc, png);
   const width = titleWidthU * u;
   page.drawImage(image, {
     x: (fit.pageWidth - width) / 2,
@@ -446,7 +458,7 @@ export async function buildPosterPdf(input: PosterInput): Promise<PosterResult> 
       const initials = person.is_placeholder ? "?" : initialsOf(person, lang);
       pen.fill(circlePath(cx, cy, avatarR), person.is_placeholder ? "#F3ECE8" : tone.bg);
       const png = await textImage([{ text: initials, size: 22 * zoom, weight: 700, color: person.is_placeholder ? MUTED : tone.fg }], avatarR * 2, avatarR * 2, pxPerU, fonts, lang);
-      page.drawImage(await doc.embedPng(png), {
+      page.drawImage(await embedNow(doc, png), {
         x: pageX(cx - avatarR),
         y: pageY(cy + avatarR),
         width: avatarR * 2 * scale,
@@ -455,7 +467,7 @@ export async function buildPosterPdf(input: PosterInput): Promise<PosterResult> 
     }
 
     const png = await textImage(cardsLines.get(node.id) ?? [], LABEL_W, labelH, pxPerU, fonts, lang);
-    page.drawImage(await doc.embedPng(png), {
+    page.drawImage(await embedNow(doc, png), {
       x: pageX(rect.x + (NODE_WIDTH - LABEL_W) / 2),
       y: pageY(rect.y + labelTop + labelH),
       width: LABEL_W * scale,
@@ -463,10 +475,8 @@ export async function buildPosterPdf(input: PosterInput): Promise<PosterResult> 
     });
 
     input.onProgress?.({ stage: "cards", done: i + 1, total: nodes.length });
-    if (i % 6 === 0) {
-      await breathe();
-      stopIfCancelled();
-    }
+    await breathe();
+    stopIfCancelled();
   }
 
   // Marriage labels: on top of everything, as on the canvas.
@@ -491,12 +501,14 @@ export async function buildPosterPdf(input: PosterInput): Promise<PosterResult> 
     pen.fill(roundedPath(pos.x - boxW / 2, top, boxW, boxH, 5), "#FFFFFF");
     const color = status === "widowed" ? MUTED : style.stroke;
     const png = await textImage(parts.map((p) => ({ text: p, size: 11, weight: 700, color })), boxW, boxH, pxPerU, fonts, lang);
-    page.drawImage(await doc.embedPng(png), { x: pageX(pos.x - boxW / 2), y: pageY(top + boxH), width: boxW * scale, height: boxH * scale });
+    page.drawImage(await embedNow(doc, png), { x: pageX(pos.x - boxW / 2), y: pageY(top + boxH), width: boxW * scale, height: boxH * scale });
   }
   stopIfCancelled();
 
   input.onProgress?.({ stage: "saving", done: 0, total: 1 });
   await breathe();
   const bytes = await doc.save();
+  // The reader may have closed the dialog while it saved: then nothing should download.
+  stopIfCancelled();
   return { bytes, missingPhotos: photoUrls.filter((u) => !photos.has(u)).length };
 }

@@ -269,6 +269,7 @@ export type VineChild = { id: string; x: number; top: number };
  * go, like a real branch.
  */
 export function familyVine(start: Pt, children: VineChild[], seed: string, parentsBottom = start.y): FamilyVine {
+  if (children.length === 0) return { art: { stems: "", leaves: ["", "", ""], veins: "" }, routeTo: () => "" };
   const r = rngFor(seed);
   const canopy = new Canopy(r);
   const tops = children.map((k) => k.top);

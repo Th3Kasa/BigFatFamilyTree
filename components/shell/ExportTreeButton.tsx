@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileDown } from "lucide-react";
 import { TreeExportDialog } from "@/components/shell/TreeExportDialog";
 import { useCurrentPerson } from "@/components/providers/current-person-provider";
@@ -15,21 +15,23 @@ export function ExportTreeButton({ lang }: { lang: Lang }) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const me = useCurrentPerson();
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   if (!me) return null;
 
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        aria-label={t("Download the family tree as a PDF", "تنزيل شجرة العائلة بصيغة PDF")}
+        aria-label={t("Download PDF of the family tree", "تنزيل PDF لشجرة العائلة")}
         className="inline-flex h-11 w-11 items-center justify-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--card)] text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 xl:w-auto xl:px-4"
       >
         <FileDown className="h-[18px] w-[18px] shrink-0" aria-hidden />
         <span className="hidden xl:inline">{t("Download PDF", "تنزيل PDF")}</span>
       </button>
-      {open && <TreeExportDialog lang={lang} onClose={() => setOpen(false)} load={loadTreeForExport} />}
+      {open && <TreeExportDialog lang={lang} onClose={() => setOpen(false)} load={loadTreeForExport} returnFocusTo={buttonRef} />}
     </>
   );
 }
