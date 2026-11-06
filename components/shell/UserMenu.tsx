@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { avatarTone } from "@/lib/people/display";
 import type { Lang } from "@/lib/lang/server";
 import { hasRealEmail } from "@/lib/auth/pin-setup";
+import { accountAvatar } from "@/lib/members/account-avatar";
+import { useCurrentPerson } from "@/components/providers/current-person-provider";
 
 interface UserMenuProps {
   user: SupabaseUser;
@@ -34,17 +36,8 @@ const ROLE_LABELS: Record<string, { en: string; ar: string }> = {
   viewer: { en: "Family member", ar: "فرد من العائلة" },
 };
 
-function userInitials(user: SupabaseUser) {
-  const name = (user.user_metadata?.full_name as string | undefined) ?? (user.user_metadata?.name as string | undefined);
-  if (name) {
-    const parts = name.trim().split(/\s+/);
-    return ((Array.from(parts[0] ?? "")[0] ?? "") + (Array.from(parts[1] ?? "")[0] ?? "")).toUpperCase() || "?";
-  }
-  return (user.email ?? "?").slice(0, 2).toUpperCase();
-}
-
 function UserAvatar({ user, size }: { user: SupabaseUser; size: "sm" | "md" }) {
-  const avatarUrl = user.user_metadata?.avatar_url as string | undefined;
+  const { photo, initials } = accountAvatar(user, useCurrentPerson());
   const tone = avatarTone(user.id);
   return (
     <span
@@ -54,11 +47,11 @@ function UserAvatar({ user, size }: { user: SupabaseUser; size: "sm" | "md" }) {
       )}
       style={{ background: tone.bg, color: tone.fg }}
     >
-      {avatarUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- provider avatar URL of unknown size
-        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element -- tree photo or provider avatar URL of unknown size
+        <img src={photo} alt="" className="h-full w-full object-cover" />
       ) : (
-        <span aria-hidden>{userInitials(user)}</span>
+        <span aria-hidden>{initials}</span>
       )}
     </span>
   );
