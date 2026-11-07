@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Waypoints } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { ExportTreeButton } from "@/components/shell/ExportTreeButton";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { LanguageToggle } from "@/components/shell/LanguageToggle";
 import { AddButton } from "@/components/shell/AddButton";
@@ -60,14 +60,7 @@ export function TopBar({ user, lang, role }: TopBarProps) {
       </div>
 
       <div className="ms-auto flex shrink-0 items-center gap-2 md:ms-0">
-        <Link
-          href="/relationships"
-          aria-label={t("How are we related?", "ما صلة القرابة بيننا؟")}
-          className="inline-flex h-11 w-11 items-center justify-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--card)] text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 xl:w-auto xl:px-4"
-        >
-          <Waypoints className="h-[18px] w-[18px] shrink-0" aria-hidden />
-          <span className="hidden xl:inline">{t("How are we related?", "ما صلة القرابة بيننا؟")}</span>
-        </Link>
+        <ExportTreeButton lang={lang} />
         <AddButton lang={lang} className="hidden md:inline-flex" />
         <LanguageToggle lang={lang} compact className="sm:hidden" />
         <LanguageToggle lang={lang} className="hidden sm:inline-flex" />

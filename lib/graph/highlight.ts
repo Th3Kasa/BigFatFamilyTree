@@ -124,8 +124,8 @@ export function edgeHighlight(index: HighlightIndex, edge: EdgeLike): EdgeHighli
 
 /**
  * Returns a copy of `edge` carrying its highlight state. Custom edges (bracket,
- * spouse) read `data.highlight`; the built-in straight edges (adopted,
- * guardian) get their style rewritten. The input is never mutated.
+ * spouse) read `data.highlight`; the link vines (adopted, guardian) get their
+ * style rewritten. The input is never mutated.
  */
 export function applyEdgeHighlight(edge: GraphEdge, index: HighlightIndex): GraphEdge {
   const highlight = edgeHighlight(index, edge);

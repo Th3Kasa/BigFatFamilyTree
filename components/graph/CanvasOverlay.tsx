@@ -3,7 +3,9 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VineArtPaths } from "./VineArtPaths";
 import { EDGE_STYLES, GHOST_OPACITY, WIDOWED_GLYPH } from "@/lib/graph/edge-styles";
+import { BARK, LEAF_TONES, coupleVine } from "@/lib/graph/vines";
 
 const HINT_KEY = "bft.canvas.hint.v2.dismissed";
 
@@ -119,8 +121,14 @@ function Legend({ lang, pathLegend }: { lang: "ar" | "en"; pathLegend: boolean }
           <p className="mb-3 text-sm font-semibold text-[var(--foreground)]">{t("What the lines mean", "معنى الخطوط")}</p>
           <ul className="flex flex-col gap-2.5 text-sm text-[var(--foreground)]">
             {pathLegend && <LegendItem color="var(--path)" label={t("How you're related", "مسار القرابة")} thick />}
-            <LegendItem color={EDGE_STYLES.parentChild.stroke} label={t("Parent and child", "والد وطفل")} />
-            <LegendItem color={EDGE_STYLES.coupleCurrent.stroke} label={t("Married", "متزوجان")} />
+            <li className="flex items-center gap-3">
+              <VineSwatch />
+              <span>{t("Parent and child", "والد وطفل")}</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <VineSwatch twined />
+              <span>{t("Married", "متزوجان")}</span>
+            </li>
             <LegendItem color={EDGE_STYLES.coupleWidowed.stroke} label={t("Widowed", "ترمّل")} dash glyph={WIDOWED_GLYPH} />
             <LegendItem color={EDGE_STYLES.coupleDivorced.stroke} label={t("Divorced", "طلاق")} dash />
             <LegendItem color={EDGE_STYLES.coupleDivorced.stroke} label={t("Earlier marriage", "زواج سابق")} dash ghost />
@@ -132,11 +140,11 @@ function Legend({ lang, pathLegend }: { lang: "ar" | "en"; pathLegend: boolean }
 
       <div className="flex items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--background)] py-1 pe-1 ps-3.5 text-xs text-[var(--muted-foreground)] shadow-[var(--shadow-floating)]">
         <span className="hidden items-center gap-1.5 sm:flex">
-          <Swatch color={EDGE_STYLES.parentChild.stroke} />
+          <VineSwatch />
           {t("Parent and child", "والد وطفل")}
         </span>
         <span className="hidden items-center gap-1.5 sm:flex">
-          <Swatch color={EDGE_STYLES.coupleCurrent.stroke} />
+          <VineSwatch twined />
           {t("Married", "متزوجان")}
         </span>
         <button
@@ -154,8 +162,20 @@ function Legend({ lang, pathLegend }: { lang: "ar" | "en"; pathLegend: boolean }
   );
 }
 
-function Swatch({ color }: { color: string }) {
-  return <span aria-hidden className="inline-block h-[3px] w-[18px] rounded-full" style={{ background: color }} />;
+/** A tiny real vine for the legend: a wandering stem, or two strands when `twined`. */
+function VineSwatch({ twined = false }: { twined?: boolean }) {
+  const vine = coupleVine({ x: 0, y: 0, width: 0, height: 16 }, { x: 34, y: 0, width: 0, height: 16 }, 0, twined ? "legend-married" : "legend-family", twined);
+  const leaf = "M 12 8 C 13 3 18 1 22 1 C 22 5 18 8 12 8 Z";
+  return (
+    <svg aria-hidden width="32" height="15" viewBox="0 0 34 16" className="shrink-0">
+      <path d={leaf} fill={LEAF_TONES[0]} />
+      {twined ? (
+        <VineArtPaths art={{ ...vine.art, leaves: ["", "", ""], veins: "" }} />
+      ) : (
+        <path d={vine.line} fill="none" stroke={BARK} strokeWidth={2.4} strokeLinecap="round" />
+      )}
+    </svg>
+  );
 }
 
 function LegendItem({

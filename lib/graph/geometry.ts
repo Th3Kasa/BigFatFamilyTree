@@ -12,8 +12,8 @@ export type Rect = { x: number; y: number; width?: number; height?: number };
 const LOW_INSET = 28;
 
 export type CoupleLine = {
-  /** SVG path of the marriage line. */
-  d: string;
+  /** The corners of the marriage line, left to right; vines.ts grows along them. */
+  points: { x: number; y: number }[];
   /** Where the children's bracket starts: the middle of this couple's line. */
   anchor: { x: number; y: number };
   /** A spot for the marriage label (above an adjacent line, below a low one). */
@@ -38,12 +38,9 @@ export function coupleLine(a: Rect, b: Rect, lane = 0): CoupleLine {
     const sy = left.y + lh / 2;
     const ty = right.y + rh / 2;
     const y = Math.max(sy, ty);
-    const parts: string[] = [];
-    if (sy < y) parts.push(`M ${sx} ${sy} L ${sx} ${y}`);
-    if (ty < y) parts.push(`M ${tx} ${ty} L ${tx} ${y}`);
-    parts.push(`M ${sx} ${y} L ${tx} ${y}`);
+    const points = [{ x: sx, y: sy }, { x: sx, y }, { x: tx, y }, { x: tx, y: ty }];
     const mid = (sx + tx) / 2;
-    return { d: parts.join(" "), anchor: { x: mid, y }, label: { x: mid, y: y - 10, placement: "above" } };
+    return { points, anchor: { x: mid, y }, label: { x: mid, y: y - 10, placement: "above" } };
   }
 
   const sx = left.x + lw - LOW_INSET;
@@ -51,9 +48,9 @@ export function coupleLine(a: Rect, b: Rect, lane = 0): CoupleLine {
   const sb = left.y + lh;
   const tb = right.y + rh;
   const y = Math.max(sb, tb) + LANE_STEP * lane;
-  const d = `M ${sx} ${sb} L ${sx} ${y} L ${tx} ${y} L ${tx} ${tb}`;
+  const points = [{ x: sx, y: sb }, { x: sx, y }, { x: tx, y }, { x: tx, y: tb }];
   const mid = (sx + tx) / 2;
-  return { d, anchor: { x: mid, y }, label: { x: mid, y: y + 12, placement: "below" } };
+  return { points, anchor: { x: mid, y }, label: { x: mid, y: y + 12, placement: "below" } };
 }
 
 /** Bottom-centre of a single parent's card. */

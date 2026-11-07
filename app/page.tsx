@@ -13,10 +13,8 @@ import { handleFirstVisit } from "@/lib/members/onboarding";
 import { withSignedPhotos } from "@/lib/storage/photos";
 import { fetchBirthOrders, withBirthOrder } from "@/lib/people/birth-order";
 import { countGenerations } from "@/lib/people/stats";
+import { TREE_COLUMNS } from "@/lib/people/tree-columns";
 import type { PersonInput, RelationshipInput } from "@/lib/graph/transform";
-
-const TREE_COLUMNS =
-  "id, slug, given_en, given_ar, family_name_en, family_name_ar, father_id, mother_id, gender, is_placeholder, photo_url, pos_x, pos_y, birth_date, death_date, created_by";
 
 type SearchParams = Promise<{
   from?: string | string[];

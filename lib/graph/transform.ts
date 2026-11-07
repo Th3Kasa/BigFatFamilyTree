@@ -75,7 +75,7 @@ export type GraphNode = {
 
 export type SpouseStatus = "current" | "divorced" | "widowed";
 
-export type GraphEdgeType = "smoothstep" | "straight" | "step" | "family-branch" | "spouse";
+export type GraphEdgeType = "smoothstep" | "step" | "family-branch" | "spouse" | "link-vine";
 
 export type GraphEdge = {
   id: string;
@@ -251,7 +251,7 @@ export function buildGraphElements(
       target: r.person_a_id,
       sourceHandle: "bottom",
       targetHandle: "top",
-      type: "straight",
+      type: "link-vine",
       selectable: false,
       focusable: false,
       deletable: false,
